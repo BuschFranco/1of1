@@ -477,6 +477,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         victorias: ps.wins,
         maxRacha: ps.bestStreak,
         segundos: ps.totalSeconds,
+        entrenamientos: ps.trainings,
+        victoriasAnio: ps.winsLastYear,
       );
 
   PlayStats _stats() => _statsOf(context.watch<PlaySessionService>());

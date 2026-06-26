@@ -75,6 +75,21 @@ class PlaySessionService extends ChangeNotifier {
   /// Cantidad de partidos ganados (resultado "Ganó").
   int get wins => _log.where((e) => e.result == PlayResult.win).length;
 
+  /// Cantidad de entrenamientos completados.
+  int get trainings =>
+      _log.where((e) => e.result == PlayResult.training).length;
+
+  /// Partidos ganados en los últimos 365 días.
+  int get winsLastYear {
+    final cutoff = DateTime.now()
+        .subtract(const Duration(days: 365))
+        .millisecondsSinceEpoch;
+    return _log
+        .where((e) =>
+            e.result == PlayResult.win && e.endedAtMillis >= cutoff)
+        .length;
+  }
+
   /// Mejor racha alcanzada (la actual o la más alta del historial).
   int get bestStreak {
     var best = _streak;

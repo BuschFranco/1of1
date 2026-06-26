@@ -4,7 +4,15 @@ import 'package:flutter/material.dart';
 const Color kGold = Color(0xFFE9B949);
 
 /// Métricas locales sobre las que se evalúan los logros.
-enum AchievementMetric { partidos, canchas, victorias, racha, horas }
+enum AchievementMetric {
+  partidos,
+  canchas,
+  victorias,
+  racha,
+  horas,
+  entrenamientos,
+  victoriasAnio, // victorias en los últimos 365 días
+}
 
 /// Snapshot de las estadísticas del jugador para evaluar logros.
 class PlayStats {
@@ -13,6 +21,8 @@ class PlayStats {
   final int victorias;
   final int maxRacha;
   final int segundos;
+  final int entrenamientos;
+  final int victoriasAnio;
 
   const PlayStats({
     required this.partidos,
@@ -20,6 +30,8 @@ class PlayStats {
     required this.victorias,
     required this.maxRacha,
     required this.segundos,
+    required this.entrenamientos,
+    required this.victoriasAnio,
   });
 
   int value(AchievementMetric m) => switch (m) {
@@ -28,6 +40,8 @@ class PlayStats {
         AchievementMetric.victorias => victorias,
         AchievementMetric.racha => maxRacha,
         AchievementMetric.horas => segundos ~/ 3600,
+        AchievementMetric.entrenamientos => entrenamientos,
+        AchievementMetric.victoriasAnio => victoriasAnio,
       };
 }
 
@@ -168,6 +182,46 @@ const List<Achievement> kAchievements = [
     metric: AchievementMetric.horas,
     goal: 50,
   ),
+  Achievement(
+    id: 'wins_100',
+    name: 'Estrella',
+    desc: 'Ganá 100 partidos',
+    icon: Icons.star,
+    metric: AchievementMetric.victorias,
+    goal: 100,
+  ),
+  Achievement(
+    id: 'play_200',
+    name: 'Inoxidable',
+    desc: 'Jugá 200 partidos',
+    icon: Icons.fitness_center,
+    metric: AchievementMetric.partidos,
+    goal: 200,
+  ),
+  Achievement(
+    id: 'wins_year_10',
+    name: 'Sensación novata',
+    desc: 'Ganá 10 partidos en un año',
+    icon: Icons.trending_up,
+    metric: AchievementMetric.victoriasAnio,
+    goal: 10,
+  ),
+  Achievement(
+    id: 'train_10',
+    name: 'Constante',
+    desc: 'Completá 10 entrenamientos',
+    icon: Icons.directions_run,
+    metric: AchievementMetric.entrenamientos,
+    goal: 10,
+  ),
+  Achievement(
+    id: 'train_30',
+    name: 'Disciplinado',
+    desc: 'Completá 30 entrenamientos',
+    icon: Icons.self_improvement,
+    metric: AchievementMetric.entrenamientos,
+    goal: 30,
+  ),
 ];
 
 Achievement? achievementById(String id) {
@@ -215,4 +269,12 @@ const List<GameTitle> kTitles = [
   // Títulos que requieren varios logros:
   GameTitle('Maestro del juego', ['play_100', 'wins_50']),
   GameTitle('Crack total', ['courts_50', 'hours_50', 'streak_10']),
+  // Apodos estilo NBA:
+  GameTitle('Rookie del año', ['wins_year_10']),
+  GameTitle('El Profe', ['train_10']),
+  GameTitle('Rata de gimnasio', ['train_30']),
+  GameTitle('MVP', ['wins_100']),
+  GameTitle('Iron Man', ['play_200']),
+  GameTitle('La Mamba Negra', ['streak_10', 'wins_50']),
+  GameTitle('El Elegido', ['play_100', 'wins_100']),
 ];
