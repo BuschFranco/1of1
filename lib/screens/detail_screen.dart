@@ -53,7 +53,6 @@ class DetailScreen extends StatelessWidget {
                       final secs = context
                           .watch<PlaySessionService>()
                           .secondsForCourt(court.id);
-                      if (secs <= 0) return const SizedBox.shrink();
                       return Padding(
                         padding: const EdgeInsets.only(top: 16),
                         child: Container(

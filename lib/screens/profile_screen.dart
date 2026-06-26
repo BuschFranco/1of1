@@ -391,12 +391,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final ps = context.watch<PlaySessionService>();
     final items = ps.breakdown.where((e) => e.seconds > 0).toList();
     final total = ps.totalSeconds;
-    if (total <= 0 && items.isEmpty) {
-      return _emptyCard('Todavía no registramos tiempo de juego.');
-    }
     return Column(
       children: [
-        // Total general.
+        // Total general (siempre visible, 0 si todavía no jugaste).
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -462,6 +459,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ],
+        if (items.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'Todavía no jugaste en ninguna cancha.',
+              style: AppText.grotesk(size: 12, color: AppColors.white(0.45)),
+            ),
+          ),
       ],
     );
   }
