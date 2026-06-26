@@ -164,7 +164,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('¡Cancha enviada para revisión! 🏀',
+          content: Text('¡Cancha enviada para revisión!',
               style: AppText.grotesk(size: 13)),
           backgroundColor: AppColors.accent,
         ),

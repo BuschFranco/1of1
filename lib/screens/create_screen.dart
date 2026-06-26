@@ -14,10 +14,10 @@ class CreateScreen extends StatelessWidget {
   const CreateScreen({super.key});
 
   static const _options = [
-    ('Crear pickup game', 'Organizá un partido en cualquier cancha', '🏀'),
-    ('Agregar cancha', '¿Conocés una cancha que no está?', '📍'),
-    ('Check-in', 'Avisá que estás jugando ahora', '✅'),
-    ('Reservar cancha', 'Reservá un horario', '📅'),
+    ('Crear pickup game', 'Organizá un partido en cualquier cancha', Icons.sports_basketball),
+    ('Agregar cancha', '¿Conocés una cancha que no está?', Icons.add_location_alt_outlined),
+    ('Check-in', 'Avisá que estás jugando ahora', Icons.check_circle_outline),
+    ('Reservar cancha', 'Reservá un horario', Icons.event_available_outlined),
   ];
 
   void _onTap(BuildContext context, int i) {
@@ -187,7 +187,7 @@ class CreateScreen extends StatelessWidget {
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('¡Pickup creado! 🏀', style: AppText.grotesk(size: 13)),
+                                content: Text('¡Pickup creado!', style: AppText.grotesk(size: 13)),
                                 backgroundColor: AppColors.accent,
                               ),
                             );
@@ -292,7 +292,7 @@ class CreateScreen extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    Text(_options[i].$3, style: const TextStyle(fontSize: 28)),
+                    Icon(_options[i].$3, size: 28, color: AppColors.accent),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(

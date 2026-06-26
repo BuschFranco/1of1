@@ -36,6 +36,6 @@ class NotionConfig {
   static const String apiVersion = '2022-06-28';
 
   /// La app puede hablar con Notion solo si hay token. Si no, degrada a
-  /// los datos mock locales (kCourts / kPlayer).
+  /// los datos mock locales (kCourts).
   static bool get isConfigured => token.isNotEmpty;
 }

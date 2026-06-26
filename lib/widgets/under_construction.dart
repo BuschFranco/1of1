@@ -17,7 +17,7 @@ class UnderConstructionBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('🚧', style: TextStyle(fontSize: 10)),
+          const Icon(Icons.construction, size: 11, color: Color(0xFFFFC457)),
           const SizedBox(width: 4),
           Text(
             'EN CONSTRUCCIÓN',
@@ -52,7 +52,7 @@ class UnderConstructionBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Text('🚧', style: TextStyle(fontSize: 16)),
+          const Icon(Icons.construction, size: 16, color: Color(0xFFFFC457)),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -71,7 +71,7 @@ void showUnderConstruction(BuildContext context, [String? feature]) {
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(
-        '🚧 ${feature ?? 'Esta sección'} está en construcción',
+        '${feature ?? 'Esta sección'} está en construcción',
         style: AppText.grotesk(size: 13),
       ),
       backgroundColor: AppColors.bgElev,

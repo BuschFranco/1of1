@@ -53,7 +53,7 @@ class DetailScreen extends StatelessWidget {
                       runSpacing: 8,
                       children: [
                         for (final b in court.badges)
-                          AppChip(label: b, icon: '✓'),
+                          AppChip(label: b),
                         AppChip(label: court.surface),
                         AppChip(label: court.type),
                       ],

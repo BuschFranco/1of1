@@ -163,7 +163,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 6),
                     AppChip(
                       label: profile.pos.isEmpty ? 'Baller' : profile.pos,
-                      icon: '🏀',
                     ),
                   ],
                 ),
@@ -184,11 +183,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               _StatBox(label: 'Partidos', value: '${profile.games}', accent: true),
               _StatBox(label: 'Canchas', value: '${profile.courts}'),
-              _StatBox(label: 'Racha', value: '${profile.streak}d', icon: '🔥'),
+              _StatBox(label: 'Racha', value: '${profile.streak}d', icon: Icons.local_fire_department),
               _StatBox(
                 label: 'Rating',
                 value: profile.rating > 0 ? profile.rating.toStringAsFixed(1) : '—',
-                icon: '⭐',
+                icon: Icons.star_rounded,
               ),
             ],
           ),
@@ -200,7 +199,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SectionTitle(title: 'Logros'),
-              _emptyCard('Sumá partidos para desbloquear logros 🏅'),
+              _emptyCard('Sumá partidos para desbloquear logros'),
               const SizedBox(height: 24),
               const SectionTitle(title: 'Últimos partidos'),
               _emptyCard('Todavía no jugaste partidos. ¡Sumate a un pickup!'),
@@ -339,7 +338,7 @@ class _FriendsTabState extends State<_FriendsTab> {
       if (found == null) {
         _snack('No existe ningún jugador con ese handle');
       } else if (FriendsService.normalizeHandle(input) == widget.profile.handle) {
-        _snack('No te podés agregar a vos mismo 🙃');
+        _snack('No te podés agregar a vos mismo');
       } else {
         final current = await _future;
         final already = current.any((f) => f.friendHandle == found.handle);
@@ -348,7 +347,7 @@ class _FriendsTabState extends State<_FriendsTab> {
         } else {
           await _service.addFriend(_ownerEmail, found);
           _searchCtrl.clear();
-          _snack('¡Agregaste a ${found.name}! 🤝');
+          _snack('¡Agregaste a ${found.name}!');
           _refresh();
         }
       }
@@ -468,7 +467,7 @@ class _FriendsTabState extends State<_FriendsTab> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Text(
-                        'Todavía no agregaste amigos. Buscá su handle arriba y agregalos 🤝',
+                        'Todavía no agregaste amigos. Buscá su handle arriba y agregalos',
                         style: AppText.grotesk(size: 13, color: AppColors.white(0.5)),
                       ),
                     ),
@@ -547,7 +546,7 @@ class _StatBox extends StatelessWidget {
   final String label;
   final String value;
   final bool accent;
-  final String? icon;
+  final IconData? icon;
 
   const _StatBox({
     required this.label,
@@ -587,9 +586,10 @@ class _StatBox extends StatelessWidget {
             Positioned(
               top: 0,
               right: 0,
-              child: Opacity(
-                opacity: 0.6,
-                child: Text(icon!, style: const TextStyle(fontSize: 16)),
+              child: Icon(
+                icon,
+                size: 16,
+                color: accent ? AppColors.white(0.7) : AppColors.white(0.45),
               ),
             ),
           Column(
