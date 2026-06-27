@@ -3,6 +3,21 @@ import 'package:flutter/material.dart';
 /// Color dorado para logros/títulos desbloqueados.
 const Color kGold = Color(0xFFE9B949);
 
+/// Niveles numéricos, infinitos. Curva creciente: cada nivel cuesta más que el
+/// anterior, así subir se vuelve progresivamente más difícil.
+///
+/// Puntos acumulados necesarios para alcanzar [level] (nivel 1 = 0 puntos).
+int pointsForLevel(int level) => level <= 1 ? 0 : 50 * level * (level - 1);
+
+/// Nivel (1..∞) correspondiente a una cantidad de puntos.
+int levelForPoints(int points) {
+  var l = 1;
+  while (pointsForLevel(l + 1) <= points) {
+    l++;
+  }
+  return l;
+}
+
 /// Métricas locales sobre las que se evalúan los logros.
 enum AchievementMetric {
   partidos,

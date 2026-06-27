@@ -230,6 +230,21 @@ class Session extends ChangeNotifier {
     }
   }
 
+  /// Actualiza el nivel del jugador en Notion (best-effort) para que lo vean
+  /// los amigos. Lo dispara el sistema de puntos al subir de nivel.
+  Future<void> setLevel(String level) async {
+    final prof = _profile;
+    final email = _email;
+    if (prof == null || email == null || !_notion.isConfigured) return;
+    if (prof.level == level) return;
+    try {
+      await _notion.updatePage(prof.pageId, {
+        'Level': NotionService.richText(level),
+      });
+      await _persist(email, prof.copyWith(level: level));
+    } catch (_) {/* se reintenta al próximo cambio de nivel */}
+  }
+
   /// Equipa (o saca, si es vacío) el título visible bajo el nombre. Se guarda
   /// en Notion para que los amigos lo vean.
   Future<String?> setTitle(String title) async {

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../data/achievements.dart';
 import '../data/courts.dart';
 
 /// Detecta automáticamente cuándo el usuario está "jugando" en una cancha:
@@ -23,6 +24,7 @@ class PlaySessionService extends ChangeNotifier {
   static const String _kPending = 'play_pending_result';
   static const String _kStreak = 'play_streak';
   static const String _kStreakHist = 'play_streak_history';
+  static const String _kPoints = 'play_points';
 
   List<Court> _courts = const [];
   Timer? _ticker;
@@ -35,6 +37,10 @@ class PlaySessionService extends ChangeNotifier {
   /// Notifica cuando empieza/termina un partido, para propagar la presencia
   /// (ej. actualizar el estado "Jugando" en Notion vía Session).
   void Function(bool playing, String courtId, DateTime? since)? onPresenceChanged;
+
+  /// Notifica cuando el jugador sube de nivel (para guardarlo en Notion y que
+  /// lo vean los amigos).
+  void Function(int level)? onLevelChanged;
   int _tickCount = 0;
   bool _sampling = false;
 
@@ -58,6 +64,11 @@ class PlaySessionService extends ChangeNotifier {
 
   /// Jugadas totales (todas las veces que jugó, sin discriminar cancha).
   int get totalPlays => _totalPlays;
+
+  // Puntos acumulados (más tiempo + bonus por resultado/racha/cancha nueva).
+  int _points = 0;
+  int get points => _points;
+  int get level => levelForPoints(_points);
 
   // Historial de partidos terminados (más reciente primero), racha actual de
   // victorias consecutivas, e historial de rachas cerradas.
@@ -371,10 +382,17 @@ class PlaySessionService extends ChangeNotifier {
   Future<void> resolvePending(PlayResult result) async {
     final p = _pendingSession;
     if (p == null) return;
+
+    // ¿Primera vez en esta cancha? (antes de insertar el partido al log)
+    final isNewCourt = !_log.any((e) => e.courtId == p.courtId);
+
     _log.insert(0, p.withResult(result));
     if (_log.length > 100) _log = _log.sublist(0, 100);
 
+    // Bonus de racha: usa la racha ya incluyendo esta victoria.
+    var streakBonus = 0;
     if (result == PlayResult.win) {
+      streakBonus = 10 * (_streak + 1);
       _streak++;
     } else if (result == PlayResult.loss) {
       if (_streak > 0) {
@@ -384,11 +402,27 @@ class PlaySessionService extends ChangeNotifier {
       _streak = 0;
     }
 
+    // Puntos: base por tiempo + bonus por resultado, racha y cancha nueva.
+    final resultBonus = switch (result) {
+      PlayResult.win => 50,
+      PlayResult.tie => 20,
+      PlayResult.training => 15,
+      PlayResult.loss => 10,
+      PlayResult.notCounted => 0,
+    };
+    final gained =
+        (p.seconds ~/ 60) + resultBonus + streakBonus + (isNewCourt ? 30 : 0);
+    final prevLevel = levelForPoints(_points);
+    _points += gained;
+    final newLevel = levelForPoints(_points);
+
     _pendingSession = null;
     await _persistLog();
     await _persistStreak();
+    await _persistPoints();
     await _clearPending();
     notifyListeners();
+    if (newLevel != prevLevel) onLevelChanged?.call(newLevel);
   }
 
   // ── Persistencia local ─────────────────────────────────────────────────
@@ -414,6 +448,11 @@ class PlaySessionService extends ChangeNotifier {
   Future<void> _persistPlays() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_kPlays, _totalPlays);
+  }
+
+  Future<void> _persistPoints() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kPoints, _points);
   }
 
   Future<void> _persistLog() async {
@@ -461,6 +500,7 @@ class PlaySessionService extends ChangeNotifier {
     _background = prefs.getBool(_kBackground) ?? true;
     _totalPlays = prefs.getInt(_kPlays) ?? 0;
     _streak = prefs.getInt(_kStreak) ?? 0;
+    _points = prefs.getInt(_kPoints) ?? 0;
 
     // Historial de partidos.
     final rawLog = prefs.getString(_kLog);

@@ -241,6 +241,7 @@ class _HomeScreenState extends State<HomeScreen>
     _play!.onPresenceChanged = (playing, courtId, since) {
       session.setPresence(playing: playing, courtId: courtId, since: since);
     };
+    _play!.onLevelChanged = (level) => session.setLevel(level.toString());
     _play!.startTracking();
   }
 

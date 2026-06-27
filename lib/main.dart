@@ -53,6 +53,7 @@ Future<void> _ensureNotionSchema() async {
         'ClanTextColor': 'rich_text',
         'ClanFont': 'rich_text',
         'EquippedTitle': 'rich_text',
+        'Level': 'rich_text',
         'ShareStatus': 'checkbox',
         'ShareCourt': 'checkbox',
         'ShareTime': 'checkbox',

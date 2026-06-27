@@ -52,6 +52,8 @@ class Profile {
   final String clanFont;
   // Título equipado (se desbloquea con logros). Visible para los amigos.
   final String title;
+  // Nivel del jugador (según puntos). Se guarda para que lo vean los amigos.
+  final String level;
 
   // Privacidad: qué comparte el usuario con sus amigos / en las canchas.
   final bool shareStatus; // mostrar "Jugando" a los amigos
@@ -83,6 +85,7 @@ class Profile {
     this.clanTextColor = '',
     this.clanFont = '',
     this.title = '',
+    this.level = '',
     this.shareStatus = false,
     this.shareCourt = false,
     this.shareTime = false,
@@ -122,6 +125,7 @@ class Profile {
       clanTextColor: NotionService.readText(p, 'ClanTextColor'),
       clanFont: NotionService.readText(p, 'ClanFont'),
       title: NotionService.readText(p, 'EquippedTitle'),
+      level: NotionService.readText(p, 'Level'),
       shareStatus: NotionService.readCheckbox(p, 'ShareStatus'),
       shareCourt: NotionService.readCheckbox(p, 'ShareCourt'),
       shareTime: NotionService.readCheckbox(p, 'ShareTime'),
@@ -152,6 +156,7 @@ class Profile {
       'ClanTextColor': NotionService.richText(clanTextColor),
       'ClanFont': NotionService.richText(clanFont),
       'EquippedTitle': NotionService.richText(title),
+      'Level': NotionService.richText(level),
       'ShareStatus': NotionService.checkbox(shareStatus),
       'ShareCourt': NotionService.checkbox(shareCourt),
       'ShareTime': NotionService.checkbox(shareTime),
@@ -175,6 +180,7 @@ class Profile {
     String? clanTextColor,
     String? clanFont,
     String? title,
+    String? level,
     bool? shareStatus,
     bool? shareCourt,
     bool? shareTime,
@@ -203,6 +209,7 @@ class Profile {
       clanTextColor: clanTextColor ?? this.clanTextColor,
       clanFont: clanFont ?? this.clanFont,
       title: title ?? this.title,
+      level: level ?? this.level,
       shareStatus: shareStatus ?? this.shareStatus,
       shareCourt: shareCourt ?? this.shareCourt,
       shareTime: shareTime ?? this.shareTime,
@@ -234,6 +241,7 @@ class Profile {
         'clanTextColor': clanTextColor,
         'clanFont': clanFont,
         'title': title,
+        'level': level,
         'shareStatus': shareStatus,
         'shareCourt': shareCourt,
         'shareTime': shareTime,
@@ -263,6 +271,7 @@ class Profile {
         clanTextColor: j['clanTextColor'] ?? '',
         clanFont: j['clanFont'] ?? '',
         title: j['title'] ?? '',
+        level: j['level'] ?? '',
         shareStatus: j['shareStatus'] ?? false,
         shareCourt: j['shareCourt'] ?? false,
         shareTime: j['shareTime'] ?? false,

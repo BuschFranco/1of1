@@ -306,6 +306,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
+        const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: _levelCard(),
+        ),
         const SizedBox(height: 24),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -384,6 +389,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _levelCard() {
+    final pts = context.watch<PlaySessionService>().points;
+    final lvl = levelForPoints(pts);
+    final start = pointsForLevel(lvl);
+    final next = pointsForLevel(lvl + 1);
+    final progress = ((pts - start) / (next - start)).clamp(0.0, 1.0);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: const Color(0x801A2430),
+        border: Border.all(color: AppColors.white(0.08)),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.shield, size: 20, color: AppColors.accent),
+              const SizedBox(width: 10),
+              Text('Nivel $lvl',
+                  style: AppText.archivo(size: 16, weight: FontWeight.w800)),
+              const Spacer(),
+              Text('$pts pts',
+                  style: AppText.grotesk(
+                      size: 13,
+                      weight: FontWeight.w700,
+                      color: AppColors.accent)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(100),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 7,
+              backgroundColor: AppColors.white(0.08),
+              valueColor: const AlwaysStoppedAnimation(AppColors.accent),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Faltan ${next - pts} pts para el nivel ${lvl + 1}',
+            style: AppText.grotesk(size: 11, color: AppColors.white(0.45)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1079,7 +1134,9 @@ class _FriendsTabState extends State<_FriendsTab> {
     }
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   Future<void> _add() async {
     final input = _searchCtrl.text.trim();
@@ -1288,11 +1345,55 @@ class _FriendsTabState extends State<_FriendsTab> {
     );
   }
 
+  /// Avatar del amigo: muestra su insignia de clan (con su color/tipografía),
+  /// o su foto, o la inicial como fallback.
+  Widget _friendAvatar(String initial, Profile? fp) {
+    final hasClan = (fp?.clan ?? '').trim().isNotEmpty;
+    final color = clanColor(fp?.avatarColor ?? '');
+    final textColor = clanTextColor(fp?.clanTextColor ?? '');
+    final useImage = !hasClan && (fp?.avatar ?? '').isNotEmpty;
+    final label = hasClan ? fp!.clan.trim().toUpperCase() : initial;
+    return Container(
+      width: 44,
+      height: 44,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color, width: 2),
+        gradient: useImage
+            ? null
+            : LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [color, _darkenColor(color)],
+              ),
+        image: useImage
+            ? DecorationImage(image: NetworkImage(fp!.avatar), fit: BoxFit.cover)
+            : null,
+      ),
+      child: useImage
+          ? null
+          : Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  style: clanFontStyle(fp?.clanFont ?? '',
+                      size: hasClan ? 16 : 20, color: textColor),
+                ),
+              ),
+            ),
+    );
+  }
+
   Widget _friendCard(Friend f) {
     final initial = (f.friendName.isNotEmpty ? f.friendName[0] : '?').toUpperCase();
     final presence = _presenceLine(f);
-    final friendTitle =
-        context.watch<ProfilesProvider>().byEmail(f.friendEmail)?.title ?? '';
+    final fp = context.watch<ProfilesProvider>().byEmail(f.friendEmail);
+    final friendTitle = fp?.title ?? '';
+    final friendClan = fp?.clan ?? '';
+    final friendLevel = (fp?.level ?? '').isEmpty ? '1' : fp!.level;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1302,28 +1403,46 @@ class _FriendsTabState extends State<_FriendsTab> {
       ),
       child: Row(
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [AppColors.accent, AppColors.accentDark],
-              ),
-            ),
-            child: Text(initial, style: AppText.archivo(size: 20, weight: FontWeight.w900)),
-          ),
+          _friendAvatar(initial, fp),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  f.friendName.isEmpty ? f.friendHandle : f.friendName,
-                  style: AppText.archivo(size: 15, weight: FontWeight.w700),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        f.friendName.isEmpty ? f.friendHandle : f.friendName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.archivo(size: 15, weight: FontWeight.w700),
+                      ),
+                    ),
+                    if (friendClan.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Text('[$friendClan]',
+                          style: AppText.grotesk(
+                              size: 11,
+                              weight: FontWeight.w800,
+                              color: AppColors.accent)),
+                    ],
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withAlpha(30),
+                        borderRadius: BorderRadius.circular(100),
+                        border: Border.all(color: AppColors.accent.withAlpha(90)),
+                      ),
+                      child: Text('Nivel $friendLevel',
+                          style: AppText.grotesk(
+                              size: 9,
+                              weight: FontWeight.w700,
+                              color: AppColors.accent)),
+                    ),
+                  ],
                 ),
                 Text(
                   f.friendHandle,
