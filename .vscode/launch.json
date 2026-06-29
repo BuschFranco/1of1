@@ -5,6 +5,8 @@
       "name": "1of1 (debug)",
       "request": "launch",
       "type": "dart",
+      "cwd": "app",
+      "program": "lib/main.dart",
       "args": ["--dart-define-from-file=dart_defines.json"]
     },
     {
@@ -12,6 +14,8 @@
       "request": "launch",
       "type": "dart",
       "flutterMode": "release",
+      "cwd": "app",
+      "program": "lib/main.dart",
       "args": ["--dart-define-from-file=dart_defines.json"]
     }
   ]

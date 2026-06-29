@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/courts_provider.dart';
+import '../services/notifications_service.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
 import '../theme/app_theme.dart';
@@ -23,6 +24,17 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   AppTab _tab = AppTab.home;
+
+  @override
+  void initState() {
+    super.initState();
+    // Permiso de notificaciones tras el primer frame: no interfiere con el
+    // arranque de la UI ni del mapa.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NotificationsService.instance.requestPermission();
+    });
+  }
+
 
   String? _detailCourtId;
   bool _filtersOpen = false;

@@ -12,6 +12,8 @@ import 'screens/onboarding_screen.dart';
 import 'notion/notion_config.dart';
 import 'services/courts_provider.dart';
 import 'services/favorites_provider.dart';
+import 'services/geofence_service.dart';
+import 'services/notifications_service.dart';
 import 'services/notion_service.dart';
 import 'services/play_session_service.dart';
 import 'services/profiles_provider.dart';
@@ -33,6 +35,11 @@ void main() async {
     statusBarIconBrightness: Brightness.light,
     systemNavigationBarColor: AppColors.bg,
   ));
+
+  // Notificaciones locales (recompensas). No bloquea el arranque si falla.
+  unawaited(NotificationsService.instance.init());
+  // Geofencing (detecta llegada a una cancha sin notificación persistente).
+  unawaited(GeofenceService.instance.init());
 
   // Crea (si faltan) las columnas que usan las features nuevas. Idempotente y
   // sin bloquear el arranque: si falla por permisos, la app sigue funcionando.

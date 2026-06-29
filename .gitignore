@@ -1,51 +1,23 @@
-# Local secrets (never commit)
-dart_defines.json
-lib/config.dart
+# ── Monorepo root ──────────────────────────────────────────────────────────
+# Cada subproyecto tiene su propio .gitignore (app/.gitignore, backend/.gitignore)
+# para sus artefactos de build. Acá solo va lo común a nivel repo.
+
+# Secrets (defensa en profundidad; también ignorados por subproyecto)
+**/dart_defines.json
+**/.env
 .env
-ios/Flutter/APIKeys.xcconfig
 
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
+# OS
 .DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
+Thumbs.db
 
-# IntelliJ related
+# Editores / IDE
+*.log
+*.swp
+.history
+.idea/
 *.iml
 *.ipr
 *.iws
-.idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+# La carpeta .vscode se versiona (launch configs compartidas), por eso NO se ignora.

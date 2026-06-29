@@ -339,6 +339,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const SizedBox(height: 24),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: _levelCard(),
+        ),
+        const SizedBox(height: 10),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
           child: GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -370,10 +375,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 10),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: _levelCard(),
+          child: _totalTimeCard(),
         ),
         const SizedBox(height: 24),
         Padding(
@@ -506,41 +511,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _playTimeSection() {
-    final ps = context.watch<PlaySessionService>();
-    final items = ps.breakdown.where((e) => e.seconds > 0).toList();
-    final total = ps.totalSeconds;
-    return Column(
-      children: [
-        // Total general (siempre visible, 0 si todavía no jugaste).
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          decoration: BoxDecoration(
-            color: const Color(0x801A2430),
-            border: Border.all(color: AppColors.white(0.06)),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Row(
+  /// Tiempo total general (todas las canchas). Va pegado justo debajo del grid
+  /// de stats.
+  Widget _totalTimeCard() {
+    final total = context.watch<PlaySessionService>().totalSeconds;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: const Color(0x801A2430),
+        border: Border.all(color: AppColors.white(0.06)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.timer_outlined, color: AppColors.accent, size: 22),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.timer_outlined, color: AppColors.accent, size: 22),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Total',
-                      style: AppText.grotesk(size: 11, color: AppColors.white(0.5))),
-                  const SizedBox(height: 2),
-                  Text(
-                    PlaySessionService.fmt(total),
-                    style: AppText.archivo(
-                        size: 20, weight: FontWeight.w900, color: AppColors.accent),
-                  ),
-                ],
+              Text('Total',
+                  style: AppText.grotesk(size: 11, color: AppColors.white(0.5))),
+              const SizedBox(height: 2),
+              Text(
+                PlaySessionService.fmt(total),
+                style: AppText.archivo(
+                    size: 20, weight: FontWeight.w900, color: AppColors.accent),
               ),
             ],
           ),
-        ),
+        ],
+      ),
+    );
+  }
+
+  Widget _playTimeSection() {
+    final ps = context.watch<PlaySessionService>();
+    final items = ps.breakdown.where((e) => e.seconds > 0).toList();
+    return Column(
+      children: [
         // Desglose por cancha.
         for (final e in items) ...[
           const SizedBox(height: 8),

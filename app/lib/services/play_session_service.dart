@@ -94,6 +94,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   final List<RewardEvent> _rewards = [];
   List<RewardEvent> get rewards => List.unmodifiable(_rewards);
 
+  /// Se dispara con cada recompensa nueva, además de encolar el banner in-app.
+  /// Lo usa la capa de notificaciones del sistema (push local).
+  void Function(RewardEvent reward)? onReward;
+
   // Historial persistido de notificaciones (más reciente primero), para el
   // listado del botón de campana.
   List<AppNotification> _notifs = [];
@@ -148,6 +152,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     );
     if (_notifs.length > 50) _notifs = _notifs.sublist(0, 50);
     _persistNotifs();
+    onReward?.call(e);
   }
 
   Future<void> _persistNotifs() async {
@@ -362,7 +367,22 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     }
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     _sample(); // primera muestra inmediata
+    // El foreground service (con su notificación) ya NO arranca acá: ahora lo
+    // gobierna el geofencing (enter de una cancha → enterCourtArea). Con la app
+    // abierta, el ticker de arriba ya detecta sin servicio en primer plano.
+  }
+
+  /// Llamado al ENTRAR a la zona de una cancha (geofence). Arranca el foreground
+  /// service para mantener viva la detección aunque se minimice la app; su
+  /// notificación queda justificada porque estás en una cancha.
+  void enterCourtArea() {
     if (_background) _startStream();
+  }
+
+  /// Llamado al SALIR de la zona de una cancha. Corta el foreground service (y
+  /// su notificación). La sesión, si la había, se cierra sola al salir del radio.
+  void leaveCourtArea() {
+    _stopStream();
   }
 
   void stopTracking() {
@@ -423,15 +443,18 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// Habilita/deshabilita la detección en segundo plano (lo elige el usuario).
   /// Con background, un servicio en primer plano mantiene viva la app aunque
   /// esté minimizada, así el muestreo sigue corriendo.
+  /// Se dispara al cambiar la preferencia de detección en background, para que
+  /// el coordinador registre o quite las geofences de las canchas.
+  void Function(bool enabled)? onBackgroundChanged;
+
   Future<void> setBackground(bool enabled) async {
     _background = enabled;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kBackground, enabled);
-    if (enabled) {
-      await _startStream();
-    } else {
-      _stopStream();
-    }
+    // Si se apaga, cortamos cualquier servicio en curso. El registro/quita de
+    // geofences lo maneja el coordinador vía onBackgroundChanged.
+    if (!enabled) _stopStream();
+    onBackgroundChanged?.call(enabled);
     notifyListeners();
   }
 
@@ -457,7 +480,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         distanceFilter: 8,
         foregroundNotificationConfig: const ForegroundNotificationConfig(
           notificationTitle: '1of1',
-          notificationText: 'Detectando si estás jugando en una cancha',
+          notificationText: 'Estás en una cancha · registrando tu tiempo',
           enableWakeLock: true,
         ),
       );

@@ -1,4 +1,7 @@
+import 'package:native_geofence/native_geofence.dart';
 import 'courts_provider.dart';
+import 'geofence_service.dart';
+import 'notifications_service.dart';
 import 'play_session_service.dart';
 import 'session.dart';
 
@@ -32,11 +35,32 @@ class SyncCoordinator {
   // Evita arrancar el tracking más de una vez por sesión (Session notifica en
   // cada cambio de perfil, no solo al loguear).
   bool _trackingStarted = false;
+  // Cantidad de canchas con la que se registraron geofences por última vez
+  // (para no re-registrar en cada notify del catálogo).
+  int _geofencedCount = -1;
 
   void _wire() {
     // Presencia "Jugando" → Notion (best-effort, con reintento vía batch).
     _play.onPresenceChanged = (playing, courtId, since) {
       _session.setPresence(playing: playing, courtId: courtId, since: since);
+    };
+
+    // Geofencing del SO: enter/exit de la zona de una cancha arranca/corta el
+    // foreground service (así la notificación persistente solo aparece estando
+    // en una cancha, no todo el tiempo).
+    GeofenceService.instance.onEvent = (event, courtIds) {
+      if (event == GeofenceEvent.enter) {
+        _play.enterCourtArea();
+      } else if (event == GeofenceEvent.exit) {
+        _play.leaveCourtArea();
+      }
+    };
+    // Al cambiar la preferencia de background, registramos o quitamos geofences.
+    _play.onBackgroundChanged = (_) => _syncGeofences();
+
+    // Cada recompensa (logro/título/nivel) también dispara un push del sistema.
+    _play.onReward = (r) {
+      NotificationsService.instance.show(r.headline, r.name);
     };
 
     // Batch: cuando el service lo pide (cada 2 min / al pausar / cerrar),
@@ -65,7 +89,28 @@ class SyncCoordinator {
     _onSessionChanged();
   }
 
-  void _pushCourts() => _play.setCourts(_courts.courts);
+  void _pushCourts() {
+    _play.setCourts(_courts.courts);
+    _syncGeofences();
+  }
+
+  /// Registra (o quita) las geofences de las canchas según haya sesión, esté
+  /// habilitada la detección en background y haya canchas cargadas. Evita
+  /// re-registrar si la cantidad de canchas no cambió.
+  void _syncGeofences() {
+    final loggedIn = _session.profile != null;
+    final courts = _courts.courts;
+    if (!loggedIn || !_play.backgroundEnabled || courts.isEmpty) {
+      if (_geofencedCount != 0) {
+        _geofencedCount = 0;
+        GeofenceService.instance.clear();
+      }
+      return;
+    }
+    if (_geofencedCount == courts.length) return; // sin cambios relevantes
+    _geofencedCount = courts.length;
+    GeofenceService.instance.syncCourts(courts);
+  }
 
   void _onSessionChanged() {
     final p = _session.profile;
@@ -74,6 +119,8 @@ class SyncCoordinator {
       if (_trackingStarted) {
         _play.stopTracking();
         _trackingStarted = false;
+        _geofencedCount = -1;
+        GeofenceService.instance.clear();
       }
       return;
     }
@@ -87,6 +134,7 @@ class SyncCoordinator {
       seedBadges: p.unlockedBadges,
       seedTotalsJson: p.playTimeByCourt,
     );
+    _syncGeofences();
   }
 
   void dispose() {
