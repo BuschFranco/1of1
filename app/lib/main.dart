@@ -10,6 +10,7 @@ import 'screens/handle_setup_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/onboarding_screen.dart';
 import 'notion/notion_config.dart';
+import 'services/app_loading_state.dart';
 import 'services/courts_provider.dart';
 import 'services/favorites_provider.dart';
 import 'services/geofence_service.dart';
@@ -69,6 +70,9 @@ Future<void> _ensureNotionSchema() async {
         'Playing': 'checkbox',
         'PlayingCourtId': 'rich_text',
         'PlayingSince': 'date',
+        'LastPlayedCourtId': 'rich_text',
+        'LastPlayedAt': 'date',
+        'ShowLastPlayed': 'checkbox',
       },
     );
     await notion.ensureProperties(
@@ -92,6 +96,7 @@ class OneOfOneApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => FavoritesProvider()..load()),
         ChangeNotifierProvider(create: (_) => ProfilesProvider()..load()),
         ChangeNotifierProvider(create: (_) => PlaySessionService()),
+        ChangeNotifierProvider(create: (_) => AppLoadingState()),
         // Pegamento de sincronización (presencia, batch, sembrado). Se crea de
         // forma temprana (lazy: false) para cablear los callbacks ni bien
         // arranca la app, sin depender de que se monte ninguna pantalla.

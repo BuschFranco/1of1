@@ -86,6 +86,10 @@ abstract class Profile with _$Profile {
     @Default(false) bool playing,
     @Default('') String playingCourtId,
     @Default('') String playingSince, // ISO8601, '' si no está jugando
+    // Último partido jugado (para mostrar a los amigos cuando no está jugando).
+    @Default('') String lastPlayedCourtId,
+    @Default('') String lastPlayedAt, // ISO8601, '' si nunca jugó
+    @Default(false) bool showLastPlayed, // privacidad: mostrarlo a los amigos
   }) = _Profile;
 
   /// Para cachear la sesión en SharedPreferences (restauración offline).
@@ -135,6 +139,9 @@ abstract class Profile with _$Profile {
       playing: NotionService.readCheckbox(p, 'Playing'),
       playingCourtId: NotionService.readText(p, 'PlayingCourtId'),
       playingSince: NotionService.readDate(p, 'PlayingSince') ?? '',
+      lastPlayedCourtId: NotionService.readText(p, 'LastPlayedCourtId'),
+      lastPlayedAt: NotionService.readDate(p, 'LastPlayedAt') ?? '',
+      showLastPlayed: NotionService.readCheckbox(p, 'ShowLastPlayed'),
     );
   }
 
@@ -172,6 +179,10 @@ abstract class Profile with _$Profile {
       'PlayingCourtId': NotionService.richText(playingCourtId),
       'PlayingSince':
           NotionService.date(playingSince.isEmpty ? null : playingSince),
+      'LastPlayedCourtId': NotionService.richText(lastPlayedCourtId),
+      'LastPlayedAt':
+          NotionService.date(lastPlayedAt.isEmpty ? null : lastPlayedAt),
+      'ShowLastPlayed': NotionService.checkbox(showLastPlayed),
     };
   }
 }

@@ -59,12 +59,28 @@ class SyncCoordinator {
               ? 'Estamos contando tu tiempo en la cancha.'
               : 'Contando tu tiempo en $name.',
         );
-      } else {
-        NotificationsService.instance.show(
-          'Terminó tu partido',
-          'Abrí 1of1 para registrar el resultado.',
-        );
       }
+    };
+
+    // Terminó un partido válido: avisamos para que registre el resultado y
+    // guardamos el "último partido" (cancha + momento) para mostrar a los amigos.
+    _play.onMatchEnded = (courtId, endedAt) {
+      NotificationsService.instance.show(
+        'Terminó tu partido',
+        'Abrí 1of1 para registrar el resultado.',
+      );
+      _session.setLastPlayed(courtId: courtId, at: endedAt);
+    };
+
+    // Partido demasiado corto (< 13 min): no se registró.
+    _play.onMatchDiscarded = (court, seconds) {
+      final mins = seconds ~/ 60;
+      final dur = mins > 0 ? '$mins min' : '$seconds s';
+      NotificationsService.instance.show(
+        'Partido no registrado',
+        'Duró solo $dur, muy poco para contar como partido. '
+            'No suma puntos ni queda en el historial.',
+      );
     };
 
     // Geofencing del SO: enter/exit de la zona de una cancha arranca/corta el
@@ -112,7 +128,7 @@ class SyncCoordinator {
         points: _play.points,
         level: _play.level.toString(),
         unlockedBadges: _play.unlockedBadges.toList(),
-        playSeconds: _play.totalSeconds,
+        playSeconds: _play.committedSeconds,
         playTimeByCourt: _play.totalsJson,
       );
       await _session.flush();

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -340,7 +341,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const SizedBox(height: 24),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: _levelCard(),
+          child: _levelWithHistory(),
         ),
         const SizedBox(height: 10),
         Padding(
@@ -472,7 +473,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
-        color: const Color(0x801A2430),
+        // Fondo SÓLIDO equivalente al translúcido 0x801A2430 compuesto sobre el
+        // fondo de la app, para que el mazo de partidos que va detrás no se
+        // transparente a través del nivel.
+        color: Color.alphaBlend(const Color(0x801A2430), AppColors.bg),
         border: Border.all(color: AppColors.white(0.08)),
         borderRadius: BorderRadius.circular(18),
       ),
@@ -508,6 +512,150 @@ class _ProfileScreenState extends State<ProfileScreen> {
             'Faltan ${next - pts} pts para el nivel ${lvl + 1}',
             style: AppText.grotesk(size: 11, color: AppColors.white(0.45)),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Nivel + mini historial de los últimos 3 partidos. El historial se
+  /// renderiza como un mazo de cartas que sale de DETRÁS del nivel: pegado y
+  /// solapado, cada partido detrás del anterior, más angosto y más transparente
+  /// a medida que se aleja (el 3ro casi no se ve). El nivel queda siempre por
+  /// encima.
+  Widget _levelWithHistory() {
+    final log = context.watch<PlaySessionService>().log;
+    final recent = log.where((e) => e.result != null).take(3).toList();
+    final levelCard = _levelCard();
+    if (recent.isEmpty) return levelCard;
+
+    const cardH = 48.0; // alto de cada carta
+    const peek = 22.0; // cuánto asoma cada carta por debajo de la anterior
+    const overlap = 14.0; // cuánto se mete la 1ra carta debajo del nivel
+    // Más angostas y más transparentes hacia el final.
+    const widths = [0.94, 0.85, 0.76];
+    const opacities = [1.0, 0.5, 0.18];
+
+    final n = recent.length;
+    final stackH = cardH + peek * (n - 1);
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // Mazo, anclado al fondo del Stack para que su parte superior quede
+        // tapada por el nivel (que se pinta después, encima).
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: SizedBox(
+            height: stackH,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                // De atrás (último, transparente) hacia adelante (más reciente).
+                for (var i = n - 1; i >= 0; i--)
+                  Positioned(
+                    top: peek * i,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: FractionallySizedBox(
+                        widthFactor: widths[i],
+                        child: Opacity(
+                          opacity: opacities[i],
+                          child: _recentPointsRow(recent[i], cardH),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        // Nivel encima + espacio reservado para la parte visible del mazo.
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            levelCard,
+            SizedBox(height: stackH - overlap),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Fondo de una carta/fila según el resultado: rojo si perdió, verde si ganó,
+  /// gris si empató; el resto (entrenamiento / sin info) queda azulado.
+  Color _resultBg(PlayResult? r) {
+    // Fondo SÓLIDO (los translúcidos dejaban ver la carta de atrás al solaparse
+    // en el mazo). Componemos sobre el fondo de la app.
+    final base = Color.alphaBlend(const Color(0xE61A2430), AppColors.bg);
+    switch (r) {
+      case PlayResult.win:
+        return Color.alphaBlend(AppColors.open.withAlpha(48), base);
+      case PlayResult.loss:
+        return Color.alphaBlend(const Color(0xFFFF6B6B).withAlpha(48), base);
+      case PlayResult.tie:
+        return Color.alphaBlend(Colors.white.withAlpha(30), base);
+      default:
+        return Color.alphaBlend(const Color(0xCC1A2430), AppColors.bg);
+    }
+  }
+
+  Color _resultBorder(PlayResult? r) {
+    switch (r) {
+      case PlayResult.win:
+        return AppColors.open.withAlpha(110);
+      case PlayResult.loss:
+        return const Color(0xFFFF6B6B).withAlpha(110);
+      case PlayResult.tie:
+        return AppColors.white(0.22);
+      default:
+        return AppColors.white(0.08);
+    }
+  }
+
+  Widget _recentPointsRow(PlaySession s, double height) {
+    final (color, label) = _resultStyle(s.result);
+    return Container(
+      height: height,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: _resultBg(s.result),
+        border: Border.all(color: _resultBorder(s.result)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            decoration: BoxDecoration(
+              color: color.withAlpha(38),
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: color.withAlpha(120)),
+            ),
+            child: Text(label,
+                style: AppText.grotesk(
+                    size: 9, weight: FontWeight.w800, color: color)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              s.courtName.isEmpty ? 'Cancha' : s.courtName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.grotesk(size: 13, weight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '+${s.points}',
+            style: AppText.archivo(
+                size: 14, weight: FontWeight.w900, color: AppColors.accent),
+          ),
+          const SizedBox(width: 2),
+          Text('pts',
+              style: AppText.grotesk(size: 10, color: AppColors.white(0.45))),
         ],
       ),
     );
@@ -549,7 +697,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _playTimeSection() {
     final ps = context.watch<PlaySessionService>();
-    final items = ps.breakdown.where((e) => e.seconds > 0).toList();
+    final items =
+        ps.breakdown.where((e) => e.seconds > 0).toList().reversed.toList();
     return Column(
       children: [
         // Desglose por cancha.
@@ -972,8 +1121,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0x801A2430),
-        border: Border.all(color: AppColors.white(0.06)),
+        color: _resultBg(s.result),
+        border: Border.all(color: _resultBorder(s.result)),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -1480,13 +1629,11 @@ class _FriendsTabState extends State<_FriendsTab> {
       final match = courts.where((c) => c.id == prof.playingCourtId);
       if (match.isNotEmpty) label = 'Jugando en ${match.first.name}';
     }
-    String? time;
+    // El tiempo corre en vivo (contador local cada 1s) usando PlayingSince como
+    // base estática: cero peticiones a la base por segundo.
+    DateTime? since;
     if (prof.shareTime && prof.playingSince.isNotEmpty) {
-      final since = DateTime.tryParse(prof.playingSince);
-      if (since != null) {
-        time = PlaySessionService.fmt(
-            DateTime.now().difference(since).inSeconds);
-      }
+      since = DateTime.tryParse(prof.playingSince);
     }
 
     return Padding(
@@ -1503,17 +1650,67 @@ class _FriendsTabState extends State<_FriendsTab> {
           ),
           const SizedBox(width: 6),
           Flexible(
+            child: since == null
+                ? Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.grotesk(
+                        size: 11,
+                        weight: FontWeight.w600,
+                        color: AppColors.open),
+                  )
+                : _LiveElapsed(since: since, prefix: '$label · '),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// "Jugó en X · 12/5 14:30" si el amigo lo comparte y no está jugando ahora.
+  /// null si no aplica.
+  Widget? _lastPlayedLine(Friend f) {
+    final prof = context.watch<ProfilesProvider>().byEmail(f.friendEmail);
+    if (prof == null ||
+        prof.playing ||
+        !prof.showLastPlayed ||
+        prof.lastPlayedAt.isEmpty) {
+      return null;
+    }
+    final at = DateTime.tryParse(prof.lastPlayedAt);
+    if (at == null) return null;
+
+    var label = 'Jugó';
+    if (prof.lastPlayedCourtId.isNotEmpty) {
+      final courts = context.watch<CourtsProvider>().courts;
+      final match = courts.where((c) => c.id == prof.lastPlayedCourtId);
+      if (match.isNotEmpty) label = 'Jugó en ${match.first.name}';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          Icon(Icons.history, size: 12, color: AppColors.white(0.4)),
+          const SizedBox(width: 6),
+          Flexible(
             child: Text(
-              time == null ? label : '$label · $time',
+              '$label · ${_fmtDateTime(at)}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: AppText.grotesk(
-                  size: 11, weight: FontWeight.w600, color: AppColors.open),
+              style: AppText.grotesk(size: 11, color: AppColors.white(0.45)),
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// Fecha + hora corta, ej. "12/5 · 14:30".
+  String _fmtDateTime(DateTime d) {
+    final hh = d.hour.toString().padLeft(2, '0');
+    final mm = d.minute.toString().padLeft(2, '0');
+    return '${d.day}/${d.month} · $hh:$mm';
   }
 
   /// Avatar del amigo: muestra su insignia de clan (con su color/tipografía),
@@ -1562,6 +1759,8 @@ class _FriendsTabState extends State<_FriendsTab> {
   Widget _friendCard(Friend f) {
     final initial = (f.friendName.isNotEmpty ? f.friendName[0] : '?').toUpperCase();
     final presence = _presenceLine(f);
+    // Si no está jugando, mostramos cuándo jugó por última vez (si lo comparte).
+    final lastPlayed = presence == null ? _lastPlayedLine(f) : null;
     final fp = context.watch<ProfilesProvider>().byEmail(f.friendEmail);
     final friendTitle = fp?.title ?? '';
     final friendClan = fp?.clan ?? '';
@@ -1634,6 +1833,7 @@ class _FriendsTabState extends State<_FriendsTab> {
                     ),
                   ),
                 ?presence,
+                ?lastPlayed,
               ],
             ),
           ),
@@ -2307,6 +2507,7 @@ class _PrivacyDialogState extends State<_PrivacyDialog> {
   late bool _status = widget.profile.shareStatus;
   late bool _court = widget.profile.shareCourt;
   late bool _time = widget.profile.shareTime;
+  late bool _showLast = widget.profile.showLastPlayed;
   late bool _background = context.read<PlaySessionService>().backgroundEnabled;
   bool _saving = false;
 
@@ -2320,6 +2521,7 @@ class _PrivacyDialogState extends State<_PrivacyDialog> {
           shareStatus: _status,
           shareCourt: _court,
           shareTime: _time,
+          showLastPlayed: _showLast,
         );
     if (!mounted) return;
     if (err == null) {
@@ -2397,6 +2599,12 @@ class _PrivacyDialogState extends State<_PrivacyDialog> {
             _time,
             (v) => setState(() => _time = v),
           ),
+          _switchRow(
+            'Mostrar último partido',
+            'Cuando no estés jugando, tus amigos ven cuándo y dónde jugaste por última vez.',
+            _showLast,
+            (v) => setState(() => _showLast = v),
+          ),
           const SizedBox(height: 8),
           Divider(color: AppColors.white(0.08), height: 1),
           const SizedBox(height: 8),
@@ -2428,6 +2636,47 @@ class _PrivacyDialogState extends State<_PrivacyDialog> {
                       size: 13, weight: FontWeight.w700, color: AppColors.accent)),
         ),
       ],
+    );
+  }
+}
+
+/// Tiempo transcurrido que corre en vivo (tick local cada 1s) desde [since].
+/// Usa el timestamp estático del amigo como base, sin pegarle a la red.
+class _LiveElapsed extends StatefulWidget {
+  final DateTime since;
+  final String prefix;
+  const _LiveElapsed({required this.since, this.prefix = ''});
+
+  @override
+  State<_LiveElapsed> createState() => _LiveElapsedState();
+}
+
+class _LiveElapsedState extends State<_LiveElapsed> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final secs = DateTime.now().difference(widget.since).inSeconds;
+    return Text(
+      '${widget.prefix}${PlaySessionService.fmt(secs < 0 ? 0 : secs)}',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: AppText.grotesk(
+          size: 11, weight: FontWeight.w600, color: AppColors.open),
     );
   }
 }

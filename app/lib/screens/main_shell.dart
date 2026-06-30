@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../services/app_loading_state.dart';
 import '../services/courts_provider.dart';
 import '../services/notifications_service.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_loader.dart';
 import '../widgets/app_tab_bar.dart';
 import '../widgets/reward_banner.dart';
 import 'crew_screen.dart';
@@ -25,9 +28,17 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   AppTab _tab = AppTab.home;
 
+  // Tope de seguridad del loader: si las señales (mapa/GPS/canchas) no llegan,
+  // igual lo ocultamos a los 6s para no dejar la app tapada.
+  bool _loaderTimedOut = false;
+  Timer? _loaderTimer;
+
   @override
   void initState() {
     super.initState();
+    _loaderTimer = Timer(const Duration(seconds: 6), () {
+      if (mounted) setState(() => _loaderTimedOut = true);
+    });
     // Permiso de notificaciones tras el primer frame: no interfiere con el
     // arranque de la UI ni del mapa. Si el SO ya las tiene habilitadas (algunos
     // equipos las auto-conceden), no se vuelve a pedir.
@@ -37,6 +48,12 @@ class _MainShellState extends State<MainShell> {
         await ns.requestPermission();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _loaderTimer?.cancel();
+    super.dispose();
   }
 
 
@@ -153,7 +170,7 @@ class _MainShellState extends State<MainShell> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '${s.courtName.isEmpty ? 'Cancha' : s.courtName} · ${PlaySessionService.fmt(s.seconds)}',
+              '${s.courtName.isEmpty ? 'Cancha' : s.courtName} · ${PlaySessionService.fmt(s.seconds)} · x${PlaySessionService.multiplierFor(s.seconds).toStringAsFixed(2)}',
               style: AppText.grotesk(size: 12, color: AppColors.white(0.55)),
             ),
             option(PlayResult.win, Icons.emoji_events_outlined, AppColors.open),
@@ -173,8 +190,16 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final courts = context.watch<CourtsProvider>().courts;
+    final courtsProvider = context.watch<CourtsProvider>();
+    final courts = courtsProvider.courts;
     final hideTabs = _detailCourtId != null || _filtersOpen;
+
+    // Loader de arranque: visible hasta que el mapa esté listo, haya primer GPS
+    // y las canchas hayan cargado (o se agote el tope de seguridad).
+    final loading = context.watch<AppLoadingState>();
+    final loaderReady =
+        loading.mapReady && loading.gpsReady && !courtsProvider.loading;
+    final loaderVisible = !loaderReady && !_loaderTimedOut;
 
     // Si hay un partido terminado sin resultado, preguntamos cómo le fue.
     final pending = context.watch<PlaySessionService>().pending;
@@ -282,6 +307,8 @@ class _MainShellState extends State<MainShell> {
                   context.read<PlaySessionService>().acknowledgeReward(),
             ),
           ),
+          // Loader de carga inicial (mapa/canchas/GPS), por encima de todo.
+          Positioned.fill(child: AppLoader(visible: loaderVisible)),
         ],
       ),
     );

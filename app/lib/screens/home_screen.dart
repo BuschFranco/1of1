@@ -6,6 +6,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../data/courts.dart';
+import '../services/app_loading_state.dart';
 import '../services/notifications_service.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
@@ -79,6 +80,9 @@ class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   int _index = 0;
   GoogleMapController? _mapCtrl;
+  // Estado de carga inicial (loader del shell). Se captura en initState para no
+  // depender del context tras awaits.
+  late final AppLoadingState _loading = context.read<AppLoadingState>();
   final TextEditingController _searchCtrl = TextEditingController();
   List<_Prediction> _predictions = [];
   bool _showSearch = false;
@@ -220,7 +224,12 @@ class _HomeScreenState extends State<HomeScreen>
       });
       _syncPageToIndex();
       _updateUserScreenPos();
-    } catch (_) {}
+    } catch (_) {
+      // Ignoramos el error: el loader no debe quedarse esperando el GPS.
+    } finally {
+      // Listo (con o sin punto): liberamos el loader del primer GPS.
+      _loading.markGpsReady();
+    }
   }
 
   @override
@@ -468,6 +477,7 @@ class _HomeScreenState extends State<HomeScreen>
                 widget.onFocusConsumed?.call();
               }
               _updateUserScreenPos();
+              _loading.markMapReady();
             },
             onCameraMove: (_) => _updateUserScreenPos(),
             onTap: _mockMode ? _onMockTap : null,
@@ -714,13 +724,39 @@ class _HomeScreenState extends State<HomeScreen>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    ending ? 'Termina en $mm:$ss' : '$mm:$ss',
-                    style: AppText.archivo(
-                      size: 13,
-                      weight: FontWeight.w800,
-                      color: accent,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        ending ? 'Termina en $mm:$ss' : '$mm:$ss',
+                        style: AppText.archivo(
+                          size: 13,
+                          weight: FontWeight.w800,
+                          color: accent,
+                        ),
+                      ),
+                      // Multiplicador por duración, creciendo en vivo.
+                      if (!ending) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withAlpha(38),
+                            borderRadius: BorderRadius.circular(6),
+                            border:
+                                Border.all(color: AppColors.accent.withAlpha(120)),
+                          ),
+                          child: Text(
+                            'x${ps.currentMultiplier.toStringAsFixed(2)}',
+                            style: AppText.grotesk(
+                                size: 10,
+                                weight: FontWeight.w800,
+                                color: AppColors.accent),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   Text(
                     ending

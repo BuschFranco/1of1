@@ -21,6 +21,13 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   // apenas el GPS te ubica fuera del radio. Recién se cierra si seguís fuera de
   // forma continua durante este tiempo (tolera saltos de señal y pausas cortas).
   static const Duration exitGrace = Duration(minutes: 6);
+  // Duración mínima para que un partido cuente. Por debajo de esto asumimos que
+  // se canceló (no suma puntos, ni tiempo, ni jugadas, ni entra al historial).
+  static const Duration minMatch = Duration(minutes: 13);
+  // Multiplicador de puntos por duración: incentiva partidos largos. Crece
+  // lineal desde x1.0 al empezar hasta [maxMultiplier] al llegar a [multiplierCap].
+  static const Duration multiplierCap = Duration(minutes: 90);
+  static const double maxMultiplier = 1.8;
   static const Duration _sampleEvery = Duration(seconds: 10);
   // Cada cuánto se suben los agregados a Notion (batch). El historial y los
   // favoritos NO se suben: quedan locales.
@@ -55,6 +62,13 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// Notifica cuando empieza/termina un partido, para propagar la presencia
   /// (ej. actualizar el estado "Jugando" en Notion vía Session).
   void Function(bool playing, String courtId, DateTime? since)? onPresenceChanged;
+
+  /// Terminó un partido válido (>= [minMatch]) que queda pendiente de resultado.
+  /// Incluye la cancha y el momento de fin (para registrar el "último partido").
+  void Function(String courtId, DateTime endedAt)? onMatchEnded;
+
+  /// Se descartó un partido por durar menos de [minMatch]: no se registró nada.
+  void Function(String courtName, int seconds)? onMatchDiscarded;
 
   // ── Notificación de sesión (cronómetro persistente con la app minimizada) ──
   // La capa de notificaciones implementa el "cómo"; acá solo decidimos el qué y
@@ -129,7 +143,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   DateTime? _startedAt;
   int _elapsed = 0; // segundos
   int _lastSavedAt = 0; // segundos transcurridos en el último guardado
-  int _accrued = 0; // segundos de la sesión ya sumados a los totales
+  int _accrued = 0; // reservado; los totales se computan al resolver el partido
   // Pausa del cronómetro (como play/pause de YouTube/Spotify).
   DateTime? _pausedAt; // != null mientras está pausado
   int _pausedSeconds = 0; // total de segundos pausados (se excluyen del elapsed)
@@ -294,6 +308,18 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   String? get courtName => _courtName;
   int get elapsedSeconds => _elapsed;
 
+  /// Multiplicador de puntos por duración para [seconds] de partido: x1.0 al
+  /// empezar, sube lineal hasta [maxMultiplier] a [multiplierCap] (1:30h) y se
+  /// mantiene ahí. Solo afecta los puntos por tiempo.
+  static double multiplierFor(int seconds) {
+    final cap = multiplierCap.inSeconds;
+    final t = seconds.clamp(0, cap) / cap;
+    return 1.0 + (maxMultiplier - 1.0) * t;
+  }
+
+  /// Multiplicador actual del partido en curso (en vivo).
+  double get currentMultiplier => multiplierFor(_elapsed);
+
   /// True si el cronómetro del partido está pausado.
   bool get isPaused => _pausedAt != null;
 
@@ -383,8 +409,14 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   int get _pending => isPlaying ? (_elapsed - _accrued) : 0;
 
   /// Tiempo total jugado (todas las canchas), incluyendo la sesión en curso.
+  /// Para mostrar en vivo en la UI.
   int get totalSeconds =>
       _totals.values.fold(0, (a, b) => a + b.seconds) + _pending;
+
+  /// Tiempo total ya REGISTRADO (sin la sesión en curso). Es lo que se sube al
+  /// backend: el partido en curso recién se contabiliza al resolverlo.
+  int get committedSeconds =>
+      _totals.values.fold(0, (a, b) => a + b.seconds);
 
   /// Desglose por cancha serializado (mismo formato que la persistencia local)
   /// para subirlo a Notion: {courtId: {"n": nombre, "s": segundos}}.
@@ -422,15 +454,15 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
 
   void setCourts(List<Court> courts) => _courts = courts;
 
-  /// Formatea segundos como "1h 23m" / "45m" / "30s".
+  /// Formatea segundos como reloj: "1:23:45" / "23:45" / "00:09".
   static String fmt(int seconds) {
-    if (seconds >= 3600) {
-      final h = seconds ~/ 3600;
-      final m = (seconds % 3600) ~/ 60;
-      return m > 0 ? '${h}h ${m}m' : '${h}h';
-    }
-    if (seconds >= 60) return '${seconds ~/ 60}m';
-    return '${seconds}s';
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    final s = seconds % 60;
+    final mm = m.toString().padLeft(2, '0');
+    final ss = s.toString().padLeft(2, '0');
+    if (h > 0) return '$h:$mm:$ss';
+    return '$mm:$ss';
   }
 
   /// Arranca el muestreo de ubicación (pide permiso si hace falta).
@@ -714,10 +746,11 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       if (_pausedAt == null) {
         _elapsed =
             DateTime.now().difference(_startedAt!).inSeconds - _pausedSeconds;
-        // Guardado periódico cada 30s: vuelca el tramo al total de la cancha.
+        // Guardado periódico cada 30s: persistimos la sesión activa (para
+        // retomar el cronómetro si se cierra la app). El tiempo NO se vuelca a
+        // los totales todavía: eso pasa al resolver el partido.
         if (_elapsed - _lastSavedAt >= 30) {
           _lastSavedAt = _elapsed;
-          _flushAccrual();
           _persistActive();
         }
       }
@@ -729,20 +762,6 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     }
     _tickCount++;
     if (_tickCount % _sampleEvery.inSeconds == 0) _sample();
-  }
-
-  /// Suma el tramo no contabilizado de la sesión al total de la cancha.
-  void _flushAccrual() {
-    if (_courtId == null) return;
-    final delta = _elapsed - _accrued;
-    if (delta <= 0) return;
-    final cur = _totals[_courtId!];
-    _totals[_courtId!] = _CourtPlay(
-      cur?.name.isNotEmpty == true ? cur!.name : (_courtName ?? ''),
-      (cur?.seconds ?? 0) + delta,
-    );
-    _accrued = _elapsed;
-    _persistTotals();
   }
 
   // ── DEV: ubicación simulada ───────────────────────────────────────────────
@@ -873,31 +892,50 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _pausedAt = null;
     _pausedSeconds = 0;
     _outsideSince = null;
-    // Registramos la cancha en el historial al instante (cuenta como "única"
-    // aunque todavía no haya acumulado segundos) y sumamos una jugada total.
-    _totals.putIfAbsent(c.id, () => _CourtPlay(c.name, 0));
-    _totalPlays++;
-    _persistTotals();
-    _persistPlays();
+    // No registramos nada todavía: jugada, cancha, tiempo, puntos, racha e
+    // historial se computan recién al resolver el resultado (resolvePending),
+    // con el partido ya terminado y validado por duración. Acá solo persistimos
+    // la sesión activa para poder retomar el cronómetro si se cierra la app.
     _persistActive();
-    _recomputeBadges();
     onPresenceChanged?.call(true, c.id, _startedAt);
     _renderSessionNotif();
     notifyListeners();
   }
 
   void _endSession() {
-    _flushAccrual(); // vuelca el tramo final al total de la cancha
     onPresenceChanged?.call(false, '', null);
+
+    final endedSeconds = _elapsed;
+    final endedCourtId = _courtId ?? '';
+    final endedCourtName = _courtName ?? '';
+
+    if (endedSeconds < minMatch.inSeconds) {
+      // Partido demasiado corto: probablemente se canceló. Como nada se
+      // registró durante el partido, no hay que revertir nada: simplemente no
+      // dejamos partido pendiente y avisamos que no se registró.
+      onMatchDiscarded?.call(endedCourtName, endedSeconds);
+      _resetLiveSession();
+      return;
+    }
+
     // Dejamos el partido "pendiente de resultado": la UI le preguntará al
-    // usuario cómo le fue (Ganó/Perdió/Empató/...).
+    // usuario cómo le fue (Ganó/Perdió/Empató/...). El registro local (jugada,
+    // tiempo, puntos, racha, historial) se hace al resolver, en resolvePending.
+    final endedAt = DateTime.now();
     _pendingSession = PlaySession(
-      courtId: _courtId ?? '',
-      courtName: _courtName ?? '',
-      seconds: _elapsed,
-      endedAtMillis: DateTime.now().millisecondsSinceEpoch,
+      courtId: endedCourtId,
+      courtName: endedCourtName,
+      seconds: endedSeconds,
+      endedAtMillis: endedAt.millisecondsSinceEpoch,
     );
     _persistPending();
+    onMatchEnded?.call(endedCourtId, endedAt);
+    _resetLiveSession();
+  }
+
+  /// Limpia el estado de la sesión en vivo (cancha, cronómetro, pausa) y
+  /// refresca la notificación. No toca totales ni partido pendiente.
+  void _resetLiveSession() {
     _courtId = null;
     _courtName = null;
     _startedAt = null;
@@ -919,11 +957,20 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     final p = _pendingSession;
     if (p == null) return;
 
-    // ¿Primera vez en esta cancha? (antes de insertar el partido al log)
-    final isNewCourt = !_log.any((e) => e.courtId == p.courtId);
+    // ¿Primera vez en esta cancha? (antes de registrar el tiempo de la cancha)
+    final isNewCourt =
+        p.courtId.isEmpty ? false : !_totals.containsKey(p.courtId);
 
-    _log.insert(0, p.withResult(result));
-    if (_log.length > 100) _log = _log.sublist(0, 100);
+    // Registro local del partido (recién ahora, con el resultado confirmado):
+    // sumamos la jugada y volcamos el tiempo al total de la cancha.
+    _totalPlays++;
+    if (p.courtId.isNotEmpty) {
+      final cur = _totals[p.courtId];
+      _totals[p.courtId] = _CourtPlay(
+        cur?.name.isNotEmpty == true ? cur!.name : p.courtName,
+        (cur?.seconds ?? 0) + p.seconds,
+      );
+    }
 
     // Bonus de racha: usa la racha ya incluyendo esta victoria.
     var streakBonus = 0;
@@ -946,11 +993,21 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       PlayResult.loss => 10,
       PlayResult.notCounted => 0,
     };
+    // Los puntos por tiempo se multiplican por la duración (incentivo a jugar
+    // partidos largos); los bonus no se multiplican.
+    final timePoints = ((p.seconds ~/ 60) * multiplierFor(p.seconds)).round();
     final gained =
-        (p.seconds ~/ 60) + resultBonus + streakBonus + (isNewCourt ? 30 : 0);
+        timePoints + resultBonus + streakBonus + (isNewCourt ? 30 : 0);
     _points += gained;
 
+    // Guardamos el partido con los puntos que sumó, para mostrarlos en el
+    // historial.
+    _log.insert(0, p.withResult(result, points: gained));
+    if (_log.length > 100) _log = _log.sublist(0, 100);
+
     _pendingSession = null;
+    await _persistPlays();
+    await _persistTotals();
     await _persistLog();
     await _persistStreak();
     await _persistPoints();
@@ -1113,9 +1170,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
           _startedAt = start;
           _elapsed = DateTime.now().difference(start).inSeconds;
           _lastSavedAt = _elapsed;
-          // No recontamos lo previo al cierre: el total ya lo tenía (hasta el
-          // último flush). Marcamos lo transcurrido como ya volcado.
-          _accrued = _elapsed;
+          // El tiempo de la sesión en curso todavía NO está en los totales (se
+          // vuelca al resolver). Lo dejamos como pendiente para que el
+          // cronómetro y el tiempo en vivo lo muestren completo.
+          _accrued = 0;
         }
       } catch (_) {
         await _clearActive();
@@ -1170,20 +1228,25 @@ class PlaySession {
   final int endedAtMillis;
   final PlayResult? result;
 
+  /// Puntos sumados por este partido (tiempo + bonus). 0 si aún no se resolvió.
+  final int points;
+
   const PlaySession({
     required this.courtId,
     required this.courtName,
     required this.seconds,
     required this.endedAtMillis,
     this.result,
+    this.points = 0,
   });
 
-  PlaySession withResult(PlayResult r) => PlaySession(
+  PlaySession withResult(PlayResult r, {int points = 0}) => PlaySession(
         courtId: courtId,
         courtName: courtName,
         seconds: seconds,
         endedAtMillis: endedAtMillis,
         result: r,
+        points: points,
       );
 
   Map<String, dynamic> toJson() => {
@@ -1192,6 +1255,7 @@ class PlaySession {
         'seconds': seconds,
         'endedAt': endedAtMillis,
         'result': result?.name,
+        'points': points,
       };
 
   factory PlaySession.fromJson(Map<String, dynamic> j) => PlaySession(
@@ -1200,6 +1264,7 @@ class PlaySession {
         seconds: (j['seconds'] as num?)?.toInt() ?? 0,
         endedAtMillis: (j['endedAt'] as num?)?.toInt() ?? 0,
         result: PlayResultX.fromName(j['result'] as String?),
+        points: (j['points'] as num?)?.toInt() ?? 0,
       );
 }
 

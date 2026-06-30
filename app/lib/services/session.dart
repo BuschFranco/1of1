@@ -266,6 +266,7 @@ class Session extends ChangeNotifier {
     bool? shareStatus,
     bool? shareCourt,
     bool? shareTime,
+    bool? showLastPlayed,
   }) async {
     final prof = _profile;
     final email = _email;
@@ -277,9 +278,30 @@ class Session extends ChangeNotifier {
         shareStatus: shareStatus ?? prof.shareStatus,
         shareCourt: shareCourt ?? prof.shareCourt,
         shareTime: shareTime ?? prof.shareTime,
+        showLastPlayed: showLastPlayed ?? prof.showLastPlayed,
       ),
     );
     return null;
+  }
+
+  /// Registra el último partido jugado (cancha + momento) para mostrarlo a los
+  /// amigos cuando el usuario no está jugando. Se guarda local y se sube en el
+  /// próximo batch (sin escritura inmediata extra).
+  Future<void> setLastPlayed({
+    required String courtId,
+    required DateTime at,
+  }) async {
+    final prof = _profile;
+    final email = _email;
+    if (prof == null || email == null) return;
+    _dirty = true;
+    await _persist(
+      email,
+      prof.copyWith(
+        lastPlayedCourtId: courtId,
+        lastPlayedAt: at.toIso8601String(),
+      ),
+    );
   }
 
   /// Actualiza la presencia "jugando" en Notion. Best-effort (no bloquea ni
