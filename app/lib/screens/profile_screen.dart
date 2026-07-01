@@ -380,16 +380,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             crossAxisCount: 2,
             mainAxisSpacing: 10,
             crossAxisSpacing: 10,
-            childAspectRatio: 1.5,
+            childAspectRatio: 2.5,
             children: [
               _StatBox(
                 label: 'Partidos',
                 value: '${context.watch<PlaySessionService>().totalPlays}',
+                icon: Icons.sports_basketball,
                 accent: true,
               ),
               _StatBox(
                 label: 'Canchas',
                 value: '${context.watch<PlaySessionService>().uniqueCourtsCount}',
+                icon: Icons.place_outlined,
               ),
               _StatBox(
                 label: 'Racha',
@@ -398,9 +400,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onTap: () => _showStreaks(context),
               ),
               _StatBox(
-                label: 'Rating (en construcción)',
+                label: 'Rating',
                 value: profile.rating > 0 ? profile.rating.toStringAsFixed(1) : '—',
                 icon: Icons.star_rounded,
+                note: 'en construcción',
               ),
             ],
           ),
@@ -1261,13 +1264,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => Container(
+      builder: (ctx) => Container(
         decoration: BoxDecoration(
           color: AppColors.bgElev,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           border: Border.all(color: AppColors.white(0.08)),
         ),
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        // Sumamos el inset de la barra de navegación del sistema para que el
+        // botón inferior no quede tapado por ella.
+        padding: EdgeInsets.fromLTRB(
+            20, 12, 20, 28 + MediaQuery.of(ctx).viewPadding.bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1453,6 +1459,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     if (s.steps > 0) {
       cells.add(_detailStat(Icons.directions_walk, 'Pasos', '${s.steps}'));
+    }
+    if (s.distance > 0) {
+      final d = s.distance >= 1000
+          ? '${(s.distance / 1000).toStringAsFixed(2)} km'
+          : '${s.distance.round()} m';
+      cells.add(_detailStat(Icons.straighten, 'Distancia', d));
     }
     final rows = <Widget>[];
     for (var i = 0; i < cells.length; i += 2) {
@@ -3048,6 +3060,8 @@ class _StatBox extends StatelessWidget {
   final bool accent;
   final IconData? icon;
   final VoidCallback? onTap;
+  /// Aclaración chica opcional debajo del label (ej. "en construcción").
+  final String? note;
 
   const _StatBox({
     required this.label,
@@ -3055,61 +3069,95 @@ class _StatBox extends StatelessWidget {
     this.accent = false,
     this.icon,
     this.onTap,
+    this.note,
   });
 
   @override
   Widget build(BuildContext context) {
+    final labelColor = accent ? AppColors.white(0.9) : AppColors.white(0.55);
     final box = Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         gradient: accent ? AppFx.accentGradient() : null,
         color: accent ? null : const Color(0x991A2430),
         border: accent
             ? null
             : Border.all(color: AppColors.accent.withAlpha(38)),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: accent
             ? AppFx.neonGlow(AppColors.accent,
-                blur: 28, alpha: 100, offset: const Offset(0, 10))
+                blur: 22, alpha: 90, offset: const Offset(0, 8))
             : null,
       ),
-      child: Stack(
+      child: Row(
         children: [
-          if (icon != null)
-            Positioned(
-              top: 0,
-              right: 0,
+          if (icon != null) ...[
+            Container(
+              width: 38,
+              height: 38,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: accent ? AppColors.white(0.18) : AppColors.accent.withAlpha(28),
+                borderRadius: BorderRadius.circular(11),
+              ),
               child: Icon(
                 icon,
-                size: 16,
-                color: accent ? AppColors.white(0.7) : AppColors.white(0.45),
+                size: 20,
+                color: accent ? Colors.white : AppColors.accent,
               ),
             ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                value,
-                style: AppText.archivo(
-                  size: 32,
-                  weight: FontWeight.w900,
-                  letterSpacing: -0.03,
-                  height: 1.0,
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.archivo(
+                    size: 24,
+                    weight: FontWeight.w900,
+                    letterSpacing: -0.02,
+                    height: 1.0,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                label.toUpperCase(),
-                style: AppText.grotesk(
-                  size: 10,
-                  weight: FontWeight.w600,
-                  color: accent ? AppColors.white(0.85) : AppColors.white(0.5),
-                  letterSpacing: 0.14,
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        label.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.grotesk(
+                          size: 10,
+                          weight: FontWeight.w700,
+                          color: labelColor,
+                          letterSpacing: 0.12,
+                        ),
+                      ),
+                    ),
+                    if (note != null) ...[
+                      const SizedBox(width: 5),
+                      Icon(Icons.construction,
+                          size: 11,
+                          color: accent
+                              ? AppColors.white(0.7)
+                              : AppColors.white(0.35)),
+                    ],
+                  ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+          if (onTap != null)
+            Icon(Icons.chevron_right,
+                size: 16,
+                color: accent ? AppColors.white(0.7) : AppColors.white(0.3)),
         ],
       ),
     );
