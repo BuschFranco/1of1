@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/app_permissions.dart';
+import '../services/play_session_service.dart';
 import '../theme/app_theme.dart';
 
 /// Modal que aparece sobre el mapa cuando faltan permisos clave (ubicación,
 /// notificaciones, alarmas exactas). Explica para qué sirve cada uno y ofrece
-/// un botón para activarlo. Se auto-refresca al volver de los ajustes y se
-/// cierra solo cuando están todos concedidos.
+/// un botón para activarlo. Incluye además el toggle opcional de Salud (Health
+/// Connect). Se auto-refresca al volver de los ajustes y, cuando se abre por
+/// falta de permisos, se cierra solo al concederse todos los obligatorios.
 class PermissionsModal extends StatefulWidget {
-  const PermissionsModal({super.key});
+  /// Si es true, el modal se cierra solo cuando están todos los permisos
+  /// obligatorios (uso automático sobre el mapa). Si es false (abierto a mano
+  /// desde el perfil), queda abierto hasta que el usuario lo cierre.
+  final bool autoClose;
+  const PermissionsModal({super.key, this.autoClose = true});
 
-  /// Muestra el modal si falta algún permiso. Devuelve cuando se cierra.
+  /// Muestra el modal si falta algún permiso obligatorio (uso automático).
   static Future<void> showIfNeeded(BuildContext context) async {
     final state = await checkPermissions();
     if (state.allGranted || !context.mounted) return;
@@ -17,6 +24,15 @@ class PermissionsModal extends StatefulWidget {
       context: context,
       barrierDismissible: true,
       builder: (_) => const PermissionsModal(),
+    );
+  }
+
+  /// Abre el modal siempre (acceso manual desde el perfil), sin auto-cerrarse.
+  static Future<void> show(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => const PermissionsModal(autoClose: false),
     );
   }
 
@@ -52,8 +68,8 @@ class _PermissionsModalState extends State<PermissionsModal>
     final st = await checkPermissions();
     if (!mounted) return;
     setState(() => _state = st);
-    // Si ya están todos, cerramos el modal.
-    if (st.allGranted) {
+    // Si ya están todos, cerramos el modal (solo en el modo automático).
+    if (st.allGranted && widget.autoClose) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) Navigator.of(context).maybePop();
       });
@@ -116,8 +132,11 @@ class _PermissionsModalState extends State<PermissionsModal>
                 ),
               ),
             )
-          else
+          else ...[
             for (final p in AppPerm.values) _row(p, !st.missing.contains(p)),
+            Divider(color: AppColors.white(0.08), height: 24),
+            _healthRow(),
+          ],
         ],
       ),
       actions: [
@@ -127,6 +146,92 @@ class _PermissionsModalState extends State<PermissionsModal>
               style: AppText.grotesk(size: 13, color: AppColors.white(0.6))),
         ),
       ],
+    );
+  }
+
+  /// Conectar / desconectar Salud (Health Connect). Opcional: no cuenta para
+  /// [PermState.allGranted], así que no bloquea el cierre del modal. Solo pide
+  /// el permiso al activar (nunca solo). Si ya se concedió antes (incluso a mano
+  /// desde Health Connect), al activar no vuelve a preguntar: pasa a Conectado.
+  Future<void> _toggleHealth() async {
+    if (_busy) return;
+    final ps = context.read<PlaySessionService>();
+    if (ps.healthEnabled) {
+      await ps.disableHealth();
+      return;
+    }
+    setState(() => _busy = true);
+    final ok = await ps.enableHealth();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No encontramos Health Connect. Instalalo desde Play Store y '
+            'sincronizá tu reloj o anillo para medir tu desempeño.',
+            style: AppText.grotesk(size: 13),
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _healthRow() {
+    final enabled = context.watch<PlaySessionService>().healthEnabled;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.favorite_border,
+              size: 22, color: enabled ? AppColors.open : AppColors.accent),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('Salud',
+                        style:
+                            AppText.grotesk(size: 13, weight: FontWeight.w700)),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: AppColors.white(0.08),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text('OPCIONAL',
+                          style: AppText.grotesk(
+                              size: 8,
+                              weight: FontWeight.w800,
+                              color: AppColors.white(0.5),
+                              letterSpacing: 0.2)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Registra calorías, pulso y pasos de tus partidos desde tu '
+                  'reloj o anillo. Superar tu récord de calorías suma puntos.',
+                  style:
+                      AppText.grotesk(size: 11, color: AppColors.white(0.5)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Switch(
+            value: enabled,
+            onChanged: _busy ? null : (_) => _toggleHealth(),
+            activeThumbColor: Colors.white,
+            activeTrackColor: AppColors.accent,
+          ),
+        ],
+      ),
     );
   }
 

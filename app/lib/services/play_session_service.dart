@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/achievements.dart';
 import '../data/courts.dart';
 import '../theme/app_theme.dart';
+import 'health_service.dart';
 import 'session_alarms.dart';
 
 /// Detecta automáticamente cuándo el usuario está "jugando" en una cancha:
@@ -69,6 +70,8 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   String get _kPoints => _k('play_points');
   String get _kBadges => _k('play_unlocked_badges');
   String get _kNotifs => _k('reward_notifications');
+  String get _kCalRecord => _k('play_calorie_record');
+  String get _kHealthEnabled => _k('play_health_enabled');
 
   List<Court> _courts = const [];
   Timer? _ticker;
@@ -194,6 +197,20 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   int _points = 0;
   int get points => _points;
   int get level => levelForPoints(_points);
+
+  // ── Salud (Health Connect / HealthKit) ───────────────────────────────────
+  final HealthService _health = HealthService();
+  // Si el usuario conectó Salud (opt-in). Mientras esté en false no se consulta
+  // nada de salud al resolver partidos.
+  bool _healthEnabled = false;
+  bool get healthEnabled => _healthEnabled;
+  // Récord personal de calorías activas en un partido. Solo se suma bonus
+  // cuando un partido lo supera (y ahí se actualiza). Sobrevive a reinstalar
+  // porque también se siembra desde Notion.
+  double _calorieRecord = 0;
+  double get calorieRecord => _calorieRecord;
+  // Bonus fijo de puntos al batir el récord de calorías.
+  static const int calorieRecordBonus = 25;
 
   // IDs de logros desbloqueados (insignias permanentes). Una vez logrado, queda
   // logrado aunque las stats que lo originaron ya no estén (p.ej. tras reinstalar
@@ -700,6 +717,8 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _totals.clear();
     _totalPlays = 0;
     _points = 0;
+    _calorieRecord = 0;
+    _healthEnabled = false;
     _streak = 0;
     _streakHistory = [];
     _log = [];
@@ -1261,14 +1280,51 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         result == PlayResult.win ? _streak.clamp(0, 5) * 0.05 : 0.0;
     final streakBonus = (timePoints * streakPct).round();
 
-    // Total: tiempo + bonus por resultado (%) + racha (%) + cancha nueva.
-    final gained =
-        timePoints + resultBonus + streakBonus + (isNewCourt ? 30 : 0);
+    // ── Salud: enriquecer con datos del wearable (si el usuario conectó Salud).
+    // Se lee la ventana [inicio, fin] del partido del store del OS (retiene el
+    // histórico, así que sirve aunque respondas más tarde). Puntos SOLO si las
+    // calorías superan tu récord personal; ahí se suma el bonus y se sube el
+    // récord. El primer dato válido fija la base sin bonus. Sin datos (sin
+    // wearable) no pasa nada.
+    HealthMetrics? hm;
+    int healthBonus = 0;
+    bool newCalorieRecord = false;
+    if (_healthEnabled && p.seconds > 0) {
+      final end = DateTime.fromMillisecondsSinceEpoch(p.endedAtMillis);
+      final start = end.subtract(Duration(seconds: p.seconds));
+      hm = await _health.metricsFor(start, end);
+      if (hm != null && hm.calories > 0) {
+        if (_calorieRecord > 0 && hm.calories > _calorieRecord) {
+          healthBonus = calorieRecordBonus;
+          newCalorieRecord = true;
+        }
+        if (hm.calories > _calorieRecord) _calorieRecord = hm.calories;
+      }
+    }
+
+    // Total: tiempo + bonus por resultado (%) + racha (%) + cancha nueva +
+    // récord de salud.
+    final gained = timePoints +
+        resultBonus +
+        streakBonus +
+        (isNewCourt ? 30 : 0) +
+        healthBonus;
     _points += gained;
 
-    // Guardamos el partido con los puntos que sumó, para mostrarlos en el
-    // historial.
-    _log.insert(0, p.withResult(result, points: gained));
+    // Guardamos el partido con los puntos que sumó y los datos de salud, para
+    // mostrarlos en el historial.
+    _log.insert(
+      0,
+      p.withResult(
+        result,
+        points: gained,
+        calories: hm?.calories ?? 0,
+        avgHr: hm?.avgHr,
+        maxHr: hm?.maxHr,
+        steps: hm?.steps ?? 0,
+        calorieRecord: newCalorieRecord,
+      ),
+    );
     if (_log.length > 100) _log = _log.sublist(0, 100);
 
     _pendingSession = null;
@@ -1277,6 +1333,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     await _persistLog();
     await _persistStreak();
     await _persistPoints();
+    await _persistCalorieRecord();
     await _clearPending();
     _recomputeBadges();
     _checkLevelUp(); // los puntos ganados pueden haber subido el nivel
@@ -1315,6 +1372,67 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _persistPoints() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_kPoints, _points);
+  }
+
+  Future<void> _persistCalorieRecord() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_kCalRecord, _calorieRecord);
+  }
+
+  // ── Salud: conectar / desconectar ────────────────────────────────────────
+
+  /// El usuario activó "Conectar Salud": dispara el pedido de permisos y deja
+  /// habilitada la lectura para los próximos partidos. No se llama solo: siempre
+  /// desde un gesto explícito del usuario. Devuelve false solo si Health Connect
+  /// no está disponible (para poder explicarle al usuario).
+  ///
+  /// OJO: en Android, Health Connect NO deja verificar el permiso de LECTURA
+  /// (lo oculta por privacidad), así que requestAuthorization puede devolver
+  /// false aun estando concedido. Por eso NO gateamos el flag en ese valor:
+  /// habilitamos mientras Health Connect esté disponible. Si al final no hay
+  /// permiso, simplemente no vendrán datos (no rompe nada ni suma puntos).
+  Future<bool> enableHealth() async {
+    bool available = false;
+    try {
+      available = await _health.isAvailable();
+    } catch (_) {/* sin Health Connect */}
+    final prefs = await SharedPreferences.getInstance();
+    if (!available) {
+      _healthEnabled = false;
+      await prefs.setBool(_kHealthEnabled, false);
+      notifyListeners();
+      return false;
+    }
+    // Dispara el flujo de permisos (si ya estaban dados, no re-pregunta).
+    try {
+      await _health.requestPermissions();
+    } catch (_) {/* el usuario resolverá en el diálogo del sistema */}
+    _healthEnabled = true;
+    await prefs.setBool(_kHealthEnabled, true);
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> disableHealth() async {
+    _healthEnabled = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kHealthEnabled, false);
+    notifyListeners();
+  }
+
+  /// ¿Está Health Connect disponible en el dispositivo? (para decidir si vale
+  /// la pena ofrecer la conexión).
+  Future<bool> healthAvailable() => _health.isAvailable();
+
+  /// Siembra el récord de calorías desde el perfil (Notion) al iniciar sesión,
+  /// para que sobreviva a reinstalar sin poder re-farmearse. Solo sube: nunca
+  /// baja el récord local con un valor menor del servidor.
+  Future<void> seedCalorieRecord(double fromProfile) async {
+    if (fromProfile > _calorieRecord) {
+      _calorieRecord = fromProfile;
+      await _persistCalorieRecord();
+      notifyListeners();
+    }
   }
 
   Future<void> _persistLog() async {
@@ -1363,6 +1481,8 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _totalPlays = prefs.getInt(_kPlays) ?? 0;
     _streak = prefs.getInt(_kStreak) ?? 0;
     _points = prefs.getInt(_kPoints) ?? 0;
+    _calorieRecord = prefs.getDouble(_kCalRecord) ?? 0;
+    _healthEnabled = prefs.getBool(_kHealthEnabled) ?? false;
     _unlockedBadges
       ..clear()
       ..addAll(prefs.getStringList(_kBadges) ?? const []);
@@ -1533,6 +1653,20 @@ class PlaySession {
   /// Puntos sumados por este partido (tiempo + bonus). 0 si aún no se resolvió.
   final int points;
 
+  // ── Datos de salud del wearable (Health Connect / HealthKit) ──────────────
+  // Se llenan al resolver el partido si el usuario conectó Salud y tenía un
+  // reloj/anillo puesto. 0/null = sin datos (no penaliza ni afecta el récord).
+  /// Calorías activas quemadas durante el partido.
+  final double calories;
+  /// Pulso promedio y máximo (bpm) durante el partido.
+  final int? avgHr;
+  final int? maxHr;
+  /// Pasos registrados durante el partido.
+  final int steps;
+
+  /// ¿Este partido marcó un récord personal de calorías? (para destacarlo).
+  final bool calorieRecord;
+
   const PlaySession({
     required this.courtId,
     required this.courtName,
@@ -1540,15 +1674,36 @@ class PlaySession {
     required this.endedAtMillis,
     this.result,
     this.points = 0,
+    this.calories = 0,
+    this.avgHr,
+    this.maxHr,
+    this.steps = 0,
+    this.calorieRecord = false,
   });
 
-  PlaySession withResult(PlayResult r, {int points = 0}) => PlaySession(
+  bool get hasHealth => calories > 0 || steps > 0 || avgHr != null;
+
+  PlaySession withResult(
+    PlayResult r, {
+    int points = 0,
+    double calories = 0,
+    int? avgHr,
+    int? maxHr,
+    int steps = 0,
+    bool calorieRecord = false,
+  }) =>
+      PlaySession(
         courtId: courtId,
         courtName: courtName,
         seconds: seconds,
         endedAtMillis: endedAtMillis,
         result: r,
         points: points,
+        calories: calories,
+        avgHr: avgHr,
+        maxHr: maxHr,
+        steps: steps,
+        calorieRecord: calorieRecord,
       );
 
   Map<String, dynamic> toJson() => {
@@ -1558,6 +1713,11 @@ class PlaySession {
         'endedAt': endedAtMillis,
         'result': result?.name,
         'points': points,
+        'calories': calories,
+        'avgHr': avgHr,
+        'maxHr': maxHr,
+        'steps': steps,
+        'calorieRecord': calorieRecord,
       };
 
   factory PlaySession.fromJson(Map<String, dynamic> j) => PlaySession(
@@ -1567,6 +1727,11 @@ class PlaySession {
         endedAtMillis: (j['endedAt'] as num?)?.toInt() ?? 0,
         result: PlayResultX.fromName(j['result'] as String?),
         points: (j['points'] as num?)?.toInt() ?? 0,
+        calories: (j['calories'] as num?)?.toDouble() ?? 0,
+        avgHr: (j['avgHr'] as num?)?.toInt(),
+        maxHr: (j['maxHr'] as num?)?.toInt(),
+        steps: (j['steps'] as num?)?.toInt() ?? 0,
+        calorieRecord: (j['calorieRecord'] as bool?) ?? false,
       );
 }
 

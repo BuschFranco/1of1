@@ -46,8 +46,9 @@ android {
         applicationId = "com.example.triplesapp"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        // native_geofence requiere minSdk 23+.
-        minSdk = maxOf(flutter.minSdkVersion, 23)
+        // native_geofence requiere minSdk 23+; Health Connect (paquete health)
+        // requiere minSdk 26+.
+        minSdk = maxOf(flutter.minSdkVersion, 26)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

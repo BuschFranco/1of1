@@ -18,6 +18,7 @@ import '../theme/app_theme.dart';
 import 'notifications_screen.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
+import '../widgets/permissions_modal.dart';
 import '../widgets/pop_background.dart';
 import '../widgets/pop_panel.dart';
 import '../widgets/rating_badge.dart';
@@ -105,7 +106,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         const SizedBox(width: 8),
                         if (context.read<Session>().isLoggedIn)
                           GestureDetector(
-                            onTap: () => _editPrivacy(context, profile),
+                            onTap: () => _openSettings(context, profile),
                             child: Container(
                               width: 40,
                               height: 40,
@@ -955,6 +956,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ]);
   }
 
+
   Widget _achievementsSection() {
     final s = _stats();
     const preview = 5;
@@ -1366,6 +1368,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ],
             ),
+            if (s.hasHealth) ...[
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Icon(Icons.monitor_heart_outlined,
+                      size: 14, color: AppColors.accent),
+                  const SizedBox(width: 6),
+                  Text('TU ESTADO',
+                      style: AppText.grotesk(
+                          size: 11,
+                          color: AppColors.white(0.5),
+                          letterSpacing: 0.1)),
+                  if (s.calorieRecord) ...[
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: kGold.withAlpha(38),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: kGold.withAlpha(120)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.bolt, size: 12, color: kGold),
+                          const SizedBox(width: 3),
+                          Text('RÉCORD DE CALORÍAS',
+                              style: AppText.grotesk(
+                                  size: 9,
+                                  weight: FontWeight.w800,
+                                  color: kGold)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 10),
+              ..._healthStatRows(s),
+            ],
             if (court != null) ...[
               const SizedBox(height: 18),
               SizedBox(
@@ -1394,6 +1437,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  /// Celdas de salud (calorías, pulso, pasos) dispuestas en filas de a dos.
+  /// Solo se arma con los datos que existan (sin wearable no aparece nada).
+  List<Widget> _healthStatRows(PlaySession s) {
+    final cells = <Widget>[];
+    if (s.calories > 0) {
+      cells.add(_detailStat(Icons.local_fire_department, 'Calorías',
+          '${s.calories.round()} kcal'));
+    }
+    if (s.avgHr != null) {
+      final v = s.maxHr != null ? '${s.avgHr} · ${s.maxHr} máx' : '${s.avgHr}';
+      cells.add(_detailStat(Icons.monitor_heart_outlined, 'Pulso (bpm)', v));
+    }
+    if (s.steps > 0) {
+      cells.add(_detailStat(Icons.directions_walk, 'Pasos', '${s.steps}'));
+    }
+    final rows = <Widget>[];
+    for (var i = 0; i < cells.length; i += 2) {
+      final right = i + 1 < cells.length ? cells[i + 1] : null;
+      rows.add(Padding(
+        padding: EdgeInsets.only(top: i == 0 ? 0 : 10),
+        child: Row(
+          children: [
+            Expanded(child: cells[i]),
+            const SizedBox(width: 10),
+            Expanded(child: right ?? const SizedBox.shrink()),
+          ],
+        ),
+      ));
+    }
+    return rows;
   }
 
   /// Celda de dato (ícono + etiqueta + valor) para el modal de detalle.
@@ -1645,6 +1720,82 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await showDialog<void>(
       context: context,
       builder: (_) => _PrivacyDialog(profile: profile),
+    );
+  }
+
+  /// Menú de la tuerquita: privacidad + permisos y salud (Health Connect).
+  void _openSettings(BuildContext context, Profile profile) {
+    _showSheet('Ajustes', (ctx) {
+      final health = ctx.watch<PlaySessionService>().healthEnabled;
+      return [
+        _settingsRow(
+          ctx,
+          Icons.visibility_outlined,
+          'Privacidad',
+          'Qué ven los demás de vos',
+          () {
+            Navigator.pop(ctx);
+            _editPrivacy(context, profile);
+          },
+        ),
+        const SizedBox(height: 8),
+        _settingsRow(
+          ctx,
+          Icons.tune,
+          'Permisos y salud',
+          health
+              ? 'Salud conectada · midiendo tu desempeño'
+              : 'Ubicación, notificaciones y salud',
+          () {
+            Navigator.pop(ctx);
+            PermissionsModal.show(context);
+          },
+          trailingOn: health,
+        ),
+      ];
+    });
+  }
+
+  Widget _settingsRow(BuildContext ctx, IconData icon, String title,
+      String subtitle, VoidCallback onTap,
+      {bool trailingOn = false}) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        decoration: BoxDecoration(
+          color: const Color(0x801A2430),
+          border: Border.all(color: AppColors.white(0.08)),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: AppColors.accent),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(title,
+                      style:
+                          AppText.grotesk(size: 14, weight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: AppText.grotesk(
+                          size: 11,
+                          color: trailingOn
+                              ? AppColors.open
+                              : AppColors.white(0.5))),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.chevron_right, size: 18, color: AppColors.white(0.4)),
+          ],
+        ),
+      ),
     );
   }
 

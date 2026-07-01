@@ -810,6 +810,24 @@ class _HomeScreenState extends State<HomeScreen>
                     overflow: TextOverflow.ellipsis,
                     style: AppText.grotesk(size: 10, color: AppColors.white(0.6)),
                   ),
+                  // Con Salud conectada dejamos claro que estamos midiendo el
+                  // desempeño físico (calorías/pulso) durante el partido.
+                  if (ps.healthEnabled) ...[
+                    const SizedBox(height: 1),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.monitor_heart_outlined,
+                            size: 10, color: AppColors.accent),
+                        const SizedBox(width: 3),
+                        Text('Midiendo tu desempeño',
+                            style: AppText.grotesk(
+                                size: 9,
+                                weight: FontWeight.w600,
+                                color: AppColors.accent)),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
