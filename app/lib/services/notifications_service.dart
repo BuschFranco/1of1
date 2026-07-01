@@ -153,7 +153,7 @@ class NotificationsService {
     if (!_ready) await init();
     if (!_ready) return;
     // Solo un mensaje, sin contador.
-    const body = 'Tu partido va a arrancar solo · o tocá EMPEZAR YA';
+    const body = 'Tu partido va a arrancar solo';
     try {
       final details = NotificationDetails(
         android: AndroidNotificationDetails(
@@ -246,7 +246,7 @@ class NotificationsService {
       await _plugin.show(
         _sessionId,
         court.isEmpty ? 'Partido pausado' : 'Pausado · $court',
-        'Partido en pausa · tocá REANUDAR para seguir',
+        'Partido en pausa',
         details,
       );
     } catch (_) {/* ignorar */}
@@ -281,7 +281,7 @@ class NotificationsService {
       await _plugin.show(
         _sessionId,
         court.isEmpty ? 'Saliste de la cancha' : 'Saliste de $court',
-        'Si no volvés, el partido se cierra solo · o tocá DETENER',
+        'Si no volvés, el partido se cierra solo',
         details,
       );
     } catch (_) {/* ignorar */}
