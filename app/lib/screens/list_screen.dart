@@ -138,7 +138,15 @@ class _CourtListItem extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0x991A2430),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.white(0.08)),
+          border: Border.all(color: AppColors.accent.withAlpha(32)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.accent.withAlpha(20),
+              blurRadius: 22,
+              spreadRadius: -6,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         child: Column(
           children: [
@@ -177,6 +185,14 @@ class _CourtListItem extends StatelessWidget {
                       size: 24,
                       weight: FontWeight.w900,
                       letterSpacing: -0.05,
+                      color: AppColors.accent,
+                    ).copyWith(
+                      shadows: [
+                        Shadow(
+                            color: AppColors.accent.withAlpha(150),
+                            blurRadius: 16),
+                        const Shadow(color: Colors.black54, blurRadius: 6),
+                      ],
                     ),
                   ),
                 ),

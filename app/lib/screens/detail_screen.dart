@@ -12,6 +12,8 @@ import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
+import '../widgets/pop_button.dart';
+import '../widgets/pop_panel.dart';
 import '../widgets/section_title.dart';
 import '../widgets/status_dot.dart';
 
@@ -321,13 +323,9 @@ class DetailScreen extends StatelessWidget {
   }
 
   Widget _ratingStrip(Court court) {
-    return Container(
+    return PopPanel(
+      radius: 18,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0x991A2430),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.white(0.08)),
-      ),
       child: Row(
         children: [
           _statCell(
@@ -534,26 +532,9 @@ class DetailScreen extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: ElevatedButton(
+          child: PopButton(
+            label: 'Unirme al juego',
             onPressed: () {},
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accent,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(100),
-              ),
-              elevation: 12,
-              shadowColor: AppColors.accent.withAlpha(85),
-            ),
-            child: Text(
-              'UNIRME AL JUEGO',
-              style: AppText.archivo(
-                size: 13,
-                weight: FontWeight.w800,
-                letterSpacing: 0.06,
-              ),
-            ),
           ),
         ),
         const SizedBox(width: 10),

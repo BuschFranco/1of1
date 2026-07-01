@@ -32,6 +32,16 @@ class GlassCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(radius),
             border: border ?? Border.all(color: AppColors.white(0.08)),
           ),
+          foregroundDecoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(radius),
+            // Highlight superior sutil: reflejo de "vidrio" pop-futurista.
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [AppColors.white(0.05), Colors.transparent],
+              stops: const [0, 0.35],
+            ),
+          ),
           padding: padding,
           child: child,
         ),

@@ -1224,10 +1224,8 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       );
     }
 
-    // Bonus de racha: usa la racha ya incluyendo esta victoria.
-    var streakBonus = 0;
+    // Racha: al ganar sube; al perder se corta (y se archiva).
     if (result == PlayResult.win) {
-      streakBonus = 10 * (_streak + 1);
       _streak++;
     } else if (result == PlayResult.loss) {
       if (_streak > 0) {
@@ -1237,21 +1235,33 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       _streak = 0;
     }
 
-    // Puntos: base por tiempo + bonus por resultado, racha y cancha nueva.
-    final resultBonus = switch (result) {
-      PlayResult.win => 50,
-      PlayResult.tie => 20,
-      PlayResult.training => 15,
-      PlayResult.loss => 10,
-      PlayResult.notCounted => 0,
-    };
-    // Los puntos por tiempo se multiplican por la duración (incentivo a jugar
-    // partidos largos); los bonus no se multiplican. El tiempo deja de sumar
-    // puntos a partir de [pointsTimeCap] (~2h, un partido profesional).
+    // Base por tiempo: única parte que usa el multiplicador por duración
+    // (incentivo a jugar partidos largos). El tiempo deja de sumar puntos a
+    // partir de [pointsTimeCap] (~2h, un partido profesional).
     final scoredSecs = p.seconds > pointsTimeCap.inSeconds
         ? pointsTimeCap.inSeconds
         : p.seconds;
     final timePoints = ((scoredSecs ~/ 60) * multiplierFor(scoredSecs)).round();
+
+    // Bonus por resultado: PORCENTAJE de los puntos por tiempo (no un valor
+    // fijo), así el peso del resultado escala con lo que jugaste.
+    final resultPct = switch (result) {
+      PlayResult.win => 0.30,
+      PlayResult.tie => 0.20,
+      PlayResult.training => 0.15,
+      PlayResult.loss => 0.10,
+      PlayResult.notCounted => 0.0,
+    };
+    final resultBonus = (timePoints * resultPct).round();
+
+    // Bonus de racha: +5% de los puntos por tiempo por cada victoria seguida,
+    // con tope de 25% (racha de 5). La racha puede seguir creciendo, pero el
+    // porcentaje se mantiene en 25%.
+    final streakPct =
+        result == PlayResult.win ? _streak.clamp(0, 5) * 0.05 : 0.0;
+    final streakBonus = (timePoints * streakPct).round();
+
+    // Total: tiempo + bonus por resultado (%) + racha (%) + cancha nueva.
     final gained =
         timePoints + resultBonus + streakBonus + (isNewCourt ? 30 : 0);
     _points += gained;
@@ -1497,9 +1507,9 @@ enum PlayResult { win, loss, tie, notCounted, training }
 
 extension PlayResultX on PlayResult {
   String get label => switch (this) {
-        PlayResult.win => 'Ganó',
-        PlayResult.loss => 'Perdió',
-        PlayResult.tie => 'Empató',
+        PlayResult.win => 'Victoria',
+        PlayResult.loss => 'Derrota',
+        PlayResult.tie => 'Empate',
         PlayResult.notCounted => 'Sin información',
         PlayResult.training => 'Entrenamiento',
       };

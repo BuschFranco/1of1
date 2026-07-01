@@ -24,6 +24,7 @@ class StatusDot extends StatelessWidget {
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(color: color, blurRadius: 8),
+              BoxShadow(color: color.withAlpha(120), blurRadius: 16, spreadRadius: 1),
             ],
           ),
         ),

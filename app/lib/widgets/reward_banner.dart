@@ -105,11 +105,11 @@ class _RewardOverlayState extends State<RewardOverlay>
         decoration: BoxDecoration(
           color: AppColors.bgElev,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: r.color.withAlpha(120)),
+          border: Border.all(color: r.color.withAlpha(150)),
           boxShadow: [
             BoxShadow(
-              color: r.color.withAlpha(40),
-              blurRadius: 24,
+              color: r.color.withAlpha(70),
+              blurRadius: 28,
               spreadRadius: 1,
             ),
             BoxShadow(

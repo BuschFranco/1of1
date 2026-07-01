@@ -2,8 +2,11 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/session.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bball_glyph.dart';
+import '../widgets/pop_background.dart';
+import '../widgets/pop_button.dart';
 
 enum AuthMode { login, signup }
 
@@ -88,21 +91,7 @@ class _AuthScreenState extends State<AuthScreen> {
       backgroundColor: AppColors.bg,
       body: Stack(
         children: [
-          // Orange glow top-right (consistente con onboarding)
-          Positioned(
-            top: -120,
-            right: -60,
-            child: Container(
-              width: 260,
-              height: 260,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [AppColors.accent.withAlpha(70), Colors.transparent],
-                ),
-              ),
-            ),
-          ),
+          const Positioned.fill(child: PopBackground()),
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
@@ -177,11 +166,8 @@ class _AuthScreenState extends State<AuthScreen> {
           height: 34,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.accent, AppColors.accentDark],
-            ),
+            gradient: AppFx.accentGradient(),
+            boxShadow: AppFx.neonGlow(AppColors.accent, blur: 16, alpha: 110),
           ),
           child: const Center(child: BBallGlyph(size: 22)),
         ),
@@ -231,8 +217,11 @@ class _AuthScreenState extends State<AuthScreen> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 11),
           decoration: BoxDecoration(
-            color: active ? AppColors.accent : Colors.transparent,
+            gradient: active ? AppFx.accentGradient() : null,
             borderRadius: BorderRadius.circular(100),
+            boxShadow: active
+                ? AppFx.neonGlow(AppColors.accent, blur: 14, alpha: 80)
+                : null,
           ),
           alignment: Alignment.center,
           child: Text(
@@ -267,52 +256,14 @@ class _AuthScreenState extends State<AuthScreen> {
     bool isPassword = false,
     TextInputType? keyboard,
   }) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xE011181F),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.white(0.1)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  obscureText: isPassword && _obscurePass,
-                  keyboardType: keyboard,
-                  style: AppText.grotesk(size: 14),
-                  cursorColor: AppColors.accent,
-                  decoration: InputDecoration(
-                    hintText: hint,
-                    hintStyle: AppText.grotesk(size: 14, color: AppColors.white(0.35)),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                ),
-              ),
-              if (isPassword)
-                GestureDetector(
-                  onTap: () => setState(() => _obscurePass = !_obscurePass),
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Icon(
-                      _obscurePass ? Icons.visibility_off : Icons.visibility,
-                      size: 18,
-                      color: AppColors.white(0.5),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+    return _GlowField(
+      controller: controller,
+      hint: hint,
+      isPassword: isPassword,
+      keyboard: keyboard,
+      obscure: isPassword && _obscurePass,
+      onToggleObscure:
+          isPassword ? () => setState(() => _obscurePass = !_obscurePass) : null,
     );
   }
 
@@ -374,44 +325,10 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _submitBtn() {
-    return GestureDetector(
-      onTap: _loading ? null : _submit,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          gradient: _loading
-              ? null
-              : const LinearGradient(
-                  colors: [AppColors.accent, AppColors.accentDark],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-          color: _loading ? AppColors.white(0.1) : null,
-          borderRadius: BorderRadius.circular(100),
-          boxShadow: _loading
-              ? null
-              : [
-                  BoxShadow(
-                    color: AppColors.accent.withAlpha(80),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-        ),
-        alignment: Alignment.center,
-        child: _loading
-            ? SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.white(0.6)),
-              )
-            : Text(
-                _isSignup ? 'CREAR CUENTA' : 'INGRESAR',
-                style: AppText.archivo(size: 14, weight: FontWeight.w900, letterSpacing: 0.04),
-              ),
-      ),
+    return PopButton(
+      label: _isSignup ? 'Crear cuenta' : 'Ingresar',
+      loading: _loading,
+      onPressed: _loading ? null : _submit,
     );
   }
 
@@ -433,6 +350,108 @@ class _AuthScreenState extends State<AuthScreen> {
               style: AppText.grotesk(size: 12.5, weight: FontWeight.w700, color: AppColors.accent),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Campo de texto glass con glow neón al enfocar (pop-futurismo). Borde y glow
+/// se intensifican en foco, dentro de la paleta actual.
+class _GlowField extends StatefulWidget {
+  final TextEditingController controller;
+  final String hint;
+  final bool isPassword;
+  final TextInputType? keyboard;
+  final bool obscure;
+  final VoidCallback? onToggleObscure;
+
+  const _GlowField({
+    required this.controller,
+    required this.hint,
+    required this.isPassword,
+    required this.keyboard,
+    required this.obscure,
+    required this.onToggleObscure,
+  });
+
+  @override
+  State<_GlowField> createState() => _GlowFieldState();
+}
+
+class _GlowFieldState extends State<_GlowField> {
+  final FocusNode _node = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _node.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _node.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final focused = _node.hasFocus;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          decoration: BoxDecoration(
+            color: const Color(0xE011181F),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: focused
+                  ? AppColors.accent.withAlpha(180)
+                  : AppColors.white(0.1),
+              width: focused ? 1.4 : 1,
+            ),
+            boxShadow: focused
+                ? AppFx.neonGlow(AppColors.accent, blur: 16, alpha: 70)
+                : null,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: widget.controller,
+                  focusNode: _node,
+                  obscureText: widget.obscure,
+                  keyboardType: widget.keyboard,
+                  style: AppText.grotesk(size: 14),
+                  cursorColor: AppColors.accent,
+                  decoration: InputDecoration(
+                    hintText: widget.hint,
+                    hintStyle:
+                        AppText.grotesk(size: 14, color: AppColors.white(0.35)),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+              if (widget.isPassword)
+                GestureDetector(
+                  onTap: widget.onToggleObscure,
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Icon(
+                      widget.obscure ? Icons.visibility_off : Icons.visibility,
+                      size: 18,
+                      color: AppColors.white(0.5),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

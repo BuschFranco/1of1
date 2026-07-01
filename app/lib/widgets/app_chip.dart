@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 
 class AppChip extends StatelessWidget {
@@ -22,6 +23,8 @@ class AppChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tint = color;
+    // Chip activo (sin tinte): degradado de acento + glow neón pop-futurista.
+    final useGradient = tint == null && active;
     final bg = tint != null
         ? tint.withAlpha(28)
         : (active ? AppColors.accent : AppColors.white(0.06));
@@ -35,9 +38,12 @@ class AppChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: bg,
+          color: useGradient ? null : bg,
+          gradient: useGradient ? AppFx.accentGradient() : null,
           borderRadius: BorderRadius.circular(100),
           border: Border.all(color: border),
+          boxShadow:
+              active ? AppFx.neonGlow(AppColors.accent, blur: 14, alpha: 70) : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

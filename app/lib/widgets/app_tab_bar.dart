@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 
 enum AppTab { home, list, plus, chat, profile }
@@ -27,6 +28,13 @@ class AppTabBar extends StatelessWidget {
                 color: AppColors.black(0.35),
                 blurRadius: 40,
                 offset: const Offset(0, 20),
+              ),
+              // Glow neón tenue de la barra (pop-futurismo).
+              BoxShadow(
+                color: AppColors.accent.withAlpha(28),
+                blurRadius: 30,
+                spreadRadius: -4,
+                offset: const Offset(0, 6),
               ),
             ],
           ),
@@ -57,7 +65,31 @@ class AppTabBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: color, size: 22),
+            // Ícono activo con glow neón.
+            Container(
+              decoration: isActive
+                  ? BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: AppFx.neonGlow(AppColors.accent,
+                          blur: 12, spread: 0, alpha: 130),
+                    )
+                  : null,
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(height: 3),
+            // Indicador neón bajo la pestaña activa.
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              width: isActive ? 16 : 0,
+              height: 2,
+              decoration: BoxDecoration(
+                gradient: isActive ? AppFx.accentGradient() : null,
+                borderRadius: BorderRadius.circular(2),
+                boxShadow: isActive
+                    ? AppFx.neonGlow(AppColors.accent, blur: 6, alpha: 140)
+                    : null,
+              ),
+            ),
             const SizedBox(height: 2),
             Text(
               label,

@@ -89,6 +89,12 @@ class _MainShellState extends State<MainShell> {
   void _handleTabSwipe(DragEndDetails d) {
     final v = d.primaryVelocity ?? 0;
     if (v == 0) return;
+    // Desde Canchas, deslizar a la derecha vuelve al Mapa. (Al revés NO: en el
+    // Mapa no hay capa de swipe, así que sus gestos quedan intactos.)
+    if (v > 0 && _tab == AppTab.list) {
+      _selectTab(AppTab.home);
+      return;
+    }
     final idx = _swipeTabs.indexOf(_tab);
     if (idx < 0) return; // estamos en el mapa: no aplica
     if (v < 0 && idx < _swipeTabs.length - 1) {

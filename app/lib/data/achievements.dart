@@ -28,7 +28,8 @@ extension TitleRarityX on TitleRarity {
 /// anterior, así subir se vuelve progresivamente más difícil.
 ///
 /// Puntos acumulados necesarios para alcanzar [level] (nivel 1 = 0 puntos).
-int pointsForLevel(int level) => level <= 1 ? 0 : 50 * level * (level - 1);
+/// El factor (40) define el ritmo: subir del nivel L al L+1 cuesta 80·L puntos.
+int pointsForLevel(int level) => level <= 1 ? 0 : 40 * level * (level - 1);
 
 /// Nivel (1..∞) correspondiente a una cantidad de puntos.
 int levelForPoints(int points) {

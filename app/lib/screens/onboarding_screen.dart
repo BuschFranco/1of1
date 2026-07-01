@@ -1,7 +1,9 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bball_glyph.dart';
+import '../widgets/pop_button.dart';
 
 class OnboardingScreen extends StatelessWidget {
   final VoidCallback? onStart;
@@ -82,18 +84,8 @@ class OnboardingScreen extends StatelessWidget {
             height: 34,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [AppColors.accent, AppColors.accentDark],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.accent.withAlpha(85),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              gradient: AppFx.accentGradient(),
+              boxShadow: AppFx.neonGlow(AppColors.accent, blur: 18, alpha: 120),
             ),
             child: const Center(child: BBallGlyph(size: 22)),
           ),
@@ -158,6 +150,12 @@ class OnboardingScreen extends StatelessWidget {
                     color: AppColors.accent,
                     letterSpacing: -0.04,
                     height: 0.95,
+                  ).copyWith(
+                    shadows: [
+                      Shadow(
+                          color: AppColors.accent.withAlpha(140),
+                          blurRadius: 24),
+                    ],
                   ),
                 ),
               ],
@@ -239,36 +237,11 @@ class OnboardingScreen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         children: [
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: onStart,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(100),
-                ),
-                elevation: 12,
-                shadowColor: AppColors.accent.withAlpha(85),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'EMPEZAR A JUGAR',
-                    style: AppText.archivo(
-                      size: 15,
-                      weight: FontWeight.w800,
-                      letterSpacing: 0.04,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Icon(Icons.arrow_forward, size: 16),
-                ],
-              ),
-            ),
+          PopButton(
+            label: 'Empezar a jugar',
+            icon: Icons.arrow_forward,
+            height: 56,
+            onPressed: onStart,
           ),
           const SizedBox(height: 14),
           GestureDetector(

@@ -484,9 +484,9 @@ class _HomeScreenState extends State<HomeScreen>
       child: Stack(
         children: [
           GoogleMap(
+            style: _kMapStyle,
             onMapCreated: (ctrl) {
               _mapCtrl = ctrl;
-              ctrl.setMapStyle(_kMapStyle);
               final c = _court;
               if (widget.focusCourtId != null && c != null) {
                 ctrl.animateCamera(
@@ -726,7 +726,15 @@ class _HomeScreenState extends State<HomeScreen>
         decoration: BoxDecoration(
           color: const Color(0xF211181F),
           borderRadius: BorderRadius.circular(100),
-          border: Border.all(color: accent.withAlpha(140)),
+          border: Border.all(color: accent.withAlpha(160)),
+          // Glow neón del color de estado (verde/ámbar/gris) — pop-futurismo.
+          boxShadow: [
+            BoxShadow(
+              color: accent.withAlpha(55),
+              blurRadius: 22,
+              spreadRadius: 1,
+            ),
+          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -734,7 +742,13 @@ class _HomeScreenState extends State<HomeScreen>
             Container(
               width: 8,
               height: 8,
-              decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: accent,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: accent, blurRadius: 8, spreadRadius: 1),
+                ],
+              ),
             ),
             const SizedBox(width: 8),
             Flexible(
@@ -763,7 +777,14 @@ class _HomeScreenState extends State<HomeScreen>
                             color: AppColors.accent.withAlpha(38),
                             borderRadius: BorderRadius.circular(6),
                             border:
-                                Border.all(color: AppColors.accent.withAlpha(120)),
+                                Border.all(color: AppColors.accent.withAlpha(150)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.accent.withAlpha(60),
+                                blurRadius: 10,
+                                spreadRadius: -1,
+                              ),
+                            ],
                           ),
                           child: Text(
                             'x${ps.currentMultiplier.toStringAsFixed(2)}',
@@ -1242,12 +1263,18 @@ class _HomeScreenState extends State<HomeScreen>
       decoration: BoxDecoration(
         color: const Color(0xF211181F),
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: AppColors.white(0.1)),
+        border: Border.all(color: AppColors.accent.withAlpha(30)),
         boxShadow: [
           BoxShadow(
             color: AppColors.black(0.3),
             blurRadius: 24,
             offset: const Offset(0, 8),
+          ),
+          // Glow neón tenue (pop-futurismo) sin blur sobre el mapa.
+          BoxShadow(
+            color: AppColors.accent.withAlpha(22),
+            blurRadius: 20,
+            spreadRadius: -6,
           ),
         ],
       ),

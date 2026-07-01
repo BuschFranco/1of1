@@ -13,10 +13,13 @@ import '../services/friends_service.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import 'notifications_screen.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
+import '../widgets/pop_background.dart';
+import '../widgets/pop_panel.dart';
 import '../widgets/rating_badge.dart';
 import '../widgets/section_title.dart';
 
@@ -56,20 +59,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       color: AppColors.bg,
       child: Stack(
         children: [
-          Positioned(
-            top: -100,
-            left: -60,
-            child: Container(
-              width: 260,
-              height: 260,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [AppColors.accent.withAlpha(48), Colors.transparent],
-                ),
-              ),
-            ),
-          ),
+          const Positioned.fill(child: PopBackground()),
           Column(
             children: [
               const SizedBox(height: 56),
@@ -480,16 +470,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final start = pointsForLevel(lvl);
     final next = pointsForLevel(lvl + 1);
     final progress = ((pts - start) / (next - start)).clamp(0.0, 1.0);
-    return Container(
+    // Fondo SÓLIDO (el mazo de partidos va detrás y no debe transparentarse).
+    final solid = Color.alphaBlend(const Color(0x801A2430), AppColors.bg);
+    return PopPanel(
+      radius: 18,
+      fill: solid,
+      glow: true,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      decoration: BoxDecoration(
-        // Fondo SÓLIDO equivalente al translúcido 0x801A2430 compuesto sobre el
-        // fondo de la app, para que el mazo de partidos que va detrás no se
-        // transparente a través del nivel.
-        color: Color.alphaBlend(const Color(0x801A2430), AppColors.bg),
-        border: Border.all(color: AppColors.white(0.08)),
-        borderRadius: BorderRadius.circular(18),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -508,13 +495,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 12),
+          // Barra de progreso con degradado + glow neón.
           ClipRRect(
             borderRadius: BorderRadius.circular(100),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 7,
-              backgroundColor: AppColors.white(0.08),
-              valueColor: const AlwaysStoppedAnimation(AppColors.accent),
+            child: Container(
+              height: 7,
+              color: AppColors.white(0.08),
+              child: FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: progress == 0 ? 0.001 : progress,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: AppFx.accentGradient(),
+                    borderRadius: BorderRadius.circular(100),
+                    boxShadow:
+                        AppFx.neonGlow(AppColors.accent, blur: 8, alpha: 130),
+                  ),
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 6),
@@ -1409,11 +1407,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   (Color, String) _resultStyle(PlayResult? r) {
     switch (r) {
       case PlayResult.win:
-        return (AppColors.open, 'GANÓ');
+        return (AppColors.open, 'VICTORIA');
       case PlayResult.loss:
-        return (const Color(0xFFFF6B6B), 'PERDIÓ');
+        return (const Color(0xFFFF6B6B), 'DERROTA');
       case PlayResult.tie:
-        return (AppColors.white(0.7), 'EMPATÓ');
+        return (AppColors.white(0.7), 'EMPATE');
       case PlayResult.training:
         return (AppColors.accent, 'ENTREN.');
       case PlayResult.notCounted:
@@ -2891,24 +2889,15 @@ class _StatBox extends StatelessWidget {
     final box = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: accent
-            ? const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [AppColors.accent, AppColors.accentDark],
-              )
-            : null,
+        gradient: accent ? AppFx.accentGradient() : null,
         color: accent ? null : const Color(0x991A2430),
-        border: accent ? null : Border.all(color: AppColors.white(0.08)),
+        border: accent
+            ? null
+            : Border.all(color: AppColors.accent.withAlpha(38)),
         borderRadius: BorderRadius.circular(18),
         boxShadow: accent
-            ? [
-                BoxShadow(
-                  color: AppColors.accent.withAlpha(68),
-                  blurRadius: 28,
-                  offset: const Offset(0, 12),
-                ),
-              ]
+            ? AppFx.neonGlow(AppColors.accent,
+                blur: 28, alpha: 100, offset: const Offset(0, 10))
             : null,
       ),
       child: Stack(
