@@ -1,4 +1,11 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
+import { normalizeHandle, validateHandleFormat } from '../common/handle';
 import {
   Profile,
   profileFromNotion,
@@ -58,5 +65,55 @@ export class ProfilesService implements OnModuleInit {
       profileToNotionProps(patch),
     );
     return profileFromNotion(page);
+  }
+
+  /** Todos los perfiles (para resolver proponentes y presencia "jugando"). */
+  async getAll(): Promise<Profile[]> {
+    const rows = await this.notion.queryDatabase(this.notion.cfg.db.profiles);
+    return rows.map(profileFromNotion);
+  }
+
+  /** Busca un perfil por handle exacto. Devuelve null si no existe. */
+  async searchByHandle(handleRaw: string): Promise<Profile | null> {
+    const handle = normalizeHandle(handleRaw);
+    if (!handle) return null;
+    const rows = await this.notion.queryDatabase(this.notion.cfg.db.profiles, {
+      filter: NotionService.filterText('Handle', handle),
+    });
+    return rows.length ? profileFromNotion(rows[0]) : null;
+  }
+
+  /** True si el handle ya lo tiene OTRO perfil (excluye el propio). */
+  async isHandleTaken(handleRaw: string, excludePageId: string): Promise<boolean> {
+    const handle = normalizeHandle(handleRaw);
+    const rows = await this.notion.queryDatabase(this.notion.cfg.db.profiles, {
+      filter: NotionService.filterText('Handle', handle),
+    });
+    return rows.some((r) => (r.id?.toString() ?? '') !== excludePageId);
+  }
+
+  /** Define/cambia el handle con validación de formato y unicidad. */
+  async setHandle(profileId: string, handleRaw: string): Promise<Profile> {
+    const fmtErr = validateHandleFormat(handleRaw);
+    if (fmtErr) throw new BadRequestException(fmtErr);
+    const handle = normalizeHandle(handleRaw);
+    if (await this.isHandleTaken(handle, profileId)) {
+      throw new ConflictException('Ese handle ya está en uso. Probá con otro.');
+    }
+    return this.update(profileId, { handle });
+  }
+
+  /** Actualiza la presencia "jugando" del perfil. */
+  async setPresence(
+    profileId: string,
+    playing: boolean,
+    courtId: string,
+    since: string | null,
+  ): Promise<Profile> {
+    return this.update(profileId, {
+      playing,
+      playingCourtId: playing ? courtId : '',
+      playingSince: playing && since ? since : '',
+    });
   }
 }
