@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../services/app_loading_state.dart';
 import '../services/courts_provider.dart';
@@ -73,12 +74,53 @@ class _MainShellState extends State<MainShell> {
     return 'tab:${_tab.name}';
   }
 
+  // Historial de pestañas visitadas, para que el botón "atrás" del sistema
+  // vuelva a la anterior en vez de salir de la app.
+  final List<AppTab> _tabHistory = [];
+
   void _selectTab(AppTab t) {
     if (t == _tab) return;
     setState(() {
+      _tabHistory.add(_tab);
+      if (_tabHistory.length > 20) _tabHistory.removeAt(0);
       _slideDir = t.index >= _tab.index ? 1 : -1;
       _tab = t;
     });
+  }
+
+  /// Botón "atrás" del sistema (Android): cierra overlays o vuelve a la pestaña
+  /// anterior en vez de salir de la app. Devuelve true si consumió el gesto;
+  /// false si no hay a dónde volver (recién ahí se permite salir).
+  bool _handleBack() {
+    if (_filtersOpen) {
+      _closeFilters();
+      return true;
+    }
+    if (_detailCourtId != null) {
+      _closeDetail();
+      return true;
+    }
+    // En Perfil, si estás en Amigos, atrás vuelve a Perfil (como el swipe).
+    if (_tab == AppTab.profile && _profileTab == 1) {
+      setState(() => _profileTab = 0);
+      return true;
+    }
+    if (_tabHistory.isNotEmpty) {
+      final prev = _tabHistory.removeLast();
+      setState(() {
+        _slideDir = -1;
+        _tab = prev;
+      });
+      return true;
+    }
+    if (_tab != AppTab.home) {
+      setState(() {
+        _slideDir = -1;
+        _tab = AppTab.home;
+      });
+      return true;
+    }
+    return false;
   }
 
   // Orden de las pestañas navegables por swipe (todas menos el mapa). Deslizar
@@ -299,7 +341,16 @@ class _MainShellState extends State<MainShell> {
     }
     final overlayKey = ValueKey(_screenKey);
 
-    return Scaffold(
+    return PopScope(
+      // Nunca dejamos que el back del sistema saque de la app directamente:
+      // lo manejamos nosotros (cerrar overlay / volver a la pestaña anterior) y
+      // solo salimos si no hay a dónde volver.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (!_handleBack()) SystemNavigator.pop();
+      },
+      child: Scaffold(
       backgroundColor: AppColors.bg,
       body: Stack(
         children: [
@@ -360,6 +411,7 @@ class _MainShellState extends State<MainShell> {
           // Loader de carga inicial (mapa/canchas/GPS), por encima de todo.
           Positioned.fill(child: AppLoader(visible: loaderVisible)),
         ],
+      ),
       ),
     );
   }
