@@ -77,6 +77,27 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
+  // Orden de las pestañas navegables por swipe (todas menos el mapa). Deslizar
+  // hacia la izquierda avanza a la siguiente; hacia la derecha, a la anterior.
+  static const List<AppTab> _swipeTabs = [
+    AppTab.list,
+    AppTab.plus,
+    AppTab.chat,
+    AppTab.profile,
+  ];
+
+  void _handleTabSwipe(DragEndDetails d) {
+    final v = d.primaryVelocity ?? 0;
+    if (v == 0) return;
+    final idx = _swipeTabs.indexOf(_tab);
+    if (idx < 0) return; // estamos en el mapa: no aplica
+    if (v < 0 && idx < _swipeTabs.length - 1) {
+      _selectTab(_swipeTabs[idx + 1]); // swipe a la izquierda → siguiente
+    } else if (v > 0 && idx > 0) {
+      _selectTab(_swipeTabs[idx - 1]); // swipe a la derecha → anterior
+    }
+  }
+
   void _openDetail(String id) {
     setState(() {
       _slideDir = 1;
@@ -268,6 +289,17 @@ class _MainShellState extends State<MainShell> {
               child: KeyedSubtree(key: tabKey, child: tabContent),
             ),
           ),
+          // Deslizar horizontalmente para navegar entre pestañas (todas menos el
+          // mapa). Translúcido: los taps y el scroll vertical pasan al contenido;
+          // solo se activa fuera del mapa y sin overlays. En el mapa no está en
+          // el árbol, así que sus gestos quedan intactos.
+          if (_tab != AppTab.home && !hideTabs)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onHorizontalDragEnd: _handleTabSwipe,
+              ),
+            ),
           // Overlay detalle/filtros.
           Positioned.fill(
             child: IgnorePointer(

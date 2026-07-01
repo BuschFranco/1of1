@@ -32,6 +32,21 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   int _tab = 0; // 0 = Perfil, 1 = Amigos
 
+  // Ancla de la sección "Últimos partidos" para hacer scroll hacia ella al
+  // tocar el mazo de puntos que va debajo del nivel.
+  final GlobalKey _historyKey = GlobalKey();
+
+  void _scrollToHistory() {
+    final ctx = _historyKey.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutCubic,
+      alignment: 0.05,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
@@ -395,7 +410,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SectionTitle(title: 'Logros'),
               _achievementsSection(),
               const SizedBox(height: 24),
-              const SectionTitle(title: 'Últimos partidos'),
+              SectionTitle(key: _historyKey, title: 'Últimos partidos'),
               _historySection(),
             ],
           ),
@@ -543,28 +558,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
           left: 0,
           right: 0,
           bottom: 0,
-          child: SizedBox(
-            height: stackH,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // De atrás (último, transparente) hacia adelante (más reciente).
-                for (var i = n - 1; i >= 0; i--)
-                  Positioned(
-                    top: peek * i,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: FractionallySizedBox(
-                        widthFactor: widths[i],
-                        child: Opacity(
-                          opacity: opacities[i],
-                          child: _recentPointsRow(recent[i], cardH),
+          child: GestureDetector(
+            onTap: _scrollToHistory,
+            behavior: HitTestBehavior.opaque,
+            child: SizedBox(
+              height: stackH,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // De atrás (último, transparente) hacia adelante (más reciente).
+                  for (var i = n - 1; i >= 0; i--)
+                    Positioned(
+                      top: peek * i,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: FractionallySizedBox(
+                          widthFactor: widths[i],
+                          child: Opacity(
+                            opacity: opacities[i],
+                            child: _recentPointsRow(recent[i], cardH),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -1124,46 +1143,264 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _historyRow(PlaySession s) {
     final (color, label) = _resultStyle(s.result);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: _resultBg(s.result),
-        border: Border.all(color: _resultBorder(s.result)),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: color.withAlpha(38),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: color.withAlpha(120)),
+    return GestureDetector(
+      onTap: () => _showMatchDetail(s),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: _resultBg(s.result),
+          border: Border.all(color: _resultBorder(s.result)),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: color.withAlpha(38),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: color.withAlpha(120)),
+              ),
+              child: Text(label,
+                  style: AppText.grotesk(
+                      size: 10, weight: FontWeight.w800, color: color)),
             ),
-            child: Text(label,
-                style: AppText.grotesk(
-                    size: 10, weight: FontWeight.w800, color: color)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  s.courtName.isEmpty ? 'Cancha' : s.courtName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppText.grotesk(size: 13, weight: FontWeight.w600),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    s.courtName.isEmpty ? 'Cancha' : s.courtName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.grotesk(size: 13, weight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(Icons.schedule,
+                          size: 12, color: AppColors.white(0.45)),
+                      const SizedBox(width: 4),
+                      Text(
+                        PlaySessionService.fmt(s.seconds),
+                        style: AppText.grotesk(
+                            size: 11,
+                            weight: FontWeight.w600,
+                            color: AppColors.white(0.6)),
+                      ),
+                      Text(
+                        '  ·  ${_fmtDate(s.endedAtMillis)}',
+                        style: AppText.grotesk(
+                            size: 11, color: AppColors.white(0.45)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (s.points > 0) ...[
+              Text('+${s.points}',
+                  style: AppText.archivo(
+                      size: 14,
+                      weight: FontWeight.w900,
+                      color: AppColors.accent)),
+              const SizedBox(width: 2),
+              Text('pts',
+                  style:
+                      AppText.grotesk(size: 10, color: AppColors.white(0.45))),
+              const SizedBox(width: 6),
+            ],
+            Icon(Icons.chevron_right, size: 18, color: AppColors.white(0.35)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Modal con el detalle de un partido: cancha (imagen + rating), resultado,
+  /// fecha, hora, duración y puntos. Usa solo datos ya disponibles (el
+  /// [PlaySession] guardado + el catálogo de canchas en memoria), sin queries.
+  Future<void> _showMatchDetail(PlaySession s) async {
+    final courts = context.read<CourtsProvider>().courts;
+    Court? court;
+    for (final c in courts) {
+      if (c.id == s.courtId) {
+        court = c;
+        break;
+      }
+    }
+    final (color, label) = _resultStyle(s.result);
+    final ended = DateTime.fromMillisecondsSinceEpoch(s.endedAtMillis);
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => Container(
+        decoration: BoxDecoration(
+          color: AppColors.bgElev,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(color: AppColors.white(0.08)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 18),
+                decoration: BoxDecoration(
+                  color: AppColors.white(0.2),
+                  borderRadius: BorderRadius.circular(100),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${_fmtDate(s.endedAtMillis)} · ${PlaySessionService.fmt(s.seconds)}',
-                  style: AppText.grotesk(size: 11, color: AppColors.white(0.45)),
+              ),
+            ),
+            Row(
+              children: [
+                CourtImage(
+                  url: court?.img ?? '',
+                  width: 64,
+                  height: 64,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        court?.name ??
+                            (s.courtName.isEmpty ? 'Cancha' : s.courtName),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            AppText.archivo(size: 18, weight: FontWeight.w900),
+                      ),
+                      if (court != null && (court.area.isNotEmpty ||
+                          court.type.isNotEmpty)) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          court.area.isEmpty
+                              ? court.type
+                              : '${court.area} · ${court.type}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppText.grotesk(
+                              size: 12, color: AppColors.white(0.5)),
+                        ),
+                      ],
+                      if (court != null) ...[
+                        const SizedBox(height: 6),
+                        RatingBadge(value: court.rating, size: 11),
+                      ],
+                    ],
+                  ),
                 ),
               ],
             ),
+            const SizedBox(height: 18),
+            Container(
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: color.withAlpha(38),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: color.withAlpha(120)),
+              ),
+              child: Text(label,
+                  style: AppText.grotesk(
+                      size: 12, weight: FontWeight.w800, color: color)),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: _detailStat(
+                      Icons.schedule, 'Duración', PlaySessionService.fmt(s.seconds)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _detailStat(Icons.stars_rounded, 'Puntos',
+                      s.points > 0 ? '+${s.points}' : '—'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _detailStat(Icons.calendar_today,
+                      'Fecha', _fmtDate(s.endedAtMillis)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _detailStat(Icons.access_time_filled, 'Hora',
+                      '${ended.hour.toString().padLeft(2, '0')}:${ended.minute.toString().padLeft(2, '0')}'),
+                ),
+              ],
+            ),
+            if (court != null) ...[
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    widget.onSelectCourt?.call(court!.id);
+                  },
+                  style: TextButton.styleFrom(
+                    backgroundColor: AppColors.accent.withAlpha(30),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text('Ver cancha',
+                      style: AppText.grotesk(
+                          size: 13,
+                          weight: FontWeight.w700,
+                          color: AppColors.accent)),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Celda de dato (ícono + etiqueta + valor) para el modal de detalle.
+  Widget _detailStat(IconData icon, String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.white(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.white(0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 13, color: AppColors.white(0.45)),
+              const SizedBox(width: 6),
+              Text(label,
+                  style:
+                      AppText.grotesk(size: 11, color: AppColors.white(0.5))),
+            ],
           ),
+          const SizedBox(height: 6),
+          Text(value,
+              style: AppText.archivo(size: 16, weight: FontWeight.w800)),
         ],
       ),
     );
@@ -2171,43 +2408,52 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
     final preview = _ctrl.text.trim().isEmpty ? 'CLAN' : _ctrl.text.trim();
     return AlertDialog(
       backgroundColor: AppColors.bgElev,
-      scrollable: true,
       title: Text('Insignia de Clan',
           style: AppText.archivo(size: 18, weight: FontWeight.w800)),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Preview en vivo del avatar (con el marco equipado).
-          Center(
-            child: framedAvatar(
-              frameById(_frame),
-              20,
-              Container(
-                width: 64,
-                height: 64,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: bg, width: 3),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [bg, _darkenColor(bg)],
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Preview en vivo del avatar (con el marco equipado). Queda FIJA
+            // arriba: no entra en el scroll de las opciones, así siempre se ve.
+            Center(
+              child: framedAvatar(
+                frameById(_frame),
+                20,
+                Container(
+                  width: 64,
+                  height: 64,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: bg, width: 3),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [bg, _darkenColor(bg)],
+                    ),
                   ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(preview,
-                        style: clanFontStyle(_font, size: 22, color: fg)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(preview,
+                          style: clanFontStyle(_font, size: 22, color: fg)),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
+            // Opciones scrolleables (el preview de arriba permanece visible).
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
           Text('Hasta 4 caracteres',
               style: AppText.grotesk(size: 12, color: AppColors.white(0.5))),
           const SizedBox(height: 6),
@@ -2316,12 +2562,18 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
             value: _textColor,
             onChanged: (hex) => setState(() => _textColor = hex),
           ),
-          if (_error != null) ...[
-            const SizedBox(height: 10),
-            Text(_error!,
-                style: AppText.grotesk(size: 12, color: const Color(0xFFFF8A8D))),
+                    if (_error != null) ...[
+                      const SizedBox(height: 10),
+                      Text(_error!,
+                          style: AppText.grotesk(
+                              size: 12, color: const Color(0xFFFF8A8D))),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           ],
-        ],
+        ),
       ),
       actions: [
         TextButton(
@@ -2346,8 +2598,8 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
   }
 }
 
-/// Selector de color reutilizable: paleta de muestras + input hexadecimal,
-/// sincronizados entre sí. Notifica el hex elegido (6 dígitos) vía [onChanged].
+/// Selector de color reutilizable: paleta de muestras. Notifica el hex elegido
+/// (6 dígitos) vía [onChanged].
 class _ColorPicker extends StatefulWidget {
   final String label;
   final List<CosmeticColor> colors;
@@ -2367,37 +2619,17 @@ class _ColorPicker extends StatefulWidget {
 }
 
 class _ColorPickerState extends State<_ColorPicker> {
-  late final TextEditingController _hexCtrl;
   late String _value;
 
   @override
   void initState() {
     super.initState();
     _value = widget.value;
-    _hexCtrl = TextEditingController(text: widget.value);
-  }
-
-  @override
-  void dispose() {
-    _hexCtrl.dispose();
-    super.dispose();
   }
 
   void _select(String hex) {
     setState(() => _value = hex);
-    _hexCtrl.text = hex;
-    _hexCtrl.selection = TextSelection.collapsed(offset: hex.length);
     widget.onChanged(hex);
-  }
-
-  void _onHex(String value) {
-    final h = value.toUpperCase();
-    if (RegExp(r'^[0-9A-F]{6}$').hasMatch(h)) {
-      setState(() => _value = h);
-      widget.onChanged(h);
-    } else {
-      setState(() {});
-    }
   }
 
   @override
@@ -2446,54 +2678,6 @@ class _ColorPickerState extends State<_ColorPicker> {
                 );
               }(),
           ],
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            color: const Color(0xE011181F),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.white(0.1)),
-          ),
-          child: Row(
-            children: [
-              Text('#',
-                  style: AppText.archivo(
-                      size: 16, weight: FontWeight.w800, color: AppColors.accent)),
-              const SizedBox(width: 6),
-              Expanded(
-                child: TextField(
-                  controller: _hexCtrl,
-                  style: AppText.grotesk(
-                      size: 14, weight: FontWeight.w600, letterSpacing: 0.05),
-                  cursorColor: AppColors.accent,
-                  textInputAction: TextInputAction.done,
-                  onChanged: _onHex,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9a-fA-F]')),
-                    LengthLimitingTextInputFormatter(6),
-                    _UpperCaseFormatter(),
-                  ],
-                  decoration: InputDecoration(
-                    hintText: 'FF6B1A',
-                    hintStyle: AppText.grotesk(size: 14, color: AppColors.white(0.3)),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                ),
-              ),
-              Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  color: clanColor(_value),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.white(0.2)),
-                ),
-              ),
-            ],
-          ),
         ),
       ],
     );
