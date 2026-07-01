@@ -12,7 +12,6 @@ import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
-import '../widgets/pop_button.dart';
 import '../widgets/pop_panel.dart';
 import '../widgets/section_title.dart';
 import '../widgets/status_dot.dart';
@@ -37,7 +36,14 @@ class DetailScreen extends StatelessWidget {
     final court = pool.firstWhere((c) => c.id == courtId,
         orElse: () => pool.first);
 
-    return Container(
+    return GestureDetector(
+      // Deslizar a la derecha cierra el detalle y vuelve a la pestaña previa
+      // (mapa o canchas, según por dónde entró: al cerrar el overlay queda a la
+      // vista el tab que estaba debajo). No choca con el scroll vertical.
+      onHorizontalDragEnd: (d) {
+        if ((d.primaryVelocity ?? 0) > 0) onBack?.call();
+      },
+      child: Container(
       color: AppColors.bg,
       child: Stack(
         children: [
@@ -130,31 +136,13 @@ class DetailScreen extends StatelessWidget {
             child: _iconBtn(Icons.chevron_left, onTap: onBack),
           ),
           Positioned(
-            top: 56,
-            right: 16,
-            child: Row(
-              children: [
-                Builder(builder: (context) {
-                  final fav = context.watch<FavoritesProvider>();
-                  final isFav = fav.isFavorite(court.id);
-                  return _iconBtn(
-                    isFav ? Icons.favorite : Icons.favorite_border,
-                    color: isFav ? AppColors.accent : Colors.white,
-                    onTap: () => context.read<FavoritesProvider>().toggle(court.id),
-                  );
-                }),
-                const SizedBox(width: 8),
-                _iconBtn(Icons.ios_share),
-              ],
-            ),
-          ),
-          Positioned(
             bottom: 110,
             left: 16,
             right: 16,
             child: _bottomCta(court),
           ),
         ],
+      ),
       ),
     );
   }
@@ -531,28 +519,38 @@ class DetailScreen extends StatelessWidget {
   Widget _bottomCta(Court court) {
     return Row(
       children: [
-        Expanded(
-          child: PopButton(
-            label: 'Unirme al juego',
-            onPressed: () {},
-          ),
-        ),
+        Builder(builder: (context) {
+          final isFav = context.watch<FavoritesProvider>().isFavorite(court.id);
+          return _squareBtn(
+            isFav ? Icons.favorite : Icons.favorite_border,
+            color: isFav ? AppColors.accent : Colors.white,
+            onTap: () => context.read<FavoritesProvider>().toggle(court.id),
+          );
+        }),
         const SizedBox(width: 10),
-        GestureDetector(
+        _squareBtn(
+          Icons.location_on_outlined,
           onTap: () => onShowOnMap?.call(court.id),
-          child: Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              color: AppColors.white(0.08),
-              border: Border.all(color: AppColors.white(0.12)),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(Icons.location_on_outlined,
-                color: Colors.white, size: 20),
-          ),
         ),
       ],
+    );
+  }
+
+  /// Botón cuadrado de acción (favoritos / ubicar en el mapa) al pie del detalle.
+  Widget _squareBtn(IconData icon,
+      {VoidCallback? onTap, Color color = Colors.white}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 54,
+        height: 54,
+        decoration: BoxDecoration(
+          color: AppColors.white(0.08),
+          border: Border.all(color: AppColors.white(0.12)),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Icon(icon, color: color, size: 20),
+      ),
     );
   }
 }
