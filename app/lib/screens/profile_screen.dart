@@ -26,14 +26,36 @@ import '../widgets/section_title.dart';
 class ProfileScreen extends StatefulWidget {
   /// Abre el detalle de una cancha (al tocar un favorito).
   final ValueChanged<String>? onSelectCourt;
-  const ProfileScreen({super.key, this.onSelectCourt});
+
+  /// Subpestaña activa (0 = Perfil, 1 = Amigos). Si viene dada, el estado lo
+  /// controla el padre (para poder cambiarla con swipe desde el shell); si es
+  /// null, la pantalla la maneja internamente.
+  final int? activeTab;
+  final ValueChanged<int>? onTabChange;
+
+  const ProfileScreen({
+    super.key,
+    this.onSelectCourt,
+    this.activeTab,
+    this.onTabChange,
+  });
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  int _tab = 0; // 0 = Perfil, 1 = Amigos
+  int _localTab = 0; // 0 = Perfil, 1 = Amigos (fallback si no lo controla el padre)
+
+  int get _tab => widget.activeTab ?? _localTab;
+
+  void _setTab(int idx) {
+    if (widget.onTabChange != null) {
+      widget.onTabChange!(idx);
+    } else {
+      setState(() => _localTab = idx);
+    }
+  }
 
   // Ancla de la sección "Últimos partidos" para hacer scroll hacia ella al
   // tocar el mazo de puntos que va debajo del nivel.
@@ -204,7 +226,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final active = _tab == idx;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _tab = idx),
+        onTap: () => _setTab(idx),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 10),

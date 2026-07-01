@@ -27,6 +27,10 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   AppTab _tab = AppTab.home;
 
+  // Subpestaña del Perfil (0 = Perfil, 1 = Amigos). Vive acá para que el swipe
+  // del shell pueda alternarla antes de saltar a otra pestaña principal.
+  int _profileTab = 0;
+
   // Tope de seguridad del loader: si las señales (mapa/GPS/canchas) no llegan,
   // igual lo ocultamos a los 6s para no dejar la app tapada.
   bool _loaderTimedOut = false;
@@ -89,6 +93,19 @@ class _MainShellState extends State<MainShell> {
   void _handleTabSwipe(DragEndDetails d) {
     final v = d.primaryVelocity ?? 0;
     if (v == 0) return;
+    // Dentro del Perfil, el swipe alterna entre las subpestañas Perfil/Amigos.
+    // Solo cae a la navegación entre pestañas principales cuando ya está en el
+    // extremo (izquierda desde Perfil → nada; derecha desde Perfil → anterior).
+    if (_tab == AppTab.profile) {
+      if (v < 0 && _profileTab == 0) {
+        setState(() => _profileTab = 1); // swipe izquierda → Amigos
+        return;
+      }
+      if (v > 0 && _profileTab == 1) {
+        setState(() => _profileTab = 0); // swipe derecha → Perfil
+        return;
+      }
+    }
     // Desde Canchas, deslizar a la derecha vuelve al Mapa. (Al revés NO: en el
     // Mapa no hay capa de swipe, así que sus gestos quedan intactos.)
     if (v > 0 && _tab == AppTab.list) {
@@ -261,6 +278,8 @@ class _MainShellState extends State<MainShell> {
       AppTab.profile => ProfileScreen(
           key: const ValueKey('tab:profile'),
           onSelectCourt: _openDetail,
+          activeTab: _profileTab,
+          onTabChange: (t) => setState(() => _profileTab = t),
         ),
     };
     final tabKey = ValueKey('tab:${_tab.name}');
