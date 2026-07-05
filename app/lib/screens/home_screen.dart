@@ -708,17 +708,21 @@ class _HomeScreenState extends State<HomeScreen>
 
   Widget _playingBanner(BuildContext context) {
     final ps = context.watch<PlaySessionService>();
-    // Si saliste del radio, mostramos la cuenta regresiva de cierre (ámbar);
-    // si no, el tiempo transcurrido del partido (verde / gris si está pausado).
+    // El banner NO cambia de color al salir del radio: sigue siendo el mismo
+    // verde de "Jugando" (gris si está pausado), y el tiempo del partido sigue
+    // corriendo. La salida de la cancha se muestra como una línea ámbar DENTRO
+    // del mismo banner (sin swaps bruscos de color/layout).
     final ending = ps.isEndingSoon;
     final paused = ps.isPaused;
-    final secs = ending ? ps.endRemainingSeconds : ps.elapsedSeconds;
+    final secs = ps.elapsedSeconds;
     final mm = (secs ~/ 60).toString().padLeft(2, '0');
     final ss = (secs % 60).toString().padLeft(2, '0');
+    // Cuenta regresiva de salida (solo cuando estás fuera del radio).
+    final exit = ps.endRemainingSeconds;
+    final emm = (exit ~/ 60).toString().padLeft(2, '0');
+    final ess = (exit % 60).toString().padLeft(2, '0');
     const amber = Color(0xFFE9B949);
-    final accent = ending
-        ? amber
-        : (paused ? AppColors.white(0.7) : AppColors.open);
+    final accent = paused ? AppColors.white(0.7) : AppColors.open;
     return Center(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -727,7 +731,7 @@ class _HomeScreenState extends State<HomeScreen>
           color: const Color(0xF211181F),
           borderRadius: BorderRadius.circular(100),
           border: Border.all(color: accent.withAlpha(160)),
-          // Glow neón del color de estado (verde/ámbar/gris) — pop-futurismo.
+          // Glow neón del color de estado (verde / gris) — pop-futurismo.
           boxShadow: [
             BoxShadow(
               color: accent.withAlpha(55),
@@ -760,7 +764,7 @@ class _HomeScreenState extends State<HomeScreen>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        ending ? 'Termina en $mm:$ss' : '$mm:$ss',
+                        '$mm:$ss',
                         style: AppText.archivo(
                           size: 13,
                           weight: FontWeight.w800,
@@ -768,7 +772,7 @@ class _HomeScreenState extends State<HomeScreen>
                         ),
                       ),
                       // Multiplicador por duración, creciendo en vivo.
-                      if (!ending) ...[
+                      if (!paused) ...[
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -800,16 +804,30 @@ class _HomeScreenState extends State<HomeScreen>
                       ],
                     ],
                   ),
-                  Text(
-                    ending
-                        ? 'Saliste de ${ps.courtName ?? 'la cancha'}'
-                        : (paused
-                            ? 'Pausado'
-                            : 'Jugando en ${ps.courtName ?? ''}'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppText.grotesk(size: 10, color: AppColors.white(0.6)),
-                  ),
+                  // Segunda línea: si estás saliendo, la cuenta regresiva de
+                  // salida en ámbar (dentro del mismo banner verde); si no, el
+                  // estado normal.
+                  if (ending && !paused)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.directions_run, size: 11, color: amber),
+                        const SizedBox(width: 3),
+                        Text('Sale de la cancha en $emm:$ess',
+                            style: AppText.grotesk(
+                                size: 10,
+                                weight: FontWeight.w700,
+                                color: amber)),
+                      ],
+                    )
+                  else
+                    Text(
+                      paused ? 'Pausado' : 'Jugando en ${ps.courtName ?? ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          AppText.grotesk(size: 10, color: AppColors.white(0.6)),
+                    ),
                   // Con Salud conectada dejamos claro que estamos midiendo el
                   // desempeño físico (calorías/pulso) durante el partido.
                   if (ps.healthEnabled) ...[
@@ -832,37 +850,34 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ),
             const SizedBox(width: 10),
-            // Botón pausa/reanudar (un solo botón, alterna). Solo en juego normal:
-            // durante la cuenta de cierre no aplica.
-            if (!ending) ...[
-              GestureDetector(
-                onTap: () => context.read<PlaySessionService>().togglePause(),
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: AppColors.white(0.08),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.white(0.18)),
-                  ),
-                  child: Icon(
-                    paused ? Icons.play_arrow : Icons.pause,
-                    size: 18,
-                    color: Colors.white,
-                  ),
+            // Botón pausa/reanudar (siempre visible: el banner es el mismo, jugues
+            // o estés saliendo del radio).
+            GestureDetector(
+              onTap: () => context.read<PlaySessionService>().togglePause(),
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: AppColors.white(0.08),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.white(0.18)),
+                ),
+                child: Icon(
+                  paused ? Icons.play_arrow : Icons.pause,
+                  size: 18,
+                  color: Colors.white,
                 ),
               ),
-              const SizedBox(width: 6),
-            ],
+            ),
+            const SizedBox(width: 6),
             GestureDetector(
               onTap: () => context.read<PlaySessionService>().stopNow(),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: ending ? amber : AppColors.white(0.08),
+                  color: AppColors.white(0.08),
                   borderRadius: BorderRadius.circular(100),
-                  border: Border.all(
-                      color: ending ? Colors.transparent : AppColors.white(0.18)),
+                  border: Border.all(color: AppColors.white(0.18)),
                 ),
                 child: Text(
                   'DETENER',
@@ -870,7 +885,7 @@ class _HomeScreenState extends State<HomeScreen>
                     size: 10,
                     weight: FontWeight.w800,
                     letterSpacing: 0.04,
-                    color: ending ? Colors.black : Colors.white,
+                    color: Colors.white,
                   ),
                 ),
               ),

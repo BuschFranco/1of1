@@ -35,6 +35,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   // apenas el GPS te ubica fuera del radio. Recién se cierra si seguís fuera de
   // forma continua durante este tiempo (tolera saltos de señal y pausas cortas).
   static const Duration exitGrace = Duration(minutes: 6);
+  // La notificación de "saliste de la cancha / termina en…" recién se muestra
+  // cuando quedan estos minutos o menos de la gracia de salida. Antes de eso, la
+  // notif sigue mostrando el partido en curso (no molesta apenas te movés).
+  static const Duration endNotifLeadTime = Duration(minutes: 3);
   // Duración mínima para que un partido cuente. Por debajo de esto asumimos que
   // se canceló (no suma puntos, ni tiempo, ni jugadas, ni entra al historial).
   static const Duration minMatch = Duration(minutes: 13);
@@ -132,11 +136,15 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     if (isPlaying && _startedAt != null) {
       if (_pausedAt != null) {
         onPausedNotif?.call(_courtName ?? '', _elapsed);
-      } else if (_outsideSince != null) {
+      } else if (_outsideSince != null &&
+          _outsideSince!.add(exitGrace).difference(DateTime.now()) <=
+              endNotifLeadTime) {
+        // Saliste del radio Y quedan <= 3 min: recién ahí avisamos "termina en…".
         onEndingNotif?.call(_courtName ?? '', _outsideSince!.add(exitGrace));
       } else {
-        // Inicio "efectivo" = ahora - elapsed, para que el cronómetro nativo
-        // muestre el tiempo correcto descontando lo que estuvo pausado.
+        // Jugando (o saliste hace poco pero todavía hay margen): mostramos el
+        // partido en curso. Inicio "efectivo" = ahora - elapsed, para que el
+        // cronómetro nativo muestre el tiempo correcto descontando la pausa.
         onPlayingNotif?.call(
             _courtName ?? '', DateTime.now().subtract(Duration(seconds: _elapsed)));
       }
@@ -172,6 +180,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   // Toleramos [gpsJitterGrace] antes de cancelar el cierre (evita que un salto
   // de GPS cancele la cuenta de fin).
   DateTime? _insideSince;
+  // Si ya mostramos la notif de "termina en…" para la gracia de salida actual
+  // (para pasarla una sola vez al cruzar [endNotifLeadTime] y no re-emitirla).
+  bool _endNotifShown = false;
 
   // Sesión activa.
   String? _courtId;
@@ -739,6 +750,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _pausedSeconds = 0;
     _outsideSince = null;
     _insideSince = null;
+    _endNotifShown = false;
     _dwellCourtId = null;
     _dwellSince = null;
     _dwellOutsideSince = null;
@@ -896,6 +908,15 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
           _lastSavedAt = _elapsed;
           _persistActive();
         }
+        // Gracia de salida: al cruzar el umbral de [endNotifLeadTime] restantes,
+        // pasamos la notif a "termina en…" (una sola vez por período de salida).
+        if (_outsideSince != null && !_endNotifShown) {
+          final rem = _outsideSince!.add(exitGrace).difference(DateTime.now());
+          if (rem <= endNotifLeadTime) {
+            _endNotifShown = true;
+            _renderSessionNotif();
+          }
+        }
       }
       notifyListeners();
       // Cada ~20s revisamos la batería: si quedó muy baja, cerramos el partido.
@@ -1001,6 +1022,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         // alarma para que cierre aunque la app esté minimizada/cerrada.
         _outsideSince = DateTime.now();
         _insideSince = null;
+        _endNotifShown = false; // arranca gracia nueva: la notif sigue "jugando"
         final pc = _playingCourt;
         if (pc != null && _startedAt != null) {
           unawaited(scheduleEndAlarm(
@@ -1025,6 +1047,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         if (DateTime.now().difference(_insideSince!) >= gpsJitterGrace) {
           _outsideSince = null;
           _insideSince = null;
+          _endNotifShown = false;
           unawaited(cancelEndAlarm());
           _renderSessionNotif(); // la notif vuelve a "jugando"
         }
@@ -1127,6 +1150,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _pausedAt = null;
     _pausedSeconds = 0;
     _outsideSince = null;
+    _endNotifShown = false;
     // Ya arrancó: cancelamos la alarma de arranque (si estaba pendiente) y
     // arrancamos la vigilancia periódica de batería (red de seguridad en
     // background por si el SO mata el proceso).
@@ -1204,6 +1228,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _pausedSeconds = 0;
     _outsideSince = null;
     _insideSince = null;
+    _endNotifShown = false;
     // Reseteamos también la permanencia: al terminar un partido (manual o por
     // salir del radio) NO queremos arrancar otro al instante con el dwell viejo
     // ya vencido. Así, si seguís dentro de la cancha, empieza de nuevo la cuenta

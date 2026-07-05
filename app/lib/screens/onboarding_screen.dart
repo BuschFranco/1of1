@@ -1,8 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
-import '../widgets/bball_glyph.dart';
+import '../widgets/app_logo.dart';
 import '../widgets/pop_button.dart';
 
 class OnboardingScreen extends StatelessWidget {
@@ -75,43 +74,11 @@ class OnboardingScreen extends StatelessWidget {
   }
 
   Widget _brand() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 20, 28, 0),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              gradient: AppFx.accentGradient(),
-              boxShadow: AppFx.neonGlow(AppColors.accent, blur: 18, alpha: 120),
-            ),
-            child: const Center(child: BBallGlyph(size: 22)),
-          ),
-          const SizedBox(width: 10),
-          RichText(
-            text: TextSpan(
-              style: AppText.archivo(
-                size: 20,
-                weight: FontWeight.w900,
-                letterSpacing: -0.03,
-              ),
-              children: [
-                const TextSpan(text: '1'),
-                TextSpan(
-                  text: 'of',
-                  style: AppText.archivo(
-                    size: 20,
-                    weight: FontWeight.w900,
-                    color: AppColors.accent,
-                  ),
-                ),
-                const TextSpan(text: '1'),
-              ],
-            ),
-          ),
-        ],
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(28, 20, 28, 0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: AppLogo(height: 44),
       ),
     );
   }

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
+import 'app_logo.dart';
 import 'pop_background.dart';
 
-/// Overlay de carga a pantalla completa con el texto "1of1" (provisorio hasta
-/// tener el logo). Hace un fade out suave cuando [visible] pasa a false y, al
+/// Overlay de carga a pantalla completa con el logo de 1of1. Hace un fade out
+/// suave cuando [visible] pasa a false y, al
 /// terminar la animación, se quita del árbol (deja de pintar y de capturar
 /// toques).
 class AppLoader extends StatefulWidget {
@@ -40,25 +41,13 @@ class _AppLoaderState extends State<AppLoader> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Wordmark "1of1" con degradado de acento + glow neón.
+                  // Logo de 1of1 con glow neón de acento.
                   DecoratedBox(
                     decoration: BoxDecoration(
                       boxShadow:
                           AppFx.neonGlow(AppColors.accent, blur: 34, alpha: 90),
                     ),
-                    child: ShaderMask(
-                      shaderCallback: (rect) =>
-                          AppFx.accentGradient().createShader(rect),
-                      child: Text(
-                        '1of1',
-                        style: AppText.display(
-                          size: 52,
-                          weight: FontWeight.w700,
-                          letterSpacing: 0.02,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
+                    child: const AppLogo(height: 120),
                   ),
                   const SizedBox(height: 24),
                   SizedBox(

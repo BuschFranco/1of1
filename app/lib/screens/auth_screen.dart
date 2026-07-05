@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/session.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
-import '../widgets/bball_glyph.dart';
+import '../widgets/app_logo.dart';
 import '../widgets/pop_background.dart';
 import '../widgets/pop_button.dart';
 
@@ -159,30 +159,9 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _brand() {
-    return Row(
-      children: [
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            gradient: AppFx.accentGradient(),
-            boxShadow: AppFx.neonGlow(AppColors.accent, blur: 16, alpha: 110),
-          ),
-          child: const Center(child: BBallGlyph(size: 22)),
-        ),
-        const SizedBox(width: 10),
-        RichText(
-          text: TextSpan(
-            style: AppText.archivo(size: 20, weight: FontWeight.w900),
-            children: [
-              const TextSpan(text: '1'),
-              TextSpan(text: 'of', style: AppText.archivo(size: 20, weight: FontWeight.w900, color: AppColors.accent)),
-              const TextSpan(text: '1'),
-            ],
-          ),
-        ),
-      ],
+    return const Align(
+      alignment: Alignment.centerLeft,
+      child: AppLogo(height: 44),
     );
   }
 
