@@ -38,6 +38,8 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   // La notificación de "saliste de la cancha / termina en…" recién se muestra
   // cuando quedan estos minutos o menos de la gracia de salida. Antes de eso, la
   // notif sigue mostrando el partido en curso (no molesta apenas te movés).
+  // GEMELA: session_alarms._kEndNotifLead (la alarma de aviso en background usa
+  // el mismo lead; si cambiás una, cambiá la otra).
   static const Duration endNotifLeadTime = Duration(minutes: 3);
   // Duración mínima para que un partido cuente. Por debajo de esto asumimos que
   // se canceló (no suma puntos, ni tiempo, ni jugadas, ni entra al historial).
@@ -459,6 +461,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         final start = DateTime.fromMillisecondsSinceEpoch(
             (j['startMillis'] as num).toInt());
         if (DateTime.now().difference(start) <= const Duration(hours: 6)) {
+          final endsAtMillis = (j['endsAtMillis'] as num?)?.toInt();
           _courtId = j['courtId'] as String?;
           _courtName = j['courtName'] as String?;
           _startedAt = start;
@@ -467,7 +470,12 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
           _accrued = 0;
           _dwellCourtId = null;
           _dwellSince = null;
-          _outsideSince = null;
+          // Si había gracia de salida en curso, la restauramos para que el
+          // cierre siga corriendo con el tiempo correcto (no la perdemos).
+          _outsideSince = endsAtMillis != null
+              ? DateTime.fromMillisecondsSinceEpoch(endsAtMillis)
+                  .subtract(exitGrace)
+              : null;
           _pausedAt = null;
           _pausedSeconds = 0;
           unawaited(cancelStartAlarm());
@@ -626,8 +634,13 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     // Persistimos el userKey para que el isolate de las alarmas arme las mismas
     // claves namespaced, y registramos el puerto de reconciliación.
     _registerPlayPort();
-    unawaited(SharedPreferences.getInstance()
-        .then((p) => p.setString(kBgUserKey, userKey)));
+    unawaited(SharedPreferences.getInstance().then((p) {
+      p.setString(kBgUserKey, userKey);
+      // DEV: el mock vive solo en memoria y murió con el proceso anterior;
+      // limpiamos su copia persistida para que las alarmas no decidan con una
+      // ubicación simulada vieja en uso real.
+      p.remove(kMockPosKey);
+    }));
     _resetState();
     await _restore();
     // Por si una alarma arrancó/cerró un partido mientras la app estaba cerrada.
@@ -706,13 +719,56 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// service para mantener viva la detección aunque se minimice la app; su
   /// notificación queda justificada porque estás en una cancha.
   void enterCourtArea() {
+    // Los geofences usan el GPS REAL: en modo prueba manda el mock y un cruce
+    // real (p. ej. una cancha cerca de tu casa) no debe interferir la prueba.
+    if (_mock != null) return;
     if (_background) _startStream();
   }
 
-  /// Llamado al SALIR de la zona de una cancha. Corta el foreground service (y
-  /// su notificación). La sesión, si la había, se cierra sola al salir del radio.
+  /// Llamado al SALIR de la zona de una cancha (geofence EXIT).
+  ///
+  /// Si hay un partido en curso NO cortamos el foreground service: lo dejamos
+  /// vivo durante la gracia de salida para que el isolate principal cierre el
+  /// partido de forma confiable con la app minimizada (antes lo matábamos acá y,
+  /// sin proceso vivo, la gracia nunca cerraba hasta reabrir la app). Además
+  /// arrancamos la gracia + alarma desde acá porque el evento de geofence es
+  /// confiable aunque el muestreo GPS no llegue a correr.
   void leaveCourtArea() {
+    // Ídem enterCourtArea: los geofences (GPS real) no deben re-armar la gracia
+    // de salida mientras el mock está adentro de la cancha simulada.
+    if (_mock != null) return;
+    if (isPlaying) {
+      _beginExitGrace();
+      return;
+    }
     _stopStream();
+  }
+
+  /// Arranca la gracia de salida del partido en curso: marca desde cuándo
+  /// estamos fuera, programa la alarma de cierre (para que cierre aunque la app
+  /// esté minimizada/cerrada) y pasa la notif a "termina en…". Idempotente: si
+  /// ya hay gracia en curso (o está pausado / no hay partido) no hace nada. La
+  /// disparan tanto el muestreo GPS ([_evaluate]) como el evento de geofence
+  /// EXIT ([leaveCourtArea]).
+  void _beginExitGrace() {
+    if (!isPlaying || _pausedAt != null || _outsideSince != null) return;
+    _outsideSince = DateTime.now();
+    _insideSince = null;
+    _endNotifShown = false; // gracia nueva: la notif sigue "jugando" por ahora
+    final pc = _playingCourt;
+    if (pc != null && _startedAt != null) {
+      unawaited(scheduleEndAlarm(
+        userKey: _userKey,
+        courtId: pc.id,
+        courtName: pc.name,
+        lat: pc.lat,
+        lng: pc.lng,
+        startMillis: _startedAt!.millisecondsSinceEpoch,
+        at: _outsideSince!.add(exitGrace),
+      ));
+    }
+    unawaited(_persistActive()); // persiste endsAtMillis para el cierre correcto
+    _renderSessionNotif(); // la notif pasa a "termina en…"
   }
 
   void stopTracking() {
@@ -887,7 +943,13 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       );
     }
     _posSub = Geolocator.getPositionStream(locationSettings: settings)
-        .listen(_evaluate, onError: (_) {});
+        .listen((pos) {
+      // En modo prueba manda el mock: si dejáramos pasar el GPS real (lejos de
+      // la cancha simulada), dispararía la gracia de salida a cada rato,
+      // resetearía la permanencia y cancelaría las alarmas en plena prueba.
+      if (_mock != null) return;
+      _evaluate(pos);
+    }, onError: (_) {});
   }
 
   void _stopStream() {
@@ -945,7 +1007,8 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   bool get mockActive => _mock != null;
 
   /// Fija una ubicación simulada y la evalúa al instante (arranca la detección
-  /// de cercanía como si estuvieras parado ahí).
+  /// de cercanía como si estuvieras parado ahí). También la persiste para que
+  /// los callbacks de alarma en background la respeten (isolate aparte).
   void setMock(double lat, double lng) {
     _mock = Position(
       latitude: lat,
@@ -959,11 +1022,17 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       speed: 0,
       speedAccuracy: 0,
     );
+    unawaited(SharedPreferences.getInstance()
+        .then((p) => p.setString(kMockPosKey, '$lat,$lng')));
     _evaluate(_mock!);
   }
 
   /// Quita la ubicación simulada y vuelve al GPS real en el próximo muestreo.
-  void clearMock() => _mock = null;
+  void clearMock() {
+    _mock = null;
+    unawaited(
+        SharedPreferences.getInstance().then((p) => p.remove(kMockPosKey)));
+  }
 
   Future<void> _sample() async {
     if (_sampling) return;
@@ -1017,25 +1086,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       if (_outsideSince == null) {
         // No hay gracia de salida en curso.
         if (atCourt) return; // todo normal, seguimos jugando
-        // Salimos del radio: arrancamos la gracia de salida (se cierra recién a
-        // los [exitGrace] si seguimos afuera). También la programamos como
-        // alarma para que cierre aunque la app esté minimizada/cerrada.
-        _outsideSince = DateTime.now();
-        _insideSince = null;
-        _endNotifShown = false; // arranca gracia nueva: la notif sigue "jugando"
-        final pc = _playingCourt;
-        if (pc != null && _startedAt != null) {
-          unawaited(scheduleEndAlarm(
-            userKey: _userKey,
-            courtId: pc.id,
-            courtName: pc.name,
-            lat: pc.lat,
-            lng: pc.lng,
-            startMillis: _startedAt!.millisecondsSinceEpoch,
-            at: _outsideSince!.add(exitGrace),
-          ));
-        }
-        _renderSessionNotif(); // la notif pasa a "termina en…"
+        // Salimos del radio: única fuente de verdad para arrancar la gracia
+        // (también la usa el geofence EXIT vía leaveCourtArea).
+        _beginExitGrace();
         return;
       }
 
@@ -1241,6 +1294,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     unawaited(cancelStartAlarm());
     unawaited(cancelEndAlarm());
     unawaited(cancelBatteryWatch());
+    // El partido cerró: soltamos el foreground service para no drenar batería.
+    // Si seguís dentro de otra cancha, el _beginDwell posterior lo reactiva.
+    _stopStream();
     _clearActive();
     _renderSessionNotif();
     notifyListeners();
@@ -1381,6 +1437,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         // el proceso se corta (apagado / kill), al reabrir sabemos hasta cuándo
         // se jugó realmente y guardamos el partido con ese tiempo (no inflado).
         'lastSeenMillis': DateTime.now().millisecondsSinceEpoch,
+        // Si hay gracia de salida en curso, cuándo DEBE cerrarse el partido (fin
+        // de gracia). Sirve para reconstruir la duración correcta (tope = fin de
+        // gracia, no el momento en que reabrís la app). null = sin salida.
+        'endsAtMillis': _outsideSince?.add(exitGrace).millisecondsSinceEpoch,
       }),
     );
   }
@@ -1580,18 +1640,45 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         final j = jsonDecode(raw) as Map<String, dynamic>;
         final start = DateTime.fromMillisecondsSinceEpoch(
             (j['startMillis'] as num).toInt());
-        final lastSeen = j['lastSeenMillis'] != null
+        // Sin lastSeenMillis = la sesión la escribió la ALARMA de background
+        // (arranque automático con el proceso muerto): no hubo latidos, pero el
+        // partido SIGUE en curso. No aplica la regla del "gap" (cerraría con 0s
+        // y el partido desaparecería de la app, que era el bug reportado).
+        final hasHeartbeat = j['lastSeenMillis'] != null;
+        final lastSeen = hasHeartbeat
             ? DateTime.fromMillisecondsSinceEpoch(
                 (j['lastSeenMillis'] as num).toInt())
             : start;
         final courtId = j['courtId'] as String?;
         final courtName = j['courtName'] as String?;
+        final endsAtMillis = (j['endsAtMillis'] as num?)?.toInt();
+        final endsAt = endsAtMillis != null
+            ? DateTime.fromMillisecondsSinceEpoch(endsAtMillis)
+            : null;
         final now = DateTime.now();
 
         if (now.difference(start) > const Duration(hours: 6)) {
           // Demasiado vieja: la descartamos.
           await _clearActive();
-        } else if (now.difference(lastSeen) > resumeGapMax) {
+        } else if (endsAt != null && !now.isBefore(endsAt)) {
+          // Habías salido de la cancha y la gracia venció con la app cerrada: el
+          // partido debía cerrarse a [endsAt]. Lo guardamos con esa duración (la
+          // gracia cuenta como jugado); el tope es fin-de-gracia, no el app-open.
+          final seconds = endsAt.difference(start).inSeconds;
+          if (seconds >= minMatch.inSeconds) {
+            _pendingSession = PlaySession(
+              courtId: courtId ?? '',
+              courtName: courtName ?? '',
+              seconds: seconds,
+              endedAtMillis: endsAt.millisecondsSinceEpoch,
+            );
+            await _persistPending();
+          }
+          await _clearActive();
+          unawaited(cancelStartAlarm());
+          unawaited(cancelEndAlarm());
+          unawaited(cancelBatteryWatch());
+        } else if (hasHeartbeat && now.difference(lastSeen) > resumeGapMax) {
           // El proceso estuvo caído (apagado / kill) mientras jugabas: el
           // partido se jugó hasta [lastSeen]. Lo GUARDAMOS con ese tiempo (no
           // resumimos con tiempo inflado). Si fue muy corto (< minMatch) se
@@ -1611,7 +1698,8 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
           unawaited(cancelEndAlarm());
           unawaited(cancelBatteryWatch());
         } else {
-          // Hueco chico: seguíamos jugando (foreground/servicio vivo). Resume.
+          // Partido en curso: hueco chico (seguíamos jugando) o arranque
+          // automático por alarma con el proceso muerto. Resume.
           _courtId = courtId;
           _courtName = courtName;
           _startedAt = start;
@@ -1621,10 +1709,20 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
           // vuelca al resolver). Lo dejamos como pendiente para que el
           // cronómetro y el tiempo en vivo lo muestren completo.
           _accrued = 0;
+          // Si había una gracia de salida en curso (no vencida), la restauramos
+          // para que la cuenta regresiva de cierre siga desde donde iba.
+          if (endsAt != null) _outsideSince = endsAt.subtract(exitGrace);
+          // Arrancamos el latido ya (las sesiones escritas por la alarma no lo
+          // traen, y sin latido el próximo restore la cerraría mal).
+          await _persistActive();
         }
       } catch (_) {
         await _clearActive();
       }
+      // Refrescamos la notificación de sesión en TODOS los caminos: en
+      // foreground limpia la "Jugando en…" vieja que pudo dejar el isolate de
+      // background; si seguimos jugando en background, la re-dibuja correcta.
+      _renderSessionNotif();
     }
     notifyListeners();
   }

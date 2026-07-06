@@ -16,11 +16,14 @@ if (localPropsFile.exists()) localPropsFile.inputStream().use { localProps.load(
 fun resolveMapsApiKey(): String {
     val fromLocal = localProps.getProperty("MAPS_API_KEY")
     if (!fromLocal.isNullOrBlank()) return fromLocal
-    // rootProject es app/android → el repo root (1of1) está 2 niveles arriba.
-    val dartDefines = rootProject.file("../../dart_defines.json")
-    if (dartDefines.exists()) {
-        val m = Regex("\"MAPS_API_KEY\"\\s*:\\s*\"([^\"]+)\"").find(dartDefines.readText())
-        if (m != null) return m.groupValues[1]
+    // rootProject es app/android → probamos app/ (ubicación actual del archivo)
+    // y el repo root (ubicación histórica) como fallback.
+    for (path in listOf("../dart_defines.json", "../../dart_defines.json")) {
+        val dartDefines = rootProject.file(path)
+        if (dartDefines.exists()) {
+            val m = Regex("\"MAPS_API_KEY\"\\s*:\\s*\"([^\"]+)\"").find(dartDefines.readText())
+            if (m != null) return m.groupValues[1]
+        }
     }
     return ""
 }

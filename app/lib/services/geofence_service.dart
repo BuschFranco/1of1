@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:native_geofence/native_geofence.dart';
 import '../data/courts.dart';
 import 'notifications_service.dart';
+import 'session_alarms.dart';
 
 /// Radio (m) de cada geofence de cancha. Igual al de la detección por dwell.
 const double kCourtGeofenceRadius = 110;
@@ -24,8 +25,12 @@ Future<void> geofenceTriggered(GeofenceCallbackParams params) async {
     send.send(<String, dynamic>{'event': params.event.name, 'ids': ids});
     return;
   }
-  // App cerrada: avisar al usuario al ENTRAR a una cancha.
+  // App cerrada (isolate de background).
   if (params.event == GeofenceEvent.enter) {
+    // Si volviste a la cancha durante la gracia de salida, cancelamos el cierre
+    // automático (el isolate principal no está vivo para hacerlo). Así no se
+    // cierra el partido en falso por haberte alejado un momento.
+    await cancelEndAlarmOnReenter();
     await NotificationsService.instance.show(
       'Estás en una cancha',
       'Abrí 1of1 para registrar tu partido.',

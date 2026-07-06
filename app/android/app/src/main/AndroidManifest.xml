@@ -24,6 +24,32 @@
         android:label="1of1"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Renderer Skia (Impeller off): con Impeller (default en Flutter 3.3x+)
+             los platform views de Google Maps tienen jank/bajos FPS en varios
+             equipos (Samsung/Xclipse incluido). Con Skia el mapa vuelve a ser
+             fluido. Re-evaluar al actualizar Flutter/google_maps_flutter. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
+        <!-- android_alarm_manager_plus: el plugin NO aporta estos componentes por
+             manifest-merge (su manifest está vacío) y sin ellos Android no tiene
+             a quién entregar el broadcast: los callbacks de alarma (arranque /
+             cierre / batería del partido en background) NUNCA corren. -->
+        <service
+            android:name="dev.fluttercommunity.plus.androidalarmmanager.AlarmService"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="false"/>
+        <receiver
+            android:name="dev.fluttercommunity.plus.androidalarmmanager.AlarmBroadcastReceiver"
+            android:exported="false"/>
+        <receiver
+            android:name="dev.fluttercommunity.plus.androidalarmmanager.RebootBroadcastReceiver"
+            android:enabled="false"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+        </receiver>
         <activity
             android:name=".MainActivity"
             android:exported="true"

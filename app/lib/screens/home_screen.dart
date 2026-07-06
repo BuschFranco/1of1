@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -19,6 +20,13 @@ import '../widgets/rating_badge.dart';
 import '../widgets/status_dot.dart';
 
 const _kApiKey = String.fromEnvironment('MAPS_API_KEY');
+
+/// Cámara inicial del mapa (CABA). Es también el valor de arranque de
+/// `_lastCam`, la cámara vigente con la que se proyecta el punto de ubicación.
+const CameraPosition _kInitialCam = CameraPosition(
+  target: LatLng(-34.6037, -58.3816),
+  zoom: 12,
+);
 
 const _kMapStyle = '''
 [
@@ -110,8 +118,13 @@ class _HomeScreenState extends State<HomeScreen>
   // que tiraba los FPS al deslizar el mapa.
   late final AnimationController _pulseCtrl;
   final ValueNotifier<Offset?> _userScreen = ValueNotifier(null);
-  // Evita encolar llamadas async a getScreenCoordinate si una sigue en vuelo.
-  bool _resolvingScreenPos = false;
+  // Cámara vigente y tamaño del mapa: permiten proyectar _userPos a pantalla de
+  // forma SÍNCRONA (Web Mercator) en cada frame del arrastre. Antes esto se
+  // resolvía con getScreenCoordinate (async, platform channel) en cada
+  // onCameraMove: la respuesta llegaba tarde y se descartaban llamadas en
+  // vuelo, así que el punto quedaba congelado y "saltaba" detrás del mapa.
+  CameraPosition _lastCam = _kInitialCam;
+  Size? _mapSize;
 
   // Canchas visibles tras aplicar los filtros activos. Alimenta tanto los
   // marcadores del mapa como la tarjeta inferior.
@@ -150,10 +163,17 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (_activeFilters.contains('Cerca') && _userPos != null) {
       final p = _userPos!;
-      list.sort((a, b) => Geolocator.distanceBetween(
-              p.latitude, p.longitude, a.lat, a.lng)
-          .compareTo(
-              Geolocator.distanceBetween(p.latitude, p.longitude, b.lat, b.lng)));
+      list.sort(
+        (a, b) =>
+            Geolocator.distanceBetween(
+              p.latitude,
+              p.longitude,
+              a.lat,
+              a.lng,
+            ).compareTo(
+              Geolocator.distanceBetween(p.latitude, p.longitude, b.lat, b.lng),
+            ),
+      );
     }
 
     _filtered = list;
@@ -170,7 +190,9 @@ class _HomeScreenState extends State<HomeScreen>
       }
     });
     // Al activar "Cerca" sin ubicación todavía, la pedimos para poder ordenar.
-    if (label == 'Cerca' && _activeFilters.contains('Cerca') && _userPos == null) {
+    if (label == 'Cerca' &&
+        _activeFilters.contains('Cerca') &&
+        _userPos == null) {
       await _ensureUserPosition();
     }
     setState(_applyFilters);
@@ -201,7 +223,9 @@ class _HomeScreenState extends State<HomeScreen>
         return;
       }
       final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
       );
       if (!mounted) return;
       _userPos = pos;
@@ -217,7 +241,9 @@ class _HomeScreenState extends State<HomeScreen>
         return;
       }
       final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
       );
       if (!mounted) return;
       setState(() {
@@ -284,16 +310,25 @@ class _HomeScreenState extends State<HomeScreen>
           perm != LocationPermission.whileInUse) {
         return;
       }
-      _posStream = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 5,
-        ),
-      ).listen((pos) {
-        if (!mounted || _mockMode) return;
-        setState(() => _userPos = pos);
-        _updateUserScreenPos();
-      }, onError: (_) {});
+      _posStream =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 5,
+            ),
+          ).listen((pos) {
+            if (!mounted || _mockMode) return;
+            // Solo movemos el punto (ValueNotifier): reconstruir todo el árbol por
+            // cada update de GPS producía jank sobre el mapa.
+            final firstFix = _userPos == null;
+            _userPos = pos;
+            _updateUserScreenPos();
+            if (firstFix) {
+              // Primer fix: aplicar el orden "Cerca" una única vez.
+              setState(_applyFilters);
+              _syncPageToIndex();
+            }
+          }, onError: (_) {});
     } catch (_) {}
   }
 
@@ -370,28 +405,60 @@ class _HomeScreenState extends State<HomeScreen>
     super.dispose();
   }
 
-  // Convierte _userPos (lat/lng) a coordenadas de pantalla para anclar el
-  // punto de ubicación. Se llama al crear el mapa y al mover la cámara.
-  Future<void> _updateUserScreenPos() async {
-    final ctrl = _mapCtrl;
+  // Reproyecta _userPos a coordenadas de pantalla y mueve el punto (vía el
+  // ValueNotifier, sin rebuild del Stack). Es SÍNCRONO y barato (unas pocas
+  // operaciones trigonométricas), así que se puede llamar en cada frame de
+  // onCameraMove y el punto queda pegado al mapa, sin el lag/salto que tenía
+  // el round-trip async por platform channel.
+  void _updateUserScreenPos() {
     final pos = _userPos;
-    if (ctrl == null || pos == null) {
+    if (pos == null) {
       _userScreen.value = null;
       return;
     }
-    if (_resolvingScreenPos) return;
-    _resolvingScreenPos = true;
-    try {
-      final sc = await ctrl.getScreenCoordinate(
-        LatLng(pos.latitude, pos.longitude),
-      );
-      if (!mounted) return;
-      final ratio = MediaQuery.of(context).devicePixelRatio;
-      _userScreen.value = Offset(sc.x / ratio, sc.y / ratio);
-    } catch (_) {
-    } finally {
-      _resolvingScreenPos = false;
+    _userScreen.value = _projectToScreen(pos.latitude, pos.longitude);
+  }
+
+  /// Proyección Web Mercator de un lat/lng a píxeles lógicos de pantalla, según
+  /// la cámara vigente ([_lastCam]) y el tamaño del mapa. El target de la cámara
+  /// cae en el centro de la vista (no usamos padding de cámara) y el tilt está
+  /// deshabilitado, así que la proyección plana es exacta. Soporta la rotación
+  /// del mapa (bearing) y el cruce del antimeridiano.
+  Offset? _projectToScreen(double lat, double lng) {
+    final size = _mapSize;
+    if (size == null || size.isEmpty) return null;
+    final cam = _lastCam;
+
+    // Mundo Web Mercator normalizado [0,1) con tile base de 256 px lógicos.
+    double worldX(double lng) => (lng + 180.0) / 360.0;
+    double worldY(double lat) {
+      final s = math.sin(lat * math.pi / 180.0).clamp(-0.9999, 0.9999);
+      return 0.5 - math.log((1 + s) / (1 - s)) / (4 * math.pi);
     }
+
+    final scale = 256.0 * math.pow(2.0, cam.zoom);
+    var dx = worldX(lng) - worldX(cam.target.longitude);
+    // Antimeridiano: elegimos el delta más corto (el mundo se repite cada 1.0).
+    if (dx > 0.5) {
+      dx -= 1.0;
+    } else if (dx < -0.5) {
+      dx += 1.0;
+    }
+    final dy = worldY(lat) - worldY(cam.target.latitude);
+    var px = dx * scale;
+    var py = dy * scale;
+
+    // Rotación del mapa (bearing, horaria): rotamos el delta al marco de pantalla.
+    if (cam.bearing != 0) {
+      final b = cam.bearing * math.pi / 180.0;
+      final cosB = math.cos(b);
+      final sinB = math.sin(b);
+      final rx = px * cosB + py * sinB;
+      final ry = -px * sinB + py * cosB;
+      px = rx;
+      py = ry;
+    }
+    return Offset(size.width / 2 + px, size.height / 2 + py);
   }
 
   /// Selección externa (tap en marker, flechas): anima el carrusel a la página
@@ -430,13 +497,17 @@ class _HomeScreenState extends State<HomeScreen>
       return;
     }
     try {
-      final uri = Uri.https('maps.googleapis.com', '/maps/api/place/autocomplete/json', {
-        'input': query,
-        'types': '(regions)',
-        'components': 'country:ar',
-        'language': 'es',
-        'key': _kApiKey,
-      });
+      final uri = Uri.https(
+        'maps.googleapis.com',
+        '/maps/api/place/autocomplete/json',
+        {
+          'input': query,
+          'types': '(regions)',
+          'components': 'country:ar',
+          'language': 'es',
+          'key': _kApiKey,
+        },
+      );
       final response = await http.get(uri);
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final raw = data['predictions'] as List<dynamic>;
@@ -460,17 +531,22 @@ class _HomeScreenState extends State<HomeScreen>
     });
     FocusScope.of(context).unfocus();
     try {
-      final uri = Uri.https('maps.googleapis.com', '/maps/api/place/details/json', {
-        'place_id': pred.placeId,
-        'fields': 'geometry',
-        'key': _kApiKey,
-      });
+      final uri = Uri.https(
+        'maps.googleapis.com',
+        '/maps/api/place/details/json',
+        {'place_id': pred.placeId, 'fields': 'geometry', 'key': _kApiKey},
+      );
       final response = await http.get(uri);
       final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final loc = (data['result'] as Map)['geometry']['location'] as Map<String, dynamic>;
+      final loc =
+          (data['result'] as Map)['geometry']['location']
+              as Map<String, dynamic>;
       _mapCtrl?.animateCamera(
         CameraUpdate.newLatLngZoom(
-          LatLng((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble()),
+          LatLng(
+            (loc['lat'] as num).toDouble(),
+            (loc['lng'] as num).toDouble(),
+          ),
           14,
         ),
       );
@@ -481,124 +557,142 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     return Container(
       color: AppColors.bg,
-      child: Stack(
-        children: [
-          GoogleMap(
-            style: _kMapStyle,
-            onMapCreated: (ctrl) {
-              _mapCtrl = ctrl;
-              final c = _court;
-              if (widget.focusCourtId != null && c != null) {
-                ctrl.animateCamera(
-                  CameraUpdate.newLatLngZoom(LatLng(c.lat, c.lng), 16),
-                );
-                widget.onFocusConsumed?.call();
-              }
-              _updateUserScreenPos();
-              _loading.markMapReady();
-            },
-            onCameraMove: (_) => _updateUserScreenPos(),
-            onTap: _mockMode ? _onMockTap : null,
-            initialCameraPosition: const CameraPosition(
-              target: LatLng(-34.6037, -58.3816),
-              zoom: 12,
-            ),
-            markers: _markers,
-            circles: _circles,
-            zoomControlsEnabled: false,
-            myLocationButtonEnabled: false,
-            compassEnabled: false,
-            mapToolbarEnabled: false,
-            tiltGesturesEnabled: false,
-          ),
-          _userLocationDot(),
-          Positioned(
-            top: 54,
-            left: 16,
-            right: 16,
-            child: _searchBar(),
-          ),
-          if (_showSearch && _predictions.isNotEmpty)
-            Positioned(
-              top: 112,
-              left: 16,
-              right: 16,
-              child: _predictionsOverlay(),
-            ),
-          if (!_showSearch)
-            Positioned(
-              top: 112,
-              left: 0,
-              right: 0,
-              child: Builder(builder: (context) {
-                final ps = context.watch<PlaySessionService>();
-                final active = ps.isPlaying || ps.isDwelling;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // El cronómetro se muestra SIEMPRE. Estar dentro del radio
-                    // solo lo "activa" (arranca la cuenta regresiva y el
-                    // partido); fuera del radio queda inactivo pero visible.
-                    if (ps.isPlaying)
-                      _playingBanner(context)
-                    else if (ps.isDwelling)
-                      _dwellBanner(context)
-                    else
-                      _idleTimer(context),
-                    if (!active) ...[
-                      const SizedBox(height: 10),
-                      _quickChips(),
-                    ],
-                  ],
-                );
-              }),
-            ),
-          Positioned(
-            right: 16,
-            bottom: 312,
-            child: Column(
-              children: [
-                _devControls(),
-                const SizedBox(height: 10),
-                _locateBtn(),
-              ],
-            ),
-          ),
-          if (_mockMode)
-            Positioned(
-              bottom: 296,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xF211181F),
-                    borderRadius: BorderRadius.circular(100),
-                    border: Border.all(color: AppColors.accent.withAlpha(140)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.touch_app, size: 14, color: AppColors.accent),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Modo prueba · tocá el mapa para moverte',
-                        style: AppText.grotesk(size: 11, weight: FontWeight.w600),
-                      ),
-                    ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Tamaño real del área del mapa (el Stack lo llena): lo necesita la
+          // proyección síncrona del punto de ubicación.
+          _mapSize = constraints.biggest;
+          return Stack(
+            children: [
+              GoogleMap(
+                style: _kMapStyle,
+                onMapCreated: (ctrl) {
+                  _mapCtrl = ctrl;
+                  final c = _court;
+                  if (widget.focusCourtId != null && c != null) {
+                    ctrl.animateCamera(
+                      CameraUpdate.newLatLngZoom(LatLng(c.lat, c.lng), 16),
+                    );
+                    widget.onFocusConsumed?.call();
+                  }
+                  _updateUserScreenPos();
+                  _loading.markMapReady();
+                },
+                // Cada frame de arrastre/animación: guardamos la cámara y
+                // reproyectamos el punto en forma síncrona (sin platform channel).
+                onCameraMove: (cam) {
+                  _lastCam = cam;
+                  _updateUserScreenPos();
+                },
+                onTap: _mockMode ? _onMockTap : null,
+                initialCameraPosition: _kInitialCam,
+                markers: _markers,
+                circles: _circles,
+                zoomControlsEnabled: false,
+                myLocationButtonEnabled: false,
+                compassEnabled: false,
+                mapToolbarEnabled: false,
+                tiltGesturesEnabled: false,
+              ),
+              _userLocationDot(),
+              Positioned(top: 54, left: 16, right: 16, child: _searchBar()),
+              if (_showSearch && _predictions.isNotEmpty)
+                Positioned(
+                  top: 112,
+                  left: 16,
+                  right: 16,
+                  child: _predictionsOverlay(),
+                ),
+              if (!_showSearch)
+                Positioned(
+                  top: 112,
+                  left: 0,
+                  right: 0,
+                  child: Builder(
+                    builder: (context) {
+                      final ps = context.watch<PlaySessionService>();
+                      final active = ps.isPlaying || ps.isDwelling;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // El cronómetro se muestra SIEMPRE. Estar dentro del radio
+                          // solo lo "activa" (arranca la cuenta regresiva y el
+                          // partido); fuera del radio queda inactivo pero visible.
+                          if (ps.isPlaying)
+                            _playingBanner(context)
+                          else if (ps.isDwelling)
+                            _dwellBanner(context)
+                          else
+                            _idleTimer(context),
+                          if (!active) ...[
+                            const SizedBox(height: 10),
+                            _quickChips(),
+                          ],
+                        ],
+                      );
+                    },
                   ),
                 ),
+              Positioned(
+                right: 16,
+                bottom: 312,
+                child: Column(
+                  children: [
+                    _devControls(),
+                    const SizedBox(height: 10),
+                    _locateBtn(),
+                  ],
+                ),
               ),
-            ),
-          Positioned(
-            bottom: 148,
-            left: 0,
-            right: 0,
-            child: _filtered.isEmpty ? _emptyFilterCard() : _bottomSwipe(),
-          ),
-        ],
+              if (_mockMode)
+                Positioned(
+                  bottom: 296,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xF211181F),
+                        borderRadius: BorderRadius.circular(100),
+                        border: Border.all(
+                          color: AppColors.accent.withAlpha(140),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.touch_app,
+                            size: 14,
+                            color: AppColors.accent,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Modo prueba · tocá el mapa para moverte',
+                            style: AppText.grotesk(
+                              size: 11,
+                              weight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              Positioned(
+                bottom: 148,
+                left: 0,
+                right: 0,
+                child: _filtered.isEmpty ? _emptyFilterCard() : _bottomSwipe(),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -644,7 +738,11 @@ class _HomeScreenState extends State<HomeScreen>
                       });
                       FocusScope.of(context).unfocus();
                     },
-                    child: Icon(Icons.close, size: 16, color: AppColors.white(0.5)),
+                    child: Icon(
+                      Icons.close,
+                      size: 16,
+                      color: AppColors.white(0.5),
+                    ),
                   ),
               ],
             ),
@@ -676,10 +774,17 @@ class _HomeScreenState extends State<HomeScreen>
             InkWell(
               onTap: () => _onSelectPrediction(pred),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: [
-                    Icon(Icons.place_outlined, size: 16, color: AppColors.white(0.5)),
+                    Icon(
+                      Icons.place_outlined,
+                      size: 16,
+                      color: AppColors.white(0.5),
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
@@ -776,12 +881,15 @@ class _HomeScreenState extends State<HomeScreen>
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 1),
+                            horizontal: 6,
+                            vertical: 1,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.accent.withAlpha(38),
                             borderRadius: BorderRadius.circular(6),
-                            border:
-                                Border.all(color: AppColors.accent.withAlpha(150)),
+                            border: Border.all(
+                              color: AppColors.accent.withAlpha(150),
+                            ),
                             boxShadow: [
                               BoxShadow(
                                 color: AppColors.accent.withAlpha(60),
@@ -793,9 +901,10 @@ class _HomeScreenState extends State<HomeScreen>
                           child: Text(
                             'x${ps.currentMultiplier.toStringAsFixed(2)}',
                             style: AppText.grotesk(
-                                size: 10,
-                                weight: FontWeight.w800,
-                                color: AppColors.accent),
+                              size: 10,
+                              weight: FontWeight.w800,
+                              color: AppColors.accent,
+                            ),
                           ),
                         ),
                         // Puntos por tiempo acumulándose en vivo, con animación.
@@ -835,14 +944,20 @@ class _HomeScreenState extends State<HomeScreen>
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.monitor_heart_outlined,
-                            size: 10, color: AppColors.accent),
+                        Icon(
+                          Icons.monitor_heart_outlined,
+                          size: 10,
+                          color: AppColors.accent,
+                        ),
                         const SizedBox(width: 3),
-                        Text('Midiendo tu desempeño',
-                            style: AppText.grotesk(
-                                size: 9,
-                                weight: FontWeight.w600,
-                                color: AppColors.accent)),
+                        Text(
+                          'Midiendo tu desempeño',
+                          style: AppText.grotesk(
+                            size: 9,
+                            weight: FontWeight.w600,
+                            color: AppColors.accent,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -873,11 +988,16 @@ class _HomeScreenState extends State<HomeScreen>
             GestureDetector(
               onTap: () => context.read<PlaySessionService>().stopNow(),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.white(0.08),
                   borderRadius: BorderRadius.circular(100),
-                  border: Border.all(color: AppColors.white(0.18)),
+                  border: Border.all(
+                    color: ending ? Colors.transparent : AppColors.white(0.18),
+                  ),
                 ),
                 child: Text(
                   'DETENER',
@@ -976,7 +1096,10 @@ class _HomeScreenState extends State<HomeScreen>
                     ps.dwellCourtName ?? 'En una cancha',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppText.grotesk(size: 10, color: AppColors.white(0.6)),
+                    style: AppText.grotesk(
+                      size: 10,
+                      color: AppColors.white(0.6),
+                    ),
                   ),
                 ],
               ),
@@ -985,7 +1108,10 @@ class _HomeScreenState extends State<HomeScreen>
             GestureDetector(
               onTap: () => context.read<PlaySessionService>().startNow(),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.accent,
                   borderRadius: BorderRadius.circular(100),
@@ -1007,7 +1133,13 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _quickChips() {
-    const labels = ['Cerca', 'Abierto ahora', 'Iluminada', 'Gratis', 'Interior'];
+    const labels = [
+      'Cerca',
+      'Abierto ahora',
+      'Iluminada',
+      'Gratis',
+      'Interior',
+    ];
     return SizedBox(
       height: 34,
       child: ListView.separated(
@@ -1059,7 +1191,9 @@ class _HomeScreenState extends State<HomeScreen>
       }
 
       final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
       if (!mounted) return;
       // Sin esto el indicador de ubicación nunca se dibuja: el punto se ancla a
@@ -1086,47 +1220,53 @@ class _HomeScreenState extends State<HomeScreen>
           width: box,
           height: box,
           child: IgnorePointer(
-            child: Center(
-              child: AnimatedBuilder(
-            animation: _pulseCtrl,
-            builder: (context, child) {
-              final t = _pulseCtrl.value;
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Anillo de pulso que crece y se desvanece.
-                  Container(
-                    width: 20 + t * 56,
-                    height: 20 + t * 56,
+            // El pulso anima a 60 fps: el RepaintBoundary aísla su repaint en su
+            // propia capa para no invalidar el resto del Stack en cada frame.
+            child: RepaintBoundary(
+              child: Center(
+                child: AnimatedBuilder(
+                  animation: _pulseCtrl,
+                  builder: (context, child) {
+                    final t = _pulseCtrl.value;
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Anillo de pulso que crece y se desvanece.
+                        Container(
+                          width: 20 + t * 56,
+                          height: 20 + t * 56,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppColors.accent.withAlpha(
+                              ((1 - t) * 90).round(),
+                            ),
+                          ),
+                        ),
+                        child!,
+                      ],
+                    );
+                  },
+                  // Punto central fijo.
+                  child: Container(
+                    width: 18,
+                    height: 18,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: AppColors.accent.withAlpha(((1 - t) * 90).round()),
+                      color: AppColors.accent,
+                      border: Border.all(color: Colors.white, width: 3),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.accent.withAlpha(140),
+                          blurRadius: 12,
+                          spreadRadius: 2,
+                        ),
+                      ],
                     ),
                   ),
-                  child!,
-                ],
-              );
-            },
-            // Punto central fijo.
-            child: Container(
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.accent,
-                border: Border.all(color: Colors.white, width: 3),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.accent.withAlpha(140),
-                    blurRadius: 12,
-                    spreadRadius: 2,
-                  ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
-      ),
         );
       },
     );
@@ -1138,20 +1278,19 @@ class _HomeScreenState extends State<HomeScreen>
   /// a ese punto y dispara la detección de cercanía.
   void _onMockTap(LatLng p) {
     context.read<PlaySessionService>().setMock(p.latitude, p.longitude);
-    setState(() {
-      _userPos = Position(
-        latitude: p.latitude,
-        longitude: p.longitude,
-        timestamp: DateTime.now(),
-        accuracy: 5,
-        altitude: 0,
-        altitudeAccuracy: 0,
-        heading: 0,
-        headingAccuracy: 0,
-        speed: 0,
-        speedAccuracy: 0,
-      );
-    });
+    // Solo el punto se mueve (ValueNotifier): sin setState, sin rebuild global.
+    _userPos = Position(
+      latitude: p.latitude,
+      longitude: p.longitude,
+      timestamp: DateTime.now(),
+      accuracy: 5,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      heading: 0,
+      headingAccuracy: 0,
+      speed: 0,
+      speedAccuracy: 0,
+    );
     _updateUserScreenPos();
   }
 
@@ -1173,8 +1312,10 @@ class _HomeScreenState extends State<HomeScreen>
           _devBtn(
             Icons.notifications_active,
             AppColors.open,
-            () => NotificationsService.instance
-                .show('Prueba', 'Las notificaciones funcionan ✅'),
+            () => NotificationsService.instance.show(
+              'Prueba',
+              'Las notificaciones funcionan ✅',
+            ),
           ),
           const SizedBox(height: 10),
         ],
@@ -1334,152 +1475,158 @@ class _CourtSwipeCard extends StatelessWidget {
     // Handle + clan vigentes del proponente (en vivo desde Perfiles).
     final session = context.watch<Session>();
     final proposer = context.watch<ProfilesProvider>().resolveProposer(
-          court,
-          sessionProfile: session.profile,
-          sessionEmail: session.email,
-        );
+      court,
+      sessionProfile: session.profile,
+      sessionEmail: session.email,
+    );
     // Sin BackdropFilter: el blur sobre el mapa en movimiento recalcula por
     // frame y baja los FPS. El fondo ya es casi opaco; lo subimos a opaco.
     return Container(
-          padding: const EdgeInsets.all(14),
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: const Color(0xF211181F),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.white(0.1)),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.black(0.5),
-                blurRadius: 60,
-                offset: const Offset(0, 20),
-              ),
-            ],
+      padding: const EdgeInsets.all(14),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: const Color(0xF211181F),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.white(0.1)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.black(0.5),
+            blurRadius: 60,
+            offset: const Offset(0, 20),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(
-                width: 96,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    CourtImage(
-                      url: court.img,
-                      borderRadius: BorderRadius.circular(16),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 96,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CourtImage(
+                  url: court.img,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                Positioned(
+                  top: 6,
+                  left: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
                     ),
-                    Positioned(
-                      top: 6,
-                      left: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppColors.black(0.75),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          court.dist.toUpperCase(),
-                          style: AppText.grotesk(
-                            size: 9,
-                            weight: FontWeight.w700,
-                            letterSpacing: 0.06,
-                          ),
-                        ),
+                    decoration: BoxDecoration(
+                      color: AppColors.black(0.75),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      court.dist.toUpperCase(),
+                      style: AppText.grotesk(
+                        size: 9,
+                        weight: FontWeight.w700,
+                        letterSpacing: 0.06,
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        StatusDot(status: court.status),
-                        RatingBadge(value: court.rating, size: 11),
-                      ],
-                    ),
-                    Text(
-                      court.name,
-                      style: AppText.archivo(size: 18, weight: FontWeight.w800),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      '${court.area} · ${court.type} · ${court.hoops} aros',
-                      style: AppText.grotesk(
+                    StatusDot(status: court.status),
+                    RatingBadge(value: court.rating, size: 11),
+                  ],
+                ),
+                Text(
+                  court.name,
+                  style: AppText.archivo(size: 18, weight: FontWeight.w800),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  '${court.area} · ${court.type} · ${court.hoops} aros',
+                  style: AppText.grotesk(
+                    size: 11,
+                    color: AppColors.white(0.55),
+                  ),
+                ),
+                // Quién propuso la cancha: handle completo (clan opcional).
+                if (proposer.handle.isNotEmpty)
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.add_location_alt_outlined,
                         size: 11,
-                        color: AppColors.white(0.55),
+                        color: AppColors.accent,
                       ),
-                    ),
-                    // Quién propuso la cancha: handle completo (clan opcional).
-                    if (proposer.handle.isNotEmpty)
-                      Row(
-                        children: [
-                          Icon(Icons.add_location_alt_outlined,
-                              size: 11, color: AppColors.accent),
-                          const SizedBox(width: 4),
-                          if (proposer.clan.isNotEmpty) ...[
-                            Text(
-                              '[${proposer.clan}]',
-                              style: AppText.grotesk(
-                                size: 10,
-                                weight: FontWeight.w800,
-                                color: AppColors.accent,
-                              ),
-                            ),
-                            const SizedBox(width: 3),
-                          ],
-                          Flexible(
-                            child: Text(
-                              proposer.handle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppText.grotesk(
-                                size: 10,
-                                weight: FontWeight.w700,
-                                color: AppColors.accent,
-                              ),
-                            ),
+                      const SizedBox(width: 4),
+                      if (proposer.clan.isNotEmpty) ...[
+                        Text(
+                          '[${proposer.clan}]',
+                          style: AppText.grotesk(
+                            size: 10,
+                            weight: FontWeight.w800,
+                            color: AppColors.accent,
                           ),
-                        ],
+                        ),
+                        const SizedBox(width: 3),
+                      ],
+                      Flexible(
+                        child: Text(
+                          proposer.handle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppText.grotesk(
+                            size: 10,
+                            weight: FontWeight.w700,
+                            color: AppColors.accent,
+                          ),
+                        ),
                       ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: onSelect,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                color: AppColors.accent,
-                                borderRadius: BorderRadius.circular(100),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                'VER DETALLE',
-                                style: AppText.archivo(
-                                  size: 11,
-                                  weight: FontWeight.w800,
-                                  letterSpacing: 0.04,
-                                ),
-                              ),
+                    ],
+                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: onSelect,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.accent,
+                            borderRadius: BorderRadius.circular(100),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            'VER DETALLE',
+                            style: AppText.archivo(
+                              size: 11,
+                              weight: FontWeight.w800,
+                              letterSpacing: 0.04,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        _arrowBtn(Icons.chevron_left, onPrev),
-                        const SizedBox(width: 6),
-                        _arrowBtn(Icons.chevron_right, onNext),
-                      ],
+                      ),
                     ),
+                    const SizedBox(width: 6),
+                    _arrowBtn(Icons.chevron_left, onPrev),
+                    const SizedBox(width: 6),
+                    _arrowBtn(Icons.chevron_right, onNext),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+        ],
+      ),
     );
   }
 
@@ -1518,13 +1665,19 @@ class _LivePointsState extends State<_LivePoints>
   );
   late final Animation<double> _scale = TweenSequence<double>([
     TweenSequenceItem(
-        tween: Tween(begin: 1.0, end: 1.25)
-            .chain(CurveTween(curve: Curves.easeOut)),
-        weight: 1),
+      tween: Tween(
+        begin: 1.0,
+        end: 1.25,
+      ).chain(CurveTween(curve: Curves.easeOut)),
+      weight: 1,
+    ),
     TweenSequenceItem(
-        tween: Tween(begin: 1.25, end: 1.0)
-            .chain(CurveTween(curve: Curves.easeIn)),
-        weight: 1),
+      tween: Tween(
+        begin: 1.25,
+        end: 1.0,
+      ).chain(CurveTween(curve: Curves.easeIn)),
+      weight: 1,
+    ),
   ]).animate(_pop);
 
   @override
@@ -1550,7 +1703,10 @@ class _LivePointsState extends State<_LivePoints>
         builder: (_, v, _) => Text(
           '+${v.round()} pts',
           style: AppText.archivo(
-              size: 12, weight: FontWeight.w900, color: AppColors.accent),
+            size: 12,
+            weight: FontWeight.w900,
+            color: AppColors.accent,
+          ),
         ),
       ),
     );
