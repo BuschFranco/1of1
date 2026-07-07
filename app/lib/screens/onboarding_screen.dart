@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
+import '../widgets/pop_background.dart';
 import '../widgets/pop_button.dart';
 
 class OnboardingScreen extends StatelessWidget {
@@ -11,31 +12,12 @@ class OnboardingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.lilac,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background image
-          Image.network(
-            'https://images.unsplash.com/photo-1546519638-68e109498ffc?w=1000&q=80',
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => Container(color: AppColors.bg),
-          ),
-          // Scrim de LEGIBILIDAD sobre la foto (se conserva a propósito: no es
-          // decoración, garantiza contraste del texto).
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0x4D0A0F14),
-                  Color(0xD90A0F14),
-                  AppColors.bg,
-                ],
-                stops: [0, 0.55, 1],
-              ),
-            ),
-          ),
+          // Fondo plano de sección (retro-pop): lila.
+          const PopBackground(color: AppColors.lilac),
           SafeArea(
             child: Column(
               children: [
@@ -81,29 +63,14 @@ class OnboardingScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          RichText(
-            text: TextSpan(
-              style: AppText.archivo(
-                size: 44,
-                weight: FontWeight.w900,
-                letterSpacing: -0.04,
-                height: 0.95,
-              ),
-              children: [
-                const TextSpan(text: 'Encontrá tu\npróxima\n'),
-                TextSpan(
-                  text: 'cancha.',
-                  // Sin glow: el acento pleno alcanza en el lenguaje
-                  // neobrutalista.
-                  style: AppText.archivo(
-                    size: 44,
-                    weight: FontWeight.w900,
-                    color: AppColors.accent,
-                    letterSpacing: -0.04,
-                    height: 0.95,
-                  ),
-                ),
-              ],
+          Text(
+            'Encontrá tu\npróxima\ncancha.',
+            style: AppText.archivo(
+              size: 46,
+              weight: FontWeight.w900,
+              color: AppColors.sun,
+              letterSpacing: -0.01,
+              height: 0.98,
             ),
           ),
           const SizedBox(height: 18),

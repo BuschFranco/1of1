@@ -44,7 +44,7 @@ class _HandleSetupScreenState extends State<HandleSetupScreen> {
   Widget build(BuildContext context) {
     final name = context.read<Session>().profile?.name ?? '';
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: AppColors.sun,
       body: Stack(
         children: [
           SafeArea(

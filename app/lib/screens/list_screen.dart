@@ -43,7 +43,7 @@ class _ListScreenState extends State<ListScreen> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppColors.bg,
+      color: AppColors.lilac,
       child: ListView(
         padding: const EdgeInsets.only(top: 56, bottom: 160),
         children: [
@@ -65,9 +65,10 @@ class _ListScreenState extends State<ListScreen> {
                 Text(
                   'Canchas\ncerca tuyo.',
                   style: AppText.archivo(
-                    size: 36,
+                    size: 38,
                     weight: FontWeight.w900,
-                    letterSpacing: -0.03,
+                    color: AppColors.sun,
+                    letterSpacing: -0.01,
                     height: 1.0,
                   ),
                 ),
@@ -318,15 +319,17 @@ class _CourtListItem extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: AppColors.black(0.7),
-        border: Border.all(color: AppColors.white(0.25), width: 1.5),
+        border: Border.all(color: Colors.white54, width: 1.5),
         borderRadius: BorderRadius.circular(AppShape.rChip),
       ),
+      // Chip oscuro sobre la foto: texto blanco.
       child: Text(
         label.toUpperCase(),
         style: AppText.grotesk(
           size: 9.5,
           weight: FontWeight.w600,
           letterSpacing: 0.04,
+          color: Colors.white,
         ),
       ),
     );
@@ -352,7 +355,7 @@ class _CourtListItem extends StatelessWidget {
             style: AppText.archivo(
               size: 14,
               weight: FontWeight.w700,
-              color: highlight ? AppColors.accent : Colors.white,
+              color: highlight ? AppColors.accent : AppColors.ink,
             ),
           ),
         ],

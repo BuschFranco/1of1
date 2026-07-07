@@ -115,10 +115,10 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: AppColors.sun,
       body: Stack(
         children: [
-          const Positioned.fill(child: PopBackground()),
+          const Positioned.fill(child: PopBackground(color: AppColors.sun)),
           SafeArea(
             // Swipe horizontal en toda la pantalla para alternar login/registro
             // (el scroll es vertical, así que no compite con este gesto).
@@ -348,21 +348,22 @@ class _AuthScreenState extends State<AuthScreen> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFE5484D).withAlpha(28),
+        color: AppColors.paper,
         borderRadius: BorderRadius.circular(AppShape.rBtn),
         // Estado de error: borde rojo pleno, franco.
-        border: Border.all(color: const Color(0xFFE5484D), width: 2),
+        border: Border.all(color: AppColors.accentDark, width: 2),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline, size: 16, color: Color(0xFFE5484D)),
+          const Icon(Icons.error_outline, size: 16, color: AppColors.accentDark),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               msg,
               style: AppText.grotesk(
                 size: 12.5,
-                color: const Color(0xFFFF8A8D),
+                weight: FontWeight.w600,
+                color: AppColors.accentDark,
               ),
             ),
           ),
@@ -453,8 +454,8 @@ class _GlowFieldState extends State<_GlowField> {
         color: AppColors.bgElev,
         borderRadius: BorderRadius.circular(AppShape.rBtn),
         border: Border.all(
-          color: focused ? AppColors.accent : AppColors.white(0.25),
-          width: focused ? 2 : 1.5,
+          color: focused ? AppColors.accent : AppColors.ink,
+          width: 2,
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16),

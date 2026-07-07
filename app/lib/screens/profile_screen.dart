@@ -79,10 +79,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final profile = session.profile ?? const Profile(name: 'Invitado');
 
     return Container(
-      color: AppColors.bg,
+      color: AppColors.sun,
       child: Stack(
         children: [
-          const Positioned.fill(child: PopBackground()),
+          const Positioned.fill(child: PopBackground(color: AppColors.sun)),
           Column(
             children: [
               const SizedBox(height: 56),
@@ -118,7 +118,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     color: AppColors.white(0.25), width: 1.5),
                               ),
                               child: const Icon(Icons.settings_outlined,
-                                  color: Colors.white, size: 18),
+                                  color: AppColors.ink, size: 18),
                             ),
                           ),
                         const SizedBox(width: 8),
@@ -135,7 +135,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   color: AppColors.white(0.25), width: 1.5),
                             ),
                             child: const Icon(Icons.logout,
-                                color: Colors.white, size: 18),
+                                color: AppColors.ink, size: 18),
                           ),
                         ),
                       ],
@@ -180,7 +180,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               border: Border.all(color: AppColors.white(0.25), width: 1.5),
             ),
             child: const Icon(Icons.notifications_outlined,
-                color: Colors.white, size: 18),
+                color: AppColors.ink, size: 18),
           ),
           if (unread > 0)
             Positioned(
@@ -493,8 +493,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final start = pointsForLevel(lvl);
     final next = pointsForLevel(lvl + 1);
     final progress = ((pts - start) / (next - start)).clamp(0.0, 1.0);
-    // Fondo SÓLIDO (el mazo de partidos va detrás y no debe transparentarse).
-    final solid = Color.alphaBlend(const Color(0x801A2430), AppColors.bg);
+    // Fondo SÓLIDO claro (el mazo de partidos va detrás y no debe transparentarse).
+    const solid = AppColors.paper;
     return PopPanel(
       radius: AppShape.rCard,
       fill: solid,
@@ -621,32 +621,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
   /// Fondo de una carta/fila según el resultado: rojo si perdió, verde si ganó,
   /// gris si empató; el resto (entrenamiento / sin info) queda azulado.
   Color _resultBg(PlayResult? r) {
-    // Fondo SÓLIDO (los translúcidos dejaban ver la carta de atrás al solaparse
-    // en el mazo). Componemos sobre el fondo de la app.
-    final base = Color.alphaBlend(const Color(0xE61A2430), AppColors.bg);
+    // Fondo SÓLIDO claro con un tinte suave del color de resultado sobre papel.
+    const base = AppColors.paper;
     switch (r) {
       case PlayResult.win:
-        return Color.alphaBlend(AppColors.open.withAlpha(48), base);
+        return Color.alphaBlend(AppColors.open.withAlpha(30), base);
       case PlayResult.loss:
-        return Color.alphaBlend(const Color(0xFFFF6B6B).withAlpha(48), base);
+        return Color.alphaBlend(AppColors.accent.withAlpha(30), base);
       case PlayResult.tie:
-        return Color.alphaBlend(Colors.white.withAlpha(30), base);
+        return Color.alphaBlend(AppColors.black(0.06), base);
       default:
-        return Color.alphaBlend(const Color(0xCC1A2430), AppColors.bg);
+        return base;
     }
   }
 
   Color _resultBorder(PlayResult? r) {
-    // Bordes de estado PLENOS (lenguaje neobrutalista, sin alphas tímidos).
+    // Bordes de estado PLENOS (borde franco negro por defecto).
     switch (r) {
       case PlayResult.win:
         return AppColors.open;
       case PlayResult.loss:
-        return const Color(0xFFFF6B6B);
+        return AppColors.accentDark;
       case PlayResult.tie:
-        return AppColors.white(0.25);
+        return AppColors.ink;
       default:
-        return AppColors.white(0.25);
+        return AppColors.ink;
     }
   }
 
@@ -1520,7 +1519,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       case PlayResult.win:
         return (AppColors.open, 'VICTORIA');
       case PlayResult.loss:
-        return (const Color(0xFFFF6B6B), 'DERROTA');
+        return (AppColors.accentDark, 'DERROTA');
       case PlayResult.tie:
         return (AppColors.white(0.7), 'EMPATE');
       case PlayResult.training:
@@ -2365,7 +2364,7 @@ class _EditHandleDialogState extends State<_EditHandleDialog> {
           if (_error != null) ...[
             const SizedBox(height: 10),
             Text(_error!,
-                style: AppText.grotesk(size: 12, color: const Color(0xFFFF8A8D))),
+                style: AppText.grotesk(size: 12, color: AppColors.accentDark)),
           ],
         ],
       ),
@@ -2740,7 +2739,7 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
                       const SizedBox(height: 10),
                       Text(_error!,
                           style: AppText.grotesk(
-                              size: 12, color: const Color(0xFFFF8A8D))),
+                              size: 12, color: AppColors.accentDark)),
                     ],
                   ],
                 ),

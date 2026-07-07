@@ -288,7 +288,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
           children: [
             IconButton(
               onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+              icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.ink, size: 20),
             ),
             Text(
               'Agregar cancha',
@@ -475,7 +475,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
 
   Widget _imgSourceOption(IconData icon, String label, VoidCallback onTap,
       {bool danger = false}) {
-    final color = danger ? const Color(0xFFE05A5A) : Colors.white;
+    final color = danger ? AppColors.accentDark : AppColors.ink;
     return ListTile(
       onTap: onTap,
       leading: Icon(icon, color: color, size: 22),
@@ -626,7 +626,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
           borderRadius: BorderRadius.circular(AppShape.rBtn),
           border: Border.all(color: AppColors.white(0.25), width: 1.5),
         ),
-        child: Icon(icon, color: Colors.white, size: 18),
+        child: Icon(icon, color: AppColors.ink, size: 18),
       ),
     );
   }

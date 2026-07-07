@@ -116,7 +116,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
                 borderRadius: BorderRadius.circular(AppShape.rBtn),
                 border: Border.all(color: AppColors.white(0.25), width: 1.5),
               ),
-              child: const Icon(Icons.close, color: Colors.white, size: 16),
+              child: const Icon(Icons.close, color: AppColors.ink, size: 16),
             ),
           ),
           Text(

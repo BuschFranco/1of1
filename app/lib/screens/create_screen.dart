@@ -124,7 +124,7 @@ class CreateScreen extends StatelessWidget {
                             : '${when!.day}/${when!.month}/${when!.year}',
                         style: AppText.grotesk(
                           size: 14,
-                          color: when == null ? AppColors.white(0.4) : Colors.white,
+                          color: when == null ? AppColors.white(0.4) : AppColors.ink,
                         ),
                       ),
                     ],

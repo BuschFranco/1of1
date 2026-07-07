@@ -516,7 +516,7 @@ class DetailScreen extends StatelessWidget {
           final isFav = context.watch<FavoritesProvider>().isFavorite(court.id);
           return _squareBtn(
             isFav ? Icons.favorite : Icons.favorite_border,
-            color: isFav ? AppColors.accent : Colors.white,
+            color: isFav ? AppColors.accent : AppColors.ink,
             onTap: () => context.read<FavoritesProvider>().toggle(court.id),
           );
         }),

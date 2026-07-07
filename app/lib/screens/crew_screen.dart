@@ -16,7 +16,7 @@ class CrewScreen extends StatelessWidget {
     ];
 
     return Container(
-      color: AppColors.bg,
+      color: AppColors.red,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 56, 20, 160),
         children: [
@@ -27,7 +27,8 @@ class CrewScreen extends StatelessWidget {
                 style: AppText.archivo(
                   size: 34,
                   weight: FontWeight.w900,
-                  letterSpacing: -0.03,
+                  color: AppColors.blush,
+                  letterSpacing: -0.01,
                 ),
               ),
               const SizedBox(width: 10),
@@ -43,7 +44,7 @@ class CrewScreen extends StatelessWidget {
             style: AppText.grotesk(
               size: 11,
               weight: FontWeight.w700,
-              color: AppColors.accent,
+              color: AppColors.blush,
               letterSpacing: 0.16,
             ),
           ),
