@@ -85,7 +85,8 @@ class _TabCircle extends StatelessWidget {
         child: Icon(
           icon,
           size: 21,
-          color: active ? AppColors.ink : Colors.white,
+          // Activo: círculo rojo → ícono blanco. Inactivo: crema → ícono negro.
+          color: active ? Colors.white : AppColors.ink,
         ),
       ),
     );
@@ -161,7 +162,7 @@ class _PlusButtonState extends State<_PlusButton>
               border: Border.all(color: AppColors.ink, width: 2),
               boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
             ),
-            child: const Icon(Icons.add, color: AppColors.ink, size: 24),
+            child: const Icon(Icons.add, color: Colors.white, size: 24),
           ),
         ),
       ),

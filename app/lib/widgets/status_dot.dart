@@ -16,8 +16,16 @@ class StatusDot extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Cuadradito plano (neobrutalismo): sin glow, el color habla solo.
-        Container(width: 8, height: 8, color: color),
+        // Punto redondo con borde negro (retro-pop): el color habla solo.
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.ink, width: 1.5),
+          ),
+        ),
         const SizedBox(width: 6),
         Text(
           label,

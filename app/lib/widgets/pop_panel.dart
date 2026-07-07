@@ -20,7 +20,7 @@ class PopPanel extends StatelessWidget {
     required this.child,
     this.padding = const EdgeInsets.all(16),
     this.radius = AppShape.rCard,
-    this.ringColor = AppColors.accent,
+    this.ringColor = AppColors.ink,
     this.fill = AppColors.panel,
     this.onTap,
     this.glow = false,

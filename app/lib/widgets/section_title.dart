@@ -43,9 +43,13 @@ class SectionTitle extends StatelessWidget {
                 right!,
                 style: AppText.grotesk(
                   size: 11,
-                  weight: FontWeight.w600,
-                  color: AppColors.accent,
+                  weight: FontWeight.w700,
+                  color: AppColors.ink,
                   letterSpacing: 0.04,
+                  height: 1,
+                ).copyWith(
+                  decoration: TextDecoration.underline,
+                  decorationColor: AppColors.ink,
                 ),
               ),
             ),

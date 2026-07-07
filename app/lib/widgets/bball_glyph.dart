@@ -30,7 +30,7 @@ class _BBallPainter extends CustomPainter {
     canvas.drawCircle(center, r, fill);
 
     final stroke = Paint()
-      ..color = const Color(0xFF0A0F14)
+      ..color = const Color(0xFF000000)
       ..strokeWidth = size.width * 0.05
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;

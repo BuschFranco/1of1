@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 
-/// CTA primario neobrutalista: acento PLANO, borde negro franco y sombra dura
-/// desplazada. Al presionar, el botón se "hunde": se traslada hacia la sombra
-/// y la pierde (táctil clásico del estilo). Texto display en mayúsculas.
+/// CTA primario retro-pop: pill rellena en crema/rosa (blush), borde negro
+/// franco y sombra dura desplazada. Al presionar, el botón se "hunde": se
+/// traslada hacia la sombra y la pierde (táctil clásico). Texto display negro
+/// en mayúsculas.
 class PopButton extends StatefulWidget {
   final String label;
   final VoidCallback? onPressed;
@@ -40,7 +41,7 @@ class _PopButtonState extends State<PopButton> {
             width: 20,
             height: 20,
             child: CircularProgressIndicator(
-                strokeWidth: 2, color: Colors.white),
+                strokeWidth: 2, color: AppColors.ink),
           )
         : Row(
             mainAxisSize: MainAxisSize.min,
@@ -50,13 +51,13 @@ class _PopButtonState extends State<PopButton> {
                 widget.label.toUpperCase(),
                 style: AppText.display(
                   size: 14,
-                  weight: FontWeight.w700,
-                  letterSpacing: 0.06,
+                  weight: FontWeight.w800,
+                  letterSpacing: 0.04,
                 ),
               ),
               if (widget.icon != null) ...[
                 const SizedBox(width: 8),
-                Icon(widget.icon, size: 18, color: Colors.white),
+                Icon(widget.icon, size: 18, color: AppColors.ink),
               ],
             ],
           );
@@ -81,10 +82,10 @@ class _PopButtonState extends State<PopButton> {
             widget.expand ? null : const EdgeInsets.symmetric(horizontal: 26),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: enabled ? AppColors.accent : AppColors.white(0.10),
+          color: enabled ? AppColors.blush : AppColors.black(0.08),
           borderRadius: BorderRadius.circular(AppShape.rBtn),
           border: Border.all(
-            color: enabled ? AppColors.ink : AppColors.white(0.20),
+            color: enabled ? AppColors.ink : AppColors.black(0.25),
             width: 2,
           ),
           boxShadow: enabled && !pressed

@@ -27,11 +27,11 @@ class AppChip extends StatelessWidget {
     // y sombra dura solo en el estado activo.
     final bg = tint != null
         ? tint.withAlpha(28)
-        : (active ? AppColors.accent : AppColors.bgElev);
-    final col = tint ?? (active ? Colors.white : const Color(0xFFF5F7FA));
+        : (active ? AppColors.accent : AppColors.paper);
+    final col = tint ?? (active ? Colors.white : AppColors.ink);
     final border = tint != null
         ? tint.withAlpha(160)
-        : (active ? AppColors.ink : AppColors.white(0.25));
+        : AppColors.ink;
 
     return GestureDetector(
       onTap: onTap,

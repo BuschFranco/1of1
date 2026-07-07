@@ -11,12 +11,19 @@ class PopBackground extends StatelessWidget {
   /// Se conserva por compatibilidad de call-sites; ya no hay nada que escalar.
   final double glowStrength;
 
-  const PopBackground({super.key, this.glowStrength = 1});
+  /// Color del fondo de la sección. Retro-pop: cada pantalla puede tener su
+  /// propio color saturado (lila, sun, red, cream). Default: fondo base (crema).
+  final Color? color;
+
+  const PopBackground({super.key, this.glowStrength = 1, this.color});
 
   @override
   Widget build(BuildContext context) {
-    return const IgnorePointer(
-      child: ColoredBox(color: AppColors.bg, child: SizedBox.expand()),
+    return IgnorePointer(
+      child: ColoredBox(
+        color: color ?? AppColors.bg,
+        child: const SizedBox.expand(),
+      ),
     );
   }
 }

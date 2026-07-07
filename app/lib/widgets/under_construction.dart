@@ -10,21 +10,21 @@ class UnderConstructionBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFB020).withAlpha(36),
+        color: AppColors.paper,
         borderRadius: BorderRadius.circular(AppShape.rChip),
-        border: Border.all(color: const Color(0xFFFFB020), width: 1.5),
+        border: Border.all(color: AppColors.ink, width: 1.5),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.construction, size: 11, color: Color(0xFFFFC457)),
+          const Icon(Icons.construction, size: 11, color: AppColors.busy),
           const SizedBox(width: 4),
           Text(
             'EN CONSTRUCCIÓN',
             style: AppText.grotesk(
               size: 9,
               weight: FontWeight.w700,
-              color: const Color(0xFFFFC457),
+              color: AppColors.ink,
               letterSpacing: 0.06,
             ),
           ),
@@ -46,18 +46,18 @@ class UnderConstructionBanner extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFB020).withAlpha(28),
-        borderRadius: BorderRadius.circular(AppShape.rBtn),
-        border: Border.all(color: const Color(0xFFFFB020), width: 2),
+        color: AppColors.paper,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        border: Border.all(color: AppColors.ink, width: 2),
       ),
       child: Row(
         children: [
-          const Icon(Icons.construction, size: 16, color: Color(0xFFFFC457)),
+          const Icon(Icons.construction, size: 16, color: AppColors.busy),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               text,
-              style: AppText.grotesk(size: 12.5, color: const Color(0xFFFFC457)),
+              style: AppText.grotesk(size: 12.5, color: AppColors.ink),
             ),
           ),
         ],

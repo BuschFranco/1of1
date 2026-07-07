@@ -34,7 +34,7 @@ class _AppLoaderState extends State<AppLoader> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            const PopBackground(),
+            const PopBackground(color: AppColors.lilac),
             Align(
               alignment: Alignment.center,
               child: Column(
