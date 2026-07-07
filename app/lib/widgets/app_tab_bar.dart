@@ -5,6 +5,9 @@ import '../theme/app_theme.dart';
 
 enum AppTab { home, list, plus, chat, profile }
 
+/// Barra de navegación neobrutalista: pill oscura con botones circulares.
+/// La pestaña activa es un círculo relleno de acento con ícono negro; las
+/// inactivas son círculos oscuros con ícono blanco. Sin labels ni subrayado.
 class AppTabBar extends StatelessWidget {
   final AppTab active;
   final ValueChanged<AppTab> onChange;
@@ -13,64 +16,80 @@ class AppTabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Barra neobrutalista: sólida, borde franco y sombra dura. Sin blur.
     return Container(
       decoration: BoxDecoration(
         color: AppColors.glass,
-        borderRadius: BorderRadius.circular(AppShape.rCard),
+        borderRadius: BorderRadius.circular(100),
         border: Border.all(color: AppColors.line, width: 2),
         boxShadow: AppFx.hardShadow(),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      padding: const EdgeInsets.all(6),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _tabItem(AppTab.home, 'Mapa', Icons.map_outlined),
-          _tabItem(AppTab.list, 'Canchas', Icons.sports_basketball_outlined),
+          _TabCircle(
+            active: active == AppTab.home,
+            icon: Icons.map_outlined,
+            onTap: () => onChange(AppTab.home),
+          ),
+          _TabCircle(
+            active: active == AppTab.list,
+            icon: Icons.sports_basketball_outlined,
+            onTap: () => onChange(AppTab.list),
+          ),
           _PlusButton(onTap: () => onChange(AppTab.plus)),
-          _tabItem(AppTab.chat, 'Crew', Icons.chat_bubble_outline),
-          _tabItem(AppTab.profile, 'Perfil', Icons.person_outline),
+          _TabCircle(
+            active: active == AppTab.chat,
+            icon: Icons.chat_bubble_outline,
+            onTap: () => onChange(AppTab.chat),
+          ),
+          _TabCircle(
+            active: active == AppTab.profile,
+            icon: Icons.person_outline,
+            onTap: () => onChange(AppTab.profile),
+          ),
         ],
       ),
     );
   }
+}
 
-  Widget _tabItem(AppTab tab, String label, IconData icon) {
-    final isActive = active == tab;
-    final color = isActive ? AppColors.accent : AppColors.white(0.55);
+/// Botón circular de pestaña: relleno de acento + ícono negro si está activa;
+/// círculo oscuro + ícono blanco si no.
+class _TabCircle extends StatelessWidget {
+  final bool active;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _TabCircle({
+    required this.active,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => onChange(tab),
+      onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 3),
-            // Subrayado rectangular plano bajo la pestaña activa.
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              width: isActive ? 18 : 0,
-              height: 3,
-              color: isActive ? AppColors.accent : Colors.transparent,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: AppText.grotesk(
-                size: 10,
-                weight: FontWeight.w600,
-                color: color,
-                letterSpacing: 0.02,
-              ),
-            ),
-          ],
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 46,
+        height: 46,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: active ? AppColors.accent : AppColors.card,
+          border: Border.all(color: AppColors.ink, width: 2),
+          boxShadow: active ? AppFx.hardShadow(offset: const Offset(2, 2)) : null,
+        ),
+        child: Icon(
+          icon,
+          size: 21,
+          color: active ? AppColors.ink : Colors.white,
         ),
       ),
     );
   }
-
 }
 
 class _PlusButton extends StatefulWidget {
@@ -107,8 +126,8 @@ class _PlusButtonState extends State<_PlusButton>
       // Espacio fijo en el layout: la animación se desborda visualmente
       // (Clip.none) sin agrandar el botón ni mover al resto de la barra.
       child: SizedBox(
-        width: 48,
-        height: 48,
+        width: 46,
+        height: 46,
         child: AnimatedBuilder(
           animation: _ctrl,
           builder: (context, child) {
@@ -122,10 +141,10 @@ class _PlusButtonState extends State<_PlusButton>
                 // Anillo de pulso que se expande y desvanece al tocar.
                 if (t > 0 && t < 1)
                   Container(
-                    width: 48 + t * 34,
-                    height: 48 + t * 34,
+                    width: 46 + t * 34,
+                    height: 46 + t * 34,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16 + t * 12),
+                      shape: BoxShape.circle,
                       color: AppColors.accent.withAlpha(((1 - t) * 110).round()),
                     ),
                   ),
@@ -134,16 +153,16 @@ class _PlusButtonState extends State<_PlusButton>
             );
           },
           child: Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppShape.rBtn),
-            color: AppColors.accent,
-            border: Border.all(color: AppColors.ink, width: 2),
-            boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.accent,
+              border: Border.all(color: AppColors.ink, width: 2),
+              boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
+            ),
+            child: const Icon(Icons.add, color: AppColors.ink, size: 24),
           ),
-          child: const Icon(Icons.add, color: Colors.white, size: 24),
-        ),
         ),
       ),
     );
