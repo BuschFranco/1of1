@@ -35,8 +35,11 @@ void main() async {
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
+    // Fondos claros: íconos del sistema en oscuro.
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
     systemNavigationBarColor: AppColors.bg,
+    systemNavigationBarIconBrightness: Brightness.dark,
   ));
 
   // Notificaciones locales (recompensas). No bloquea el arranque si falla.

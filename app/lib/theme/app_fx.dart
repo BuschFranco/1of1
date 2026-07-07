@@ -16,7 +16,7 @@ class AppFx {
   }) =>
       [
         BoxShadow(
-          color: color ?? AppColors.black(0.85),
+          color: color ?? AppColors.ink,
           offset: offset,
           blurRadius: 0,
           spreadRadius: 0,

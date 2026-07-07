@@ -1,53 +1,73 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+/// Paleta RETRO-POP CARTOON (clara). Fondos planos saturados por pantalla,
+/// superficies claras (crema/blanco), tinta negra, bordes negros y sombras
+/// duras. Se conservan los NOMBRES de tokens de la era neobrutalista (accent,
+/// glass, line, white(op)…) reimplementando sus VALORES, para no tocar los
+/// cientos de call-sites.
 class AppColors {
-  static const Color bg = Color(0xFF0A0F14);
-  static const Color bgElev = Color(0xFF111821);
-  // Neobrutalismo: superficies SÓLIDAS (nada semitransparente ni "glass").
-  static const Color card = Color(0xFF1A2430);
-  static const Color accent = Color(0xFFFF6B1A);
-  static const Color accentDark = Color(0xFFD94E06);
-  // Acento claro (se conserva para tintes puntuales; ya no hay degradados).
-  static const Color accentAmber = Color(0xFFFFA23C);
-  static const Color open = Color(0xFF4ADE80);
-  static const Color busy = Color(0xFFFF6B1A);
-  static const Color closed = Color(0xFF6B7788);
+  // Fondo base (crema) y superficies.
+  static const Color bg = Color(0xFFF4EBDD); // crema base / default
+  static const Color bgElev = Color(0xFFFFFFFF); // elevado (diálogos) = blanco
+  static const Color card = Color(0xFFFFF9EF); // card crema casi blanca
+  static const Color panel = Color(0xFFFFF9EF); // = card
 
-  // Superficies nombradas (sólidas).
-  static const Color panel = Color(0xFF1A2430);
-  static const Color glass = Color(0xFF11181F);
+  // Acento interactivo: rojo (kickers, links, tab activa, selección).
+  static const Color accent = Color(0xFFC94040);
+  static const Color accentDark = Color(0xFF9E2F2F);
+  static const Color accentAmber = Color(0xFFF5A94B); // = sun (tinte cálido)
 
-  // Bordes del lenguaje neobrutalista: claro sobre paneles oscuros, negro puro
-  // sobre elementos de acento.
-  static const Color line = Color(0xE6FFFFFF); // blanco 90%
+  // Estados (oscurecidos para leer sobre superficies claras).
+  static const Color open = Color(0xFF2E9E5B); // verde
+  static const Color busy = Color(0xFFD97706); // ámbar quemado
+  static const Color closed = Color(0xFF7A7267); // gris cálido
+
+  // Fondos de sección (un color distinto por pantalla) + superficies claras.
+  static const Color lilac = Color(0xFF9F92E8);
+  static const Color sun = Color(0xFFF5A94B);
+  static const Color red = Color(0xFFC94040);
+  static const Color cream = Color(0xFFF4EBDD);
+  static const Color paper = Color(0xFFFFFFFF); // pills/nav/cards sobre saturado
+  static const Color blush = Color(0xFFF7CFC4); // relleno de botones / headlines
+
+  // "glass" (histórico): overlays sobre el mapa y la tab bar → pills BLANCAS.
+  static const Color glass = Color(0xFFFFFFFF);
+
+  // Borde universal del lenguaje: NEGRO (antes blanco 90%). Al redefinir el
+  // valor, todos los `AppColors.line` pasan a negro sin tocar call-sites.
+  static const Color line = Color(0xFF000000);
   static const Color ink = Color(0xFF000000);
 
-  static Color white(double op) => Color.fromRGBO(255, 255, 255, op);
+  /// "Tinta tenue": OJO — histórico `white(op)`, ahora devuelve NEGRO con
+  /// opacidad. Así todos los textos/íconos/bordes secundarios que eran "blanco
+  /// apagado sobre oscuro" pasan a "negro apagado sobre claro" de una sola vez.
+  /// Para blanco real usar `Colors.white` explícito (sobre acento/rojo).
+  static Color white(double op) => Color.fromRGBO(0, 0, 0, op);
   static Color black(double op) => Color.fromRGBO(0, 0, 0, op);
 }
 
-/// Radios del lenguaje neobrutalista: pocos y chicos (nada de píldoras).
+/// Radios del lenguaje retro-pop: pills en botones/chips, esquinas grandes en
+/// cards.
 class AppShape {
   AppShape._();
-  static const double rCard = 8; // cards grandes / paneles
-  static const double rBtn = 6; // botones / inputs
-  static const double rChip = 4; // chips / badges
+  static const double rCard = 20; // cards / paneles redondeados grandes
+  static const double rBtn = 100; // botones / inputs → pill
+  static const double rChip = 100; // chips / badges → pill
 }
 
 class AppText {
-  /// Fuente display de la marca (títulos): Unbounded — display bold y
-  /// redondeada, con onda pop. Es ancha por naturaleza, así que el default de
-  /// letterSpacing es 0 (los headlines grandes pasan valores negativos para
-  /// compactar). Pesa hasta 900.
+  /// Fuente display de la marca (títulos): Fraunces — serif ultra pesada y
+  /// redondeada, con onda retro-pop. Pesa hasta 900 (default). El color default
+  /// es tinta negra (fondos claros). `letterSpacing` es una fracción del tamaño.
   static TextStyle display({
     double size = 14,
-    FontWeight weight = FontWeight.w700,
-    Color color = Colors.white,
+    FontWeight weight = FontWeight.w900,
+    Color color = AppColors.ink,
     double letterSpacing = 0,
     double? height,
   }) {
-    return GoogleFonts.unbounded(
+    return GoogleFonts.fraunces(
       fontSize: size,
       fontWeight: weight,
       color: color,
@@ -57,11 +77,11 @@ class AppText {
   }
 
   /// Alias histórico. Todo el código existente que usaba `AppText.archivo`
-  /// ahora renderiza con la fuente display (Unbounded) sin tocar call-sites.
+  /// ahora renderiza con la fuente display (Fraunces) sin tocar call-sites.
   static TextStyle archivo({
     double size = 14,
-    FontWeight weight = FontWeight.w700,
-    Color color = Colors.white,
+    FontWeight weight = FontWeight.w900,
+    Color color = AppColors.ink,
     double letterSpacing = 0,
     double? height,
   }) =>
@@ -76,7 +96,7 @@ class AppText {
   static TextStyle grotesk({
     double size = 12,
     FontWeight weight = FontWeight.w500,
-    Color color = Colors.white,
+    Color color = AppColors.ink,
     double letterSpacing = 0,
     double? height,
   }) {
@@ -92,24 +112,23 @@ class AppText {
 
 ThemeData buildAppTheme() {
   return ThemeData(
-    brightness: Brightness.dark,
+    brightness: Brightness.light,
     scaffoldBackgroundColor: AppColors.bg,
-    colorScheme: const ColorScheme.dark(
+    colorScheme: const ColorScheme.light(
       primary: AppColors.accent,
       secondary: AppColors.accent,
       surface: AppColors.bg,
     ),
     textTheme: GoogleFonts.spaceGroteskTextTheme(
-      ThemeData.dark().textTheme,
+      ThemeData.light().textTheme,
     ),
-    // Diálogos neobrutalistas GLOBALES: fondo sólido, borde franco, radio
-    // chico. Cubre todos los AlertDialog (resultado, permisos, insignia…)
-    // sin tocarlos uno por uno.
+    // Diálogos retro-pop GLOBALES: fondo claro, borde negro franco, esquinas
+    // redondeadas. Cubre todos los AlertDialog sin tocarlos uno por uno.
     dialogTheme: DialogThemeData(
-      backgroundColor: AppColors.bgElev,
+      backgroundColor: AppColors.paper,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppShape.rCard),
-        side: const BorderSide(color: AppColors.line, width: 2),
+        side: const BorderSide(color: AppColors.ink, width: 2),
       ),
     ),
   );
