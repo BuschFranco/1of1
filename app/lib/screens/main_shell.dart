@@ -78,6 +78,15 @@ class _MainShellState extends State<MainShell> {
   // vuelva a la anterior en vez de salir de la app.
   final List<AppTab> _tabHistory = [];
 
+  // Color de fondo por pestaña (retro-pop, un color por sección).
+  Color _bgForTab(AppTab t) => switch (t) {
+        AppTab.home => AppColors.cream,
+        AppTab.list => AppColors.lilac,
+        AppTab.plus => AppColors.cream,
+        AppTab.chat => AppColors.red,
+        AppTab.profile => AppColors.sun,
+      };
+
   void _selectTab(AppTab t) {
     if (t == _tab) return;
     setState(() {
@@ -254,7 +263,7 @@ class _MainShellState extends State<MainShell> {
             ),
             option(PlayResult.win, Icons.emoji_events_outlined, AppColors.open),
             option(PlayResult.loss, Icons.thumb_down_outlined,
-                const Color(0xFFFF6B6B)),
+                AppColors.accentDark),
             option(PlayResult.tie, Icons.handshake_outlined, AppColors.white(0.7)),
             option(PlayResult.training, Icons.fitness_center, AppColors.accent),
             option(PlayResult.notCounted, Icons.not_interested,
@@ -351,7 +360,9 @@ class _MainShellState extends State<MainShell> {
         if (!_handleBack()) SystemNavigator.pop();
       },
       child: Scaffold(
-      backgroundColor: AppColors.bg,
+      // Retro-pop: cada pestaña tiene su color de fondo saturado. Acompaña el
+      // slide entre pestañas (las pantallas repintan su propio PopBackground).
+      backgroundColor: _bgForTab(_tab),
       body: Stack(
         children: [
           Positioned.fill(child: homeLayer),

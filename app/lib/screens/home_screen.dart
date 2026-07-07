@@ -29,29 +29,30 @@ const CameraPosition _kInitialCam = CameraPosition(
   zoom: 12,
 );
 
+// Mapa CLARO retro-pop: geometría crema, calles blancas/crema, agua lila
+// (guiño a la paleta), POIs/transit ocultos. Solo cambia el string de estilo,
+// sin overlays sobre el GoogleMap.
 const _kMapStyle = '''
 [
-  {"elementType":"geometry","stylers":[{"color":"#0d1520"}]},
+  {"elementType":"geometry","stylers":[{"color":"#f2e8d5"}]},
   {"elementType":"labels.icon","stylers":[{"visibility":"off"}]},
-  {"elementType":"labels.text.fill","stylers":[{"color":"#8896a7"}]},
-  {"elementType":"labels.text.stroke","stylers":[{"color":"#0a0f14"}]},
-  {"featureType":"administrative","elementType":"geometry","stylers":[{"color":"#152030"}]},
-  {"featureType":"administrative.country","elementType":"labels.text.fill","stylers":[{"color":"#9e9e9e"}]},
+  {"elementType":"labels.text.fill","stylers":[{"color":"#6b6459"}]},
+  {"elementType":"labels.text.stroke","stylers":[{"color":"#f4ebdd"}]},
+  {"featureType":"administrative","elementType":"geometry","stylers":[{"color":"#e5dac2"}]},
   {"featureType":"administrative.land_parcel","stylers":[{"visibility":"off"}]},
-  {"featureType":"administrative.locality","elementType":"labels.text.fill","stylers":[{"color":"#c0c8d8"}]},
-  {"featureType":"administrative.neighborhood","elementType":"labels.text.fill","stylers":[{"color":"#8896a7"}]},
+  {"featureType":"administrative.locality","elementType":"labels.text.fill","stylers":[{"color":"#3d3833"}]},
+  {"featureType":"administrative.neighborhood","elementType":"labels.text.fill","stylers":[{"color":"#6b6459"}]},
   {"featureType":"poi","stylers":[{"visibility":"off"}]},
-  {"featureType":"road","elementType":"geometry","stylers":[{"color":"#1a2a3a"}]},
-  {"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#0d1a26"}]},
-  {"featureType":"road","elementType":"labels.text.fill","stylers":[{"color":"#8896a7"}]},
-  {"featureType":"road.arterial","elementType":"geometry","stylers":[{"color":"#1e3040"}]},
-  {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#1a3a52"}]},
-  {"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#0d2030"}]},
-  {"featureType":"road.highway","elementType":"labels.text.fill","stylers":[{"color":"#b0c4d4"}]},
-  {"featureType":"road.local","elementType":"labels.text.fill","stylers":[{"color":"#586878"}]},
+  {"featureType":"road","elementType":"geometry","stylers":[{"color":"#ffffff"}]},
+  {"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#e0d5bd"}]},
+  {"featureType":"road","elementType":"labels.text.fill","stylers":[{"color":"#8a8275"}]},
+  {"featureType":"road.arterial","elementType":"geometry","stylers":[{"color":"#fdf6e8"}]},
+  {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#f5c98a"}]},
+  {"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#d9a55e"}]},
+  {"featureType":"road.highway","elementType":"labels.text.fill","stylers":[{"color":"#7a6f5c"}]},
   {"featureType":"transit","stylers":[{"visibility":"off"}]},
-  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#0a1929"}]},
-  {"featureType":"water","elementType":"labels.text.fill","stylers":[{"color":"#3d5060"}]}
+  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#b7aeee"}]},
+  {"featureType":"water","elementType":"labels.text.fill","stylers":[{"color":"#5d539e"}]}
 ]
 ''';
 
@@ -771,7 +772,7 @@ class _HomeScreenState extends State<HomeScreen>
             height: 44,
             radius: AppShape.rBtn,
             child: const Center(
-              child: Icon(Icons.tune, color: Colors.white, size: 18),
+              child: Icon(Icons.tune, color: AppColors.ink, size: 18),
             ),
           ),
         ),
@@ -840,7 +841,7 @@ class _HomeScreenState extends State<HomeScreen>
     final exit = ps.endRemainingSeconds;
     final emm = (exit ~/ 60).toString().padLeft(2, '0');
     final ess = (exit % 60).toString().padLeft(2, '0');
-    const amber = Color(0xFFE9B949);
+    const amber = AppColors.busy;
     final accent = paused ? AppColors.white(0.7) : AppColors.open;
     return Center(
       child: Container(
@@ -971,15 +972,14 @@ class _HomeScreenState extends State<HomeScreen>
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: AppColors.bgElev,
+                  color: AppColors.blush,
                   borderRadius: BorderRadius.circular(AppShape.rBtn),
-                  border:
-                      Border.all(color: AppColors.white(0.25), width: 1.5),
+                  border: Border.all(color: AppColors.ink, width: 1.5),
                 ),
                 child: Icon(
                   paused ? Icons.play_arrow : Icons.pause,
                   size: 18,
-                  color: Colors.white,
+                  color: AppColors.ink,
                 ),
               ),
             ),
@@ -992,13 +992,9 @@ class _HomeScreenState extends State<HomeScreen>
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.bgElev,
+                  color: AppColors.accent,
                   borderRadius: BorderRadius.circular(AppShape.rBtn),
-                  border: Border.all(
-                    color:
-                        ending ? Colors.transparent : AppColors.white(0.25),
-                    width: 1.5,
-                  ),
+                  border: Border.all(color: AppColors.ink, width: 1.5),
                 ),
                 child: Text(
                   'DETENER',
@@ -1257,7 +1253,7 @@ class _HomeScreenState extends State<HomeScreen>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: AppColors.accent,
-                      border: Border.all(color: Colors.white, width: 3),
+                      border: Border.all(color: AppColors.ink, width: 3),
                       boxShadow: [
                         BoxShadow(
                           color: AppColors.accent.withAlpha(140),
@@ -1628,9 +1624,9 @@ class _CourtSwipeCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.bgElev,
           borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.white(0.25), width: 1.5),
+          border: Border.all(color: AppColors.ink, width: 1.5),
         ),
-        child: Icon(icon, color: Colors.white, size: 16),
+        child: Icon(icon, color: AppColors.ink, size: 16),
       ),
     );
   }
