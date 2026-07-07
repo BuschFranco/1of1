@@ -279,7 +279,7 @@ class CreateScreen extends StatelessWidget {
             style: AppText.archivo(
               size: 34,
               weight: FontWeight.w900,
-              letterSpacing: -0.03,
+              letterSpacing: -0.01,
             ),
           ),
           const SizedBox(height: 20),

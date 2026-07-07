@@ -218,8 +218,8 @@ class DetailScreen extends StatelessWidget {
                   style: AppText.archivo(
                     size: 38,
                     weight: FontWeight.w900,
-                    letterSpacing: -0.03,
-                    height: 0.95,
+                    letterSpacing: -0.01,
+                    height: 1.0,
                   ),
                 ),
                 const SizedBox(height: 6),
