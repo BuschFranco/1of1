@@ -11,7 +11,7 @@ class AppLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Image.asset(
-      'assets/images/logo_1of1.webp',
+      'assets/images/logo_1of1.png',
       height: height,
       fit: BoxFit.contain,
       filterQuality: FilterQuality.medium,

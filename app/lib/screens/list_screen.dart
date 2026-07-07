@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../data/courts.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
@@ -135,18 +136,13 @@ class _CourtListItem extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
+        // Card de lista protagonista: sólida, borde claro franco y sombra
+        // dura (neobrutalismo; sin glow difuso).
         decoration: BoxDecoration(
-          color: const Color(0x991A2430),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.accent.withAlpha(32)),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.accent.withAlpha(20),
-              blurRadius: 22,
-              spreadRadius: -6,
-              offset: const Offset(0, 8),
-            ),
-          ],
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(AppShape.rCard),
+          border: Border.all(color: AppColors.line, width: 2),
+          boxShadow: AppFx.hardShadow(),
         ),
         child: Column(
           children: [
@@ -156,11 +152,14 @@ class _CourtListItem extends StatelessWidget {
                   url: court.img,
                   height: 140,
                   width: double.infinity,
+                  // 6 = rCard (8) menos el borde de 2px de la card.
                   borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(19),
-                    topRight: Radius.circular(19),
+                    topLeft: Radius.circular(6),
+                    topRight: Radius.circular(6),
                   ),
                 ),
+                // Scrim de LEGIBILIDAD sobre la foto: se conserva (no es
+                // decoración, da contraste a los badges y al ranking).
                 Container(
                   height: 140,
                   decoration: const BoxDecoration(
@@ -171,8 +170,8 @@ class _CourtListItem extends StatelessWidget {
                       stops: [0.4, 1],
                     ),
                     borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(19),
-                      topRight: Radius.circular(19),
+                      topLeft: Radius.circular(6),
+                      topRight: Radius.circular(6),
                     ),
                   ),
                 ),
@@ -187,10 +186,9 @@ class _CourtListItem extends StatelessWidget {
                       letterSpacing: -0.05,
                       color: AppColors.accent,
                     ).copyWith(
+                      // Solo la sombra negra de legibilidad sobre la foto
+                      // (el glow de acento se quitó con el neobrutalismo).
                       shadows: [
-                        Shadow(
-                            color: AppColors.accent.withAlpha(150),
-                            blurRadius: 16),
                         const Shadow(color: Colors.black54, blurRadius: 6),
                       ],
                     ),
@@ -217,8 +215,10 @@ class _CourtListItem extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                           decoration: BoxDecoration(
                             color: AppColors.black(0.6),
-                            borderRadius: BorderRadius.circular(100),
-                            border: Border.all(color: AppColors.accent.withAlpha(90)),
+                            borderRadius:
+                                BorderRadius.circular(AppShape.rChip),
+                            border: Border.all(
+                                color: AppColors.accent, width: 1.5),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -318,8 +318,8 @@ class _CourtListItem extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: AppColors.black(0.7),
-        border: Border.all(color: AppColors.white(0.12)),
-        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppColors.white(0.25), width: 1.5),
+        borderRadius: BorderRadius.circular(AppShape.rChip),
       ),
       child: Text(
         label.toUpperCase(),

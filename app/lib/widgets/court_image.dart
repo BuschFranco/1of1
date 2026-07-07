@@ -41,13 +41,8 @@ class CourtImage extends StatelessWidget {
     return Container(
       width: width,
       height: height,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF222B38), Color(0xFF151C26)],
-        ),
-      ),
+      // Placeholder plano (neobrutalismo): sin degradado.
+      color: AppColors.card,
       child: LayoutBuilder(
         builder: (_, c) {
           final size = (c.biggest.shortestSide * 0.34).clamp(18.0, 56.0);

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 
-/// CTA primario pop-futurista: fondo con degradado de acento (naranja→ámbar),
-/// glow neón, texto display (Chakra Petch) en mayúsculas con tracking y un leve
-/// "scale" al presionar. Reemplaza los ElevatedButton/containers de CTA inline.
+/// CTA primario neobrutalista: acento PLANO, borde negro franco y sombra dura
+/// desplazada. Al presionar, el botón se "hunde": se traslada hacia la sombra
+/// y la pierde (táctil clásico del estilo). Texto display en mayúsculas.
 class PopButton extends StatefulWidget {
   final String label;
   final VoidCallback? onPressed;
@@ -29,6 +29,8 @@ class PopButton extends StatefulWidget {
 
 class _PopButtonState extends State<PopButton> {
   bool _down = false;
+
+  static const _shadowOffset = Offset(4, 4);
 
   @override
   Widget build(BuildContext context) {
@@ -59,37 +61,37 @@ class _PopButtonState extends State<PopButton> {
             ],
           );
 
+    // Hundimiento: trasladamos el botón hacia donde estaba la sombra, así el
+    // conjunto (botón+sombra) no cambia de tamaño y el layout no salta.
+    final pressed = _down && enabled;
     return GestureDetector(
       onTap: enabled ? widget.onPressed : null,
       onTapDown: enabled ? (_) => setState(() => _down = true) : null,
       onTapUp: enabled ? (_) => setState(() => _down = false) : null,
       onTapCancel: enabled ? () => setState(() => _down = false) : null,
       behavior: HitTestBehavior.opaque,
-      child: AnimatedScale(
-        scale: _down ? 0.97 : 1,
-        duration: const Duration(milliseconds: 110),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 90),
         curve: Curves.easeOut,
-        child: Container(
-          height: widget.height,
-          width: widget.expand ? double.infinity : null,
-          padding: widget.expand
-              ? null
-              : const EdgeInsets.symmetric(horizontal: 26),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            gradient: enabled
-                ? AppFx.accentGradient()
-                : LinearGradient(colors: [
-                    AppColors.white(0.10),
-                    AppColors.white(0.06),
-                  ]),
-            borderRadius: BorderRadius.circular(100),
-            boxShadow: enabled
-                ? AppFx.neonGlow(AppColors.accent, blur: 24, alpha: 105)
-                : null,
+        transform: Matrix4.translationValues(
+            pressed ? _shadowOffset.dx : 0, pressed ? _shadowOffset.dy : 0, 0),
+        height: widget.height,
+        width: widget.expand ? double.infinity : null,
+        padding:
+            widget.expand ? null : const EdgeInsets.symmetric(horizontal: 26),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: enabled ? AppColors.accent : AppColors.white(0.10),
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: Border.all(
+            color: enabled ? AppColors.ink : AppColors.white(0.20),
+            width: 2,
           ),
-          child: content,
+          boxShadow: enabled && !pressed
+              ? AppFx.hardShadow(offset: _shadowOffset)
+              : null,
         ),
+        child: content,
       ),
     );
   }

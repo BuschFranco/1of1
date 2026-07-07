@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -46,6 +47,31 @@ class MainActivity : FlutterActivity() {
                                         Uri.parse("package:$packageName")
                                     )
                                 )
+                            } catch (_: Exception) {
+                            }
+                        }
+                        result.success(null)
+                    }
+                    // ¿La app está exenta de la optimización de batería? Sin esta
+                    // exención, Samsung/One UI congela o mata el proceso (y su
+                    // foreground service) en pleno partido.
+                    "isIgnoringBatteryOptimizations" -> {
+                        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                        result.success(pm.isIgnoringBatteryOptimizations(packageName))
+                    }
+                    // Pide la exención (diálogo del sistema). Fallback: la lista
+                    // general de optimización de batería.
+                    "requestIgnoreBatteryOptimizations" -> {
+                        try {
+                            startActivity(
+                                Intent(
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    Uri.parse("package:$packageName")
+                                )
+                            )
+                        } catch (e: Exception) {
+                            try {
+                                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
                             } catch (_: Exception) {
                             }
                         }

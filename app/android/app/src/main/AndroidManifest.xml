@@ -14,6 +14,9 @@
     <!-- Alarmas exactas: arranque/cierre automático del partido en segundo plano. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <!-- Exención de optimización de batería: sin ella, Samsung/One UI congela o
+         mata el proceso (y el foreground service) en pleno partido. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <!-- Health Connect: lectura de métricas del partido (opcional, opt-in). Se
          registran en el historial y el récord de calorías puede sumar puntos. -->
     <uses-permission android:name="android.permission.health.READ_HEART_RATE"/>

@@ -479,6 +479,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
           _pausedAt = null;
           _pausedSeconds = 0;
           unawaited(cancelStartAlarm());
+          // Re-armamos el foreground service para que el partido adoptado siga
+          // detectándose aunque la app se vuelva a minimizar.
+          if (_background) unawaited(_startStream());
           _renderSessionNotif();
           notifyListeners();
         }
@@ -634,14 +637,37 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     // Persistimos el userKey para que el isolate de las alarmas arme las mismas
     // claves namespaced, y registramos el puerto de reconciliación.
     _registerPlayPort();
-    unawaited(SharedPreferences.getInstance().then((p) {
-      p.setString(kBgUserKey, userKey);
-      // DEV: el mock vive solo en memoria y murió con el proceso anterior;
-      // limpiamos su copia persistida para que las alarmas no decidan con una
-      // ubicación simulada vieja en uso real.
-      p.remove(kMockPosKey);
-    }));
+    unawaited(SharedPreferences.getInstance()
+        .then((p) => p.setString(kBgUserKey, userKey)));
     _resetState();
+    // DEV: si el proceso murió con el modo prueba activo, restauramos la
+    // ubicación simulada ANTES del restore. Sin esto, un reinicio del SO
+    // "teletransporta" al jugador al GPS real (lejos de la cancha simulada) y
+    // el partido en prueba se cierra o descarta solo. El mock se limpia
+    // únicamente al salir del modo prueba (clearMock).
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final mockRaw = prefs.getString(kMockPosKey);
+      if (mockRaw != null) {
+        final parts = mockRaw.split(',');
+        final mlat = double.tryParse(parts[0]);
+        final mlng = double.tryParse(parts.length > 1 ? parts[1] : '');
+        if (mlat != null && mlng != null) {
+          _mock = Position(
+            latitude: mlat,
+            longitude: mlng,
+            timestamp: DateTime.now(),
+            accuracy: 5,
+            altitude: 0,
+            altitudeAccuracy: 0,
+            heading: 0,
+            headingAccuracy: 0,
+            speed: 0,
+            speedAccuracy: 0,
+          );
+        }
+      }
+    } catch (_) {/* sin prefs: seguimos con GPS real */}
     await _restore();
     // Por si una alarma arrancó/cerró un partido mientras la app estaba cerrada.
     await reconcileFromPrefs();
@@ -1715,6 +1741,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
           // Arrancamos el latido ya (las sesiones escritas por la alarma no lo
           // traen, y sin latido el próximo restore la cerraría mal).
           await _persistActive();
+          // Re-armamos el foreground service: el partido resumido tiene que
+          // seguir detectándose aunque la app se vuelva a minimizar.
+          if (_background) unawaited(_startStream());
         }
       } catch (_) {
         await _clearActive();

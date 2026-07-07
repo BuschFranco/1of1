@@ -4,21 +4,35 @@ import 'package:google_fonts/google_fonts.dart';
 class AppColors {
   static const Color bg = Color(0xFF0A0F14);
   static const Color bgElev = Color(0xFF111821);
-  static const Color card = Color(0x991A2430);
+  // Neobrutalismo: superficies SÓLIDAS (nada semitransparente ni "glass").
+  static const Color card = Color(0xFF1A2430);
   static const Color accent = Color(0xFFFF6B1A);
   static const Color accentDark = Color(0xFFD94E06);
-  // Extremo claro del degradado neón naranja→ámbar (pop-futurismo).
+  // Acento claro (se conserva para tintes puntuales; ya no hay degradados).
   static const Color accentAmber = Color(0xFFFFA23C);
   static const Color open = Color(0xFF4ADE80);
   static const Color busy = Color(0xFFFF6B1A);
   static const Color closed = Color(0xFF6B7788);
 
-  // Tints de superficie más usados en la app, nombrados para coherencia.
-  static const Color panel = Color(0x991A2430); // panel/card semitransparente
-  static const Color glass = Color(0xF211181F); // contenedor "glass" opaco
+  // Superficies nombradas (sólidas).
+  static const Color panel = Color(0xFF1A2430);
+  static const Color glass = Color(0xFF11181F);
+
+  // Bordes del lenguaje neobrutalista: claro sobre paneles oscuros, negro puro
+  // sobre elementos de acento.
+  static const Color line = Color(0xE6FFFFFF); // blanco 90%
+  static const Color ink = Color(0xFF000000);
 
   static Color white(double op) => Color.fromRGBO(255, 255, 255, op);
   static Color black(double op) => Color.fromRGBO(0, 0, 0, op);
+}
+
+/// Radios del lenguaje neobrutalista: pocos y chicos (nada de píldoras).
+class AppShape {
+  AppShape._();
+  static const double rCard = 8; // cards grandes / paneles
+  static const double rBtn = 6; // botones / inputs
+  static const double rChip = 4; // chips / badges
 }
 
 class AppText {
@@ -87,6 +101,16 @@ ThemeData buildAppTheme() {
     ),
     textTheme: GoogleFonts.spaceGroteskTextTheme(
       ThemeData.dark().textTheme,
+    ),
+    // Diálogos neobrutalistas GLOBALES: fondo sólido, borde franco, radio
+    // chico. Cubre todos los AlertDialog (resultado, permisos, insignia…)
+    // sin tocarlos uno por uno.
+    dialogTheme: DialogThemeData(
+      backgroundColor: AppColors.bgElev,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        side: const BorderSide(color: AppColors.line, width: 2),
+      ),
     ),
   );
 }

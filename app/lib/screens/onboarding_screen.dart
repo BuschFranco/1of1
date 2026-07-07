@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
@@ -21,7 +20,8 @@ class OnboardingScreen extends StatelessWidget {
             fit: BoxFit.cover,
             errorBuilder: (_, _, _) => Container(color: AppColors.bg),
           ),
-          // Gradient overlay
+          // Scrim de LEGIBILIDAD sobre la foto (se conserva a propósito: no es
+          // decoración, garantiza contraste del texto).
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -33,24 +33,6 @@ class OnboardingScreen extends StatelessWidget {
                   AppColors.bg,
                 ],
                 stops: [0, 0.55, 1],
-              ),
-            ),
-          ),
-          // Orange glow top-right
-          Positioned(
-            top: -120,
-            right: -60,
-            child: Container(
-              width: 260,
-              height: 260,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    AppColors.accent.withAlpha(102),
-                    Colors.transparent,
-                  ],
-                ),
               ),
             ),
           ),
@@ -111,18 +93,14 @@ class OnboardingScreen extends StatelessWidget {
                 const TextSpan(text: 'Encontrá tu\npróxima\n'),
                 TextSpan(
                   text: 'cancha.',
+                  // Sin glow: el acento pleno alcanza en el lenguaje
+                  // neobrutalista.
                   style: AppText.archivo(
                     size: 44,
                     weight: FontWeight.w900,
                     color: AppColors.accent,
                     letterSpacing: -0.04,
                     height: 0.95,
-                  ).copyWith(
-                    shadows: [
-                      Shadow(
-                          color: AppColors.accent.withAlpha(140),
-                          blurRadius: 24),
-                    ],
                   ),
                 ),
               ],
@@ -157,38 +135,34 @@ class OnboardingScreen extends StatelessWidget {
         children: [
           for (var i = 0; i < items.length; i++) ...[
             Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.white(0.06),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.white(0.08)),
+              // Cajita sólida con borde franco (sin blur "glass").
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.glass,
+                  borderRadius: BorderRadius.circular(AppShape.rCard),
+                  border: Border.all(color: AppColors.white(0.25), width: 1.5),
+                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      items[i].$1,
+                      style: AppText.archivo(
+                        size: 20,
+                        weight: FontWeight.w800,
+                      ),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          items[i].$1,
-                          style: AppText.archivo(
-                            size: 20,
-                            weight: FontWeight.w800,
-                          ),
-                        ),
-                        Text(
-                          items[i].$2.toUpperCase(),
-                          style: AppText.grotesk(
-                            size: 10,
-                            color: AppColors.white(0.5),
-                            letterSpacing: 0.08,
-                          ),
-                        ),
-                      ],
+                    Text(
+                      items[i].$2.toUpperCase(),
+                      style: AppText.grotesk(
+                        size: 10,
+                        color: AppColors.white(0.5),
+                        letterSpacing: 0.08,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),

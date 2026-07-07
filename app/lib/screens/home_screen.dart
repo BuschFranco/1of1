@@ -12,6 +12,7 @@ import '../services/notifications_service.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
@@ -281,13 +282,28 @@ class _HomeScreenState extends State<HomeScreen>
     // La detección de partidos (presencia, batch, sembrado y canchas) la cablea
     // SyncCoordinator al arrancar la app; HomeScreen ya no orquesta nada de eso.
     WidgetsBinding.instance.addObserver(this);
+    // DEV: si el servicio restauró una ubicación simulada tras un reinicio del
+    // proceso, retomamos el modo prueba en la UI (el pin sigue gobernando).
+    _syncMockMode();
     // Modal de permisos sobre el mapa (si falta ubicación / notif / alarmas).
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowPerms());
   }
 
+  /// DEV: alinea el flag de UI del modo prueba con el estado del servicio (el
+  /// mock puede haberse restaurado tras morir el proceso, y el servicio arranca
+  /// async: re-chequeamos también al volver al frente).
+  void _syncMockMode() {
+    if (!_mockMode && context.read<PlaySessionService>().mockActive) {
+      setState(() => _mockMode = true);
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _maybeShowPerms();
+    if (state == AppLifecycleState.resumed) {
+      _syncMockMode();
+      _maybeShowPerms();
+    }
   }
 
   /// Muestra el modal de permisos si falta alguno. Evita apilarlo.
@@ -657,11 +673,10 @@ class _HomeScreenState extends State<HomeScreen>
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xF211181F),
-                        borderRadius: BorderRadius.circular(100),
-                        border: Border.all(
-                          color: AppColors.accent.withAlpha(140),
-                        ),
+                        color: AppColors.glass,
+                        borderRadius: BorderRadius.circular(AppShape.rBtn),
+                        border:
+                            Border.all(color: AppColors.accent, width: 2),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -704,7 +719,7 @@ class _HomeScreenState extends State<HomeScreen>
           child: _glassContainer(
             height: 48,
             padding: const EdgeInsets.symmetric(horizontal: 18),
-            radius: 100,
+            radius: AppShape.rBtn,
             child: Row(
               children: [
                 Icon(Icons.search, size: 16, color: AppColors.white(0.5)),
@@ -754,7 +769,7 @@ class _HomeScreenState extends State<HomeScreen>
           child: _glassContainer(
             width: 44,
             height: 44,
-            radius: 100,
+            radius: AppShape.rBtn,
             child: const Center(
               child: Icon(Icons.tune, color: Colors.white, size: 18),
             ),
@@ -766,7 +781,6 @@ class _HomeScreenState extends State<HomeScreen>
 
   Widget _predictionsOverlay() {
     return _glassContainer(
-      radius: 16,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -833,17 +847,12 @@ class _HomeScreenState extends State<HomeScreen>
         margin: const EdgeInsets.symmetric(horizontal: 16),
         padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
         decoration: BoxDecoration(
-          color: const Color(0xF211181F),
-          borderRadius: BorderRadius.circular(100),
-          border: Border.all(color: accent.withAlpha(160)),
-          // Glow neón del color de estado (verde / gris) — pop-futurismo.
-          boxShadow: [
-            BoxShadow(
-              color: accent.withAlpha(55),
-              blurRadius: 22,
-              spreadRadius: 1,
-            ),
-          ],
+          color: AppColors.glass,
+          // Neobrutalismo: rectángulo franco con borde pleno del color de
+          // estado (verde / gris) y sombra dura, sin glow.
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: Border.all(color: accent, width: 2),
+          boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -854,9 +863,6 @@ class _HomeScreenState extends State<HomeScreen>
               decoration: BoxDecoration(
                 color: accent,
                 shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(color: accent, blurRadius: 8, spreadRadius: 1),
-                ],
               ),
             ),
             const SizedBox(width: 8),
@@ -886,17 +892,9 @@ class _HomeScreenState extends State<HomeScreen>
                           ),
                           decoration: BoxDecoration(
                             color: AppColors.accent.withAlpha(38),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: AppColors.accent.withAlpha(150),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.accent.withAlpha(60),
-                                blurRadius: 10,
-                                spreadRadius: -1,
-                              ),
-                            ],
+                            borderRadius:
+                                BorderRadius.circular(AppShape.rChip),
+                            border: Border.all(color: AppColors.accent),
                           ),
                           child: Text(
                             'x${ps.currentMultiplier.toStringAsFixed(2)}',
@@ -973,9 +971,10 @@ class _HomeScreenState extends State<HomeScreen>
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: AppColors.white(0.08),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.white(0.18)),
+                  color: AppColors.bgElev,
+                  borderRadius: BorderRadius.circular(AppShape.rBtn),
+                  border:
+                      Border.all(color: AppColors.white(0.25), width: 1.5),
                 ),
                 child: Icon(
                   paused ? Icons.play_arrow : Icons.pause,
@@ -993,10 +992,12 @@ class _HomeScreenState extends State<HomeScreen>
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.white(0.08),
-                  borderRadius: BorderRadius.circular(100),
+                  color: AppColors.bgElev,
+                  borderRadius: BorderRadius.circular(AppShape.rBtn),
                   border: Border.all(
-                    color: ending ? Colors.transparent : AppColors.white(0.18),
+                    color:
+                        ending ? Colors.transparent : AppColors.white(0.25),
+                    width: 1.5,
                   ),
                 ),
                 child: Text(
@@ -1026,9 +1027,11 @@ class _HomeScreenState extends State<HomeScreen>
         margin: const EdgeInsets.symmetric(horizontal: 16),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
-          color: const Color(0xF211181F),
-          borderRadius: BorderRadius.circular(100),
-          border: Border.all(color: AppColors.white(0.12)),
+          color: AppColors.glass,
+          // Estado "inactivo": borde gris franco (se mantiene el gris de
+          // estado, solo cambia el lenguaje de forma).
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: Border.all(color: AppColors.white(0.25), width: 2),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1070,9 +1073,9 @@ class _HomeScreenState extends State<HomeScreen>
         margin: const EdgeInsets.symmetric(horizontal: 16),
         padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
         decoration: BoxDecoration(
-          color: const Color(0xF211181F),
-          borderRadius: BorderRadius.circular(100),
-          border: Border.all(color: AppColors.accent.withAlpha(120)),
+          color: AppColors.glass,
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: Border.all(color: AppColors.accent, width: 2),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1114,7 +1117,9 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
                 decoration: BoxDecoration(
                   color: AppColors.accent,
-                  borderRadius: BorderRadius.circular(100),
+                  borderRadius: BorderRadius.circular(AppShape.rBtn),
+                  // Acento pleno → borde negro puro (contraste neobrutalista).
+                  border: Border.all(color: AppColors.ink, width: 2),
                 ),
                 child: Text(
                   'EMPEZAR YA',
@@ -1160,7 +1165,6 @@ class _HomeScreenState extends State<HomeScreen>
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: _glassContainer(
-        radius: 20,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
         child: Row(
           children: [
@@ -1334,7 +1338,7 @@ class _HomeScreenState extends State<HomeScreen>
       child: _glassContainer(
         width: 48,
         height: 48,
-        radius: 16,
+        radius: AppShape.rBtn,
         child: Center(child: Icon(icon, color: color, size: 22)),
       ),
     );
@@ -1346,7 +1350,7 @@ class _HomeScreenState extends State<HomeScreen>
       child: _glassContainer(
         width: 48,
         height: 48,
-        radius: 16,
+        radius: AppShape.rBtn,
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),
           child: _locating
@@ -1423,34 +1427,21 @@ class _HomeScreenState extends State<HomeScreen>
     required Widget child,
     double? width,
     double? height,
-    double radius = 14,
+    double radius = AppShape.rCard,
     EdgeInsetsGeometry? padding,
   }) {
-    // Sin BackdropFilter a propósito: el blur sobre el mapa (platform view) se
-    // recalcula en cada frame al deslizar y tira los FPS. El fondo ya es casi
-    // opaco, así que un sólido translúcido se ve prácticamente igual.
+    // Neobrutalismo: overlay SÓLIDO sobre el mapa con borde franco y sombra
+    // dura desplazada (nada de blur ni glow, que además tiraban los FPS).
     return Container(
       width: width,
       height: height,
       padding: padding,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: const Color(0xF211181F),
+        color: AppColors.glass,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: AppColors.accent.withAlpha(30)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.black(0.3),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-          // Glow neón tenue (pop-futurismo) sin blur sobre el mapa.
-          BoxShadow(
-            color: AppColors.accent.withAlpha(22),
-            blurRadius: 20,
-            spreadRadius: -6,
-          ),
-        ],
+        border: Border.all(color: AppColors.line, width: 2),
+        boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
       ),
       child: child,
     );
@@ -1479,22 +1470,16 @@ class _CourtSwipeCard extends StatelessWidget {
       sessionProfile: session.profile,
       sessionEmail: session.email,
     );
-    // Sin BackdropFilter: el blur sobre el mapa en movimiento recalcula por
-    // frame y baja los FPS. El fondo ya es casi opaco; lo subimos a opaco.
+    // Tarjeta protagonista del mapa: sólida, borde claro franco y sombra dura
+    // desplazada (lenguaje neobrutalista, sin blur sobre el mapa).
     return Container(
       padding: const EdgeInsets.all(14),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: const Color(0xF211181F),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.white(0.1)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.black(0.5),
-            blurRadius: 60,
-            offset: const Offset(0, 20),
-          ),
-        ],
+        color: AppColors.glass,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        border: Border.all(color: AppColors.line, width: 2),
+        boxShadow: AppFx.hardShadow(),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1506,7 +1491,7 @@ class _CourtSwipeCard extends StatelessWidget {
               children: [
                 CourtImage(
                   url: court.img,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(AppShape.rBtn),
                 ),
                 Positioned(
                   top: 6,
@@ -1518,7 +1503,7 @@ class _CourtSwipeCard extends StatelessWidget {
                     ),
                     decoration: BoxDecoration(
                       color: AppColors.black(0.75),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(AppShape.rChip),
                     ),
                     child: Text(
                       court.dist.toUpperCase(),
@@ -1602,7 +1587,11 @@ class _CourtSwipeCard extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           decoration: BoxDecoration(
                             color: AppColors.accent,
-                            borderRadius: BorderRadius.circular(100),
+                            borderRadius:
+                                BorderRadius.circular(AppShape.rBtn),
+                            // Acento pleno → borde negro puro.
+                            border:
+                                Border.all(color: AppColors.ink, width: 2),
                           ),
                           alignment: Alignment.center,
                           child: Text(
@@ -1637,9 +1626,9 @@ class _CourtSwipeCard extends StatelessWidget {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: AppColors.white(0.06),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.white(0.08)),
+          color: AppColors.bgElev,
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: Border.all(color: AppColors.white(0.25), width: 1.5),
         ),
         child: Icon(icon, color: Colors.white, size: 16),
       ),

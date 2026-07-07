@@ -53,7 +53,7 @@ class CreateScreen extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: AppColors.bgElev,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppShape.rCard)),
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) => SafeArea(
@@ -75,9 +75,10 @@ class CreateScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 decoration: BoxDecoration(
-                  color: const Color(0x331A2430),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.white(0.1)),
+                  color: AppColors.bgElev,
+                  borderRadius: BorderRadius.circular(AppShape.rBtn),
+                  border:
+                      Border.all(color: AppColors.white(0.25), width: 1.5),
                 ),
                 child: DropdownButton<Court>(
                   value: selected,
@@ -108,9 +109,10 @@ class CreateScreen extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                   decoration: BoxDecoration(
-                    color: const Color(0x331A2430),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.white(0.1)),
+                    color: AppColors.bgElev,
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                    border:
+                        Border.all(color: AppColors.white(0.25), width: 1.5),
                   ),
                   child: Row(
                     children: [
@@ -155,12 +157,14 @@ class CreateScreen extends StatelessWidget {
                   hintText: 'Ej. 5v5, nivel intermedio',
                   hintStyle: AppText.grotesk(size: 13, color: AppColors.white(0.35)),
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: AppColors.white(0.1)),
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                    borderSide:
+                        BorderSide(color: AppColors.white(0.25), width: 1.5),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.accent),
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                    borderSide:
+                        const BorderSide(color: AppColors.accent, width: 2),
                   ),
                 ),
               ),
@@ -209,13 +213,13 @@ class CreateScreen extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   decoration: BoxDecoration(
-                    gradient: saving
+                    // CTA: acento plano + borde negro (sin degradado ni
+                    // píldora).
+                    color: saving ? AppColors.white(0.1) : AppColors.accent,
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                    border: saving
                         ? null
-                        : const LinearGradient(
-                            colors: [AppColors.accent, AppColors.accentDark],
-                          ),
-                    color: saving ? AppColors.white(0.1) : null,
-                    borderRadius: BorderRadius.circular(100),
+                        : Border.all(color: AppColors.ink, width: 2),
                   ),
                   alignment: Alignment.center,
                   child: saving
@@ -255,9 +259,9 @@ class CreateScreen extends StatelessWidget {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: const Color(0x331A2430),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.white(0.1)),
+            color: AppColors.bgElev,
+            borderRadius: BorderRadius.circular(AppShape.rBtn),
+            border: Border.all(color: AppColors.white(0.25), width: 1.5),
           ),
           child: Icon(icon, color: Colors.white, size: 18),
         ),
@@ -285,10 +289,11 @@ class CreateScreen extends StatelessWidget {
               child: Container(
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.all(18),
+                // Card de opción: sólida con borde claro franco.
                 decoration: BoxDecoration(
-                  color: const Color(0x991A2430),
-                  border: Border.all(color: AppColors.white(0.06)),
-                  borderRadius: BorderRadius.circular(18),
+                  color: AppColors.card,
+                  border: Border.all(color: AppColors.line, width: 2),
+                  borderRadius: BorderRadius.circular(AppShape.rCard),
                 ),
                 child: Row(
                   children: [

@@ -111,9 +111,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(
-                                color: AppColors.white(0.05),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: AppColors.white(0.08)),
+                                color: AppColors.bgElev,
+                                borderRadius:
+                                    BorderRadius.circular(AppShape.rBtn),
+                                border: Border.all(
+                                    color: AppColors.white(0.25), width: 1.5),
                               ),
                               child: const Icon(Icons.settings_outlined,
                                   color: Colors.white, size: 18),
@@ -126,9 +128,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: AppColors.white(0.05),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppColors.white(0.08)),
+                              color: AppColors.bgElev,
+                              borderRadius:
+                                  BorderRadius.circular(AppShape.rBtn),
+                              border: Border.all(
+                                  color: AppColors.white(0.25), width: 1.5),
                             ),
                             child: const Icon(Icons.logout,
                                 color: Colors.white, size: 18),
@@ -171,9 +175,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: AppColors.white(0.05),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.white(0.08)),
+              color: AppColors.bgElev,
+              borderRadius: BorderRadius.circular(AppShape.rBtn),
+              border: Border.all(color: AppColors.white(0.25), width: 1.5),
             ),
             child: const Icon(Icons.notifications_outlined,
                 color: Colors.white, size: 18),
@@ -187,7 +191,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                 decoration: BoxDecoration(
                   color: AppColors.accent,
-                  borderRadius: BorderRadius.circular(100),
+                  borderRadius: BorderRadius.circular(AppShape.rChip),
                   border: Border.all(color: AppColors.bg, width: 2),
                 ),
                 alignment: Alignment.center,
@@ -210,9 +214,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: const Color(0x331A2430),
-        borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: AppColors.white(0.08)),
+        color: AppColors.bgElev,
+        borderRadius: BorderRadius.circular(AppShape.rBtn),
+        border: Border.all(color: AppColors.white(0.25), width: 1.5),
       ),
       child: Row(
         children: [
@@ -233,7 +237,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
             color: active ? AppColors.accent : Colors.transparent,
-            borderRadius: BorderRadius.circular(100),
+            // Radio chip por estar anidado dentro del selector rBtn.
+            borderRadius: BorderRadius.circular(AppShape.rChip),
           ),
           alignment: Alignment.center,
           child: Text(
@@ -309,9 +314,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
-                  color: AppColors.white(0.05),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.white(0.1)),
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(AppShape.rBtn),
+                  border:
+                      Border.all(color: AppColors.white(0.25), width: 1.5),
                 ),
                 child: Row(
                   children: [
@@ -340,9 +346,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
-                  color: AppColors.white(0.05),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.white(0.1)),
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(AppShape.rBtn),
+                  border:
+                      Border.all(color: AppColors.white(0.25), width: 1.5),
                 ),
                 child: Row(
                   children: [
@@ -450,25 +457,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       height: 84,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: color, width: 3),
-        gradient: useImage
-            ? null
-            : LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [color, _darkenColor(color)],
-              ),
+        // Avatar neobrutalista: relleno plano del color del clan, borde negro
+        // puro y sombra dura chica (sin degradado ni glow).
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        border: Border.all(color: AppColors.ink, width: 2),
+        color: useImage ? null : color,
         image: useImage
             ? DecorationImage(image: NetworkImage(profile.avatar), fit: BoxFit.cover)
             : null,
-        boxShadow: [
-          BoxShadow(
-            color: color.withAlpha(85),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        boxShadow: AppFx.hardShadow(offset: const Offset(2, 2)),
       ),
       child: useImage
           ? null
@@ -487,7 +484,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
     );
-    return framedAvatar(frameById(profile.avatarFrame), 24, inner);
+    return framedAvatar(frameById(profile.avatarFrame), AppShape.rCard, inner);
   }
 
   Widget _levelCard() {
@@ -499,7 +496,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Fondo SÓLIDO (el mazo de partidos va detrás y no debe transparentarse).
     final solid = Color.alphaBlend(const Color(0x801A2430), AppColors.bg);
     return PopPanel(
-      radius: 18,
+      radius: AppShape.rCard,
       fill: solid,
       glow: true,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -521,9 +518,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          // Barra de progreso con degradado + glow neón.
+          // Barra de progreso plana: acento sólido, sin glow ni píldora.
           ClipRRect(
-            borderRadius: BorderRadius.circular(100),
+            borderRadius: BorderRadius.circular(AppShape.rChip),
             child: Container(
               height: 7,
               color: AppColors.white(0.08),
@@ -532,10 +529,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 widthFactor: progress == 0 ? 0.001 : progress,
                 child: Container(
                   decoration: BoxDecoration(
-                    gradient: AppFx.accentGradient(),
-                    borderRadius: BorderRadius.circular(100),
-                    boxShadow:
-                        AppFx.neonGlow(AppColors.accent, blur: 8, alpha: 130),
+                    color: AppColors.accent,
+                    borderRadius: BorderRadius.circular(AppShape.rChip),
                   ),
                 ),
               ),
@@ -642,15 +637,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Color _resultBorder(PlayResult? r) {
+    // Bordes de estado PLENOS (lenguaje neobrutalista, sin alphas tímidos).
     switch (r) {
       case PlayResult.win:
-        return AppColors.open.withAlpha(110);
+        return AppColors.open;
       case PlayResult.loss:
-        return const Color(0xFFFF6B6B).withAlpha(110);
+        return const Color(0xFFFF6B6B);
       case PlayResult.tie:
-        return AppColors.white(0.22);
+        return AppColors.white(0.25);
       default:
-        return AppColors.white(0.08);
+        return AppColors.white(0.25);
     }
   }
 
@@ -661,8 +657,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
         color: _resultBg(s.result),
-        border: Border.all(color: _resultBorder(s.result)),
-        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _resultBorder(s.result), width: 2),
+        borderRadius: BorderRadius.circular(AppShape.rCard),
       ),
       child: Row(
         children: [
@@ -670,8 +666,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
             decoration: BoxDecoration(
               color: color.withAlpha(38),
-              borderRadius: BorderRadius.circular(7),
-              border: Border.all(color: color.withAlpha(120)),
+              borderRadius: BorderRadius.circular(AppShape.rChip),
+              border: Border.all(color: color),
             ),
             child: Text(label,
                 style: AppText.grotesk(
@@ -741,9 +737,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0x801A2430),
-          border: Border.all(color: AppColors.white(0.06)),
-          borderRadius: BorderRadius.circular(14),
+          color: AppColors.card,
+          border: Border.all(color: AppColors.white(0.25), width: 1.5),
+          borderRadius: BorderRadius.circular(AppShape.rCard),
         ),
         child: Row(
           children: [
@@ -755,7 +751,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               decoration: BoxDecoration(
                 color: color.withAlpha(38),
                 shape: BoxShape.circle,
-                border: Border.all(color: color.withAlpha(150)),
+                border: Border.all(color: color),
               ),
               child: Text('$rank',
                   style: AppText.archivo(
@@ -822,9 +818,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.symmetric(vertical: 12),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: AppColors.white(0.04),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.white(0.08)),
+          color: AppColors.bgElev,
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: Border.all(color: AppColors.white(0.25), width: 1.5),
         ),
         child: Text(label,
             style: AppText.grotesk(
@@ -840,7 +836,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: AppColors.bgElev,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppShape.rCard)),
       ),
       builder: (ctx) => ConstrainedBox(
         constraints: BoxConstraints(
@@ -926,12 +922,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             decoration: BoxDecoration(
               color: selected
                   ? AppColors.accent.withAlpha(30)
-                  : const Color(0x801A2430),
+                  : AppColors.card,
               border: Border.all(
-                color: selected ? AppColors.accent : AppColors.white(0.08),
-                width: selected ? 1.5 : 1,
+                color: selected ? AppColors.accent : AppColors.white(0.25),
+                width: selected ? 2 : 1.5,
               ),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(AppShape.rBtn),
             ),
             child: Row(
               children: [
@@ -999,10 +995,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0x801A2430),
+        color: AppColors.card,
+        // Desbloqueado: borde dorado pleno (color de estado).
         border: Border.all(
-            color: unlocked ? kGold.withAlpha(90) : AppColors.white(0.06)),
-        borderRadius: BorderRadius.circular(14),
+            color: unlocked ? kGold : AppColors.white(0.25),
+            width: unlocked ? 2 : 1.5),
+        borderRadius: BorderRadius.circular(AppShape.rCard),
       ),
       child: Row(
         children: [
@@ -1012,7 +1010,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: color.withAlpha(unlocked ? 38 : 20),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(AppShape.rBtn),
             ),
             child: Icon(a.icon, size: 20, color: color),
           ),
@@ -1093,14 +1091,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: equipped ? rarity.withAlpha(30) : const Color(0x801A2430),
+          color: equipped ? rarity.withAlpha(30) : AppColors.card,
+          // Rareza como borde pleno; bloqueado queda con el borde neutro.
           border: Border.all(
             color: equipped
                 ? rarity
-                : (unlocked ? rarity.withAlpha(90) : AppColors.white(0.06)),
-            width: equipped ? 1.5 : 1,
+                : (unlocked ? rarity : AppColors.white(0.25)),
+            width: equipped ? 2 : 1.5,
           ),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(AppShape.rCard),
         ),
         child: Row(
           children: [
@@ -1175,8 +1174,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: _resultBg(s.result),
-          border: Border.all(color: _resultBorder(s.result)),
-          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _resultBorder(s.result), width: 2),
+          borderRadius: BorderRadius.circular(AppShape.rCard),
         ),
         child: Row(
           children: [
@@ -1184,8 +1183,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: color.withAlpha(38),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: color.withAlpha(120)),
+                borderRadius: BorderRadius.circular(AppShape.rChip),
+                border: Border.all(color: color),
               ),
               child: Text(label,
                   style: AppText.grotesk(
@@ -1267,8 +1266,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (ctx) => Container(
         decoration: BoxDecoration(
           color: AppColors.bgElev,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border.all(color: AppColors.white(0.08)),
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(AppShape.rCard)),
+          border: Border.all(color: AppColors.line, width: 2),
         ),
         // Sumamos el inset de la barra de navegación del sistema para que el
         // botón inferior no quede tapado por ella.
@@ -1295,7 +1295,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   url: court?.img ?? '',
                   width: 64,
                   height: 64,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(AppShape.rBtn),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -1339,8 +1339,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: color.withAlpha(38),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: color.withAlpha(120)),
+                borderRadius: BorderRadius.circular(AppShape.rChip),
+                border: Border.all(color: color, width: 1.5),
               ),
               child: Text(label,
                   style: AppText.grotesk(
@@ -1393,8 +1393,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: kGold.withAlpha(38),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: kGold.withAlpha(120)),
+                        borderRadius: BorderRadius.circular(AppShape.rChip),
+                        border: Border.all(color: kGold),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1428,7 +1428,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     backgroundColor: AppColors.accent.withAlpha(30),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppShape.rBtn),
+                      side: const BorderSide(
+                          color: AppColors.accent, width: 2),
                     ),
                   ),
                   child: Text('Ver cancha',
@@ -1488,9 +1490,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.white(0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.white(0.08)),
+        color: AppColors.bgElev,
+        borderRadius: BorderRadius.circular(AppShape.rBtn),
+        border: Border.all(color: AppColors.white(0.25), width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1554,9 +1556,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: const Color(0x801A2430),
-          border: Border.all(color: AppColors.white(0.06)),
-          borderRadius: BorderRadius.circular(14),
+          color: AppColors.card,
+          border: Border.all(color: AppColors.white(0.25), width: 1.5),
+          borderRadius: BorderRadius.circular(AppShape.rCard),
         ),
         child: Row(
           children: [
@@ -1564,7 +1566,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               url: c.img,
               width: 52,
               height: 52,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(AppShape.rBtn),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1608,9 +1610,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       margin: const EdgeInsets.only(top: 4),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       decoration: BoxDecoration(
-        color: const Color(0x801A2430),
-        border: Border.all(color: AppColors.white(0.06)),
-        borderRadius: BorderRadius.circular(14),
+        color: AppColors.card,
+        border: Border.all(color: AppColors.white(0.25), width: 1.5),
+        borderRadius: BorderRadius.circular(AppShape.rCard),
       ),
       child: Text(
         text,
@@ -1661,8 +1663,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final history = ps.streakHistory;
     await showDialog<void>(
       context: context,
+      // El fondo/forma los pone el dialogTheme global (neobrutalista).
       builder: (_) => AlertDialog(
-        backgroundColor: AppColors.bgElev,
         scrollable: true,
         title: Text('Tus rachas',
             style: AppText.archivo(size: 18, weight: FontWeight.w800)),
@@ -1777,9 +1779,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         decoration: BoxDecoration(
-          color: const Color(0x801A2430),
-          border: Border.all(color: AppColors.white(0.08)),
-          borderRadius: BorderRadius.circular(14),
+          color: AppColors.card,
+          border: Border.all(color: AppColors.white(0.25), width: 1.5),
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
         ),
         child: Row(
           children: [
@@ -1814,8 +1816,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _confirmLogout(BuildContext context) async {
     final ok = await showDialog<bool>(
       context: context,
+      // El fondo/forma los pone el dialogTheme global (neobrutalista).
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.bgElev,
         title: Text('Cerrar sesión', style: AppText.archivo(size: 18, weight: FontWeight.w800)),
         content: Text('¿Querés salir de tu cuenta?',
             style: AppText.grotesk(size: 14, color: AppColors.white(0.7))),
@@ -1945,9 +1947,10 @@ class _FriendsTabState extends State<_FriendsTab> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
-                    color: const Color(0xE011181F),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.white(0.1)),
+                    // Search bar protagonista: sólida y con borde claro franco.
+                    color: AppColors.glass,
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                    border: Border.all(color: AppColors.line, width: 2),
                   ),
                   child: Row(
                     children: [
@@ -1979,10 +1982,10 @@ class _FriendsTabState extends State<_FriendsTab> {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppColors.accent, AppColors.accentDark],
-                    ),
-                    borderRadius: BorderRadius.circular(14),
+                    // Acento plano + borde negro (sin degradado).
+                    color: AppColors.accent,
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                    border: Border.all(color: AppColors.ink, width: 2),
                   ),
                   child: _adding
                       ? const Padding(
@@ -2019,9 +2022,10 @@ class _FriendsTabState extends State<_FriendsTab> {
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                       decoration: BoxDecoration(
-                        color: const Color(0x801A2430),
-                        border: Border.all(color: AppColors.white(0.06)),
-                        borderRadius: BorderRadius.circular(14),
+                        color: AppColors.card,
+                        border: Border.all(
+                            color: AppColors.white(0.25), width: 1.5),
+                        borderRadius: BorderRadius.circular(AppShape.rCard),
                       ),
                       child: Text(
                         'Todavía no agregaste amigos. Buscá su handle arriba y agregalos',
@@ -2152,18 +2156,14 @@ class _FriendsTabState extends State<_FriendsTab> {
       height: 44,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color, width: 2),
-        gradient: useImage
-            ? null
-            : LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [color, _darkenColor(color)],
-              ),
+        // Avatar de amigo: plano, borde negro y sombra dura chica.
+        borderRadius: BorderRadius.circular(AppShape.rBtn),
+        border: Border.all(color: AppColors.ink, width: 2),
+        color: useImage ? null : color,
         image: useImage
             ? DecorationImage(image: NetworkImage(fp!.avatar), fit: BoxFit.cover)
             : null,
+        boxShadow: AppFx.hardShadow(offset: const Offset(2, 2)),
       ),
       child: useImage
           ? null
@@ -2179,7 +2179,7 @@ class _FriendsTabState extends State<_FriendsTab> {
               ),
             ),
     );
-    return framedAvatar(frameById(fp?.avatarFrame ?? ''), 12, inner);
+    return framedAvatar(frameById(fp?.avatarFrame ?? ''), AppShape.rBtn, inner);
   }
 
   Widget _friendCard(Friend f) {
@@ -2194,9 +2194,9 @@ class _FriendsTabState extends State<_FriendsTab> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0x801A2430),
-        border: Border.all(color: AppColors.white(0.06)),
-        borderRadius: BorderRadius.circular(14),
+        color: AppColors.card,
+        border: Border.all(color: AppColors.white(0.25), width: 1.5),
+        borderRadius: BorderRadius.circular(AppShape.rCard),
       ),
       child: Row(
         children: [
@@ -2230,8 +2230,8 @@ class _FriendsTabState extends State<_FriendsTab> {
                           horizontal: 7, vertical: 2),
                       decoration: BoxDecoration(
                         color: AppColors.accent.withAlpha(30),
-                        borderRadius: BorderRadius.circular(100),
-                        border: Border.all(color: AppColors.accent.withAlpha(90)),
+                        borderRadius: BorderRadius.circular(AppShape.rChip),
+                        border: Border.all(color: AppColors.accent),
                       ),
                       child: Text('Nivel $friendLevel',
                           style: AppText.grotesk(
@@ -2317,8 +2317,8 @@ class _EditHandleDialogState extends State<_EditHandleDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // El fondo/forma los pone el dialogTheme global (neobrutalista).
     return AlertDialog(
-      backgroundColor: AppColors.bgElev,
       title: Text('Editar handle',
           style: AppText.archivo(size: 18, weight: FontWeight.w800)),
       content: Column(
@@ -2328,9 +2328,9 @@ class _EditHandleDialogState extends State<_EditHandleDialog> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
-              color: const Color(0xE011181F),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.white(0.1)),
+              color: AppColors.bgElev,
+              borderRadius: BorderRadius.circular(AppShape.rBtn),
+              border: Border.all(color: AppColors.white(0.25), width: 1.5),
             ),
             child: Row(
               children: [
@@ -2449,12 +2449,6 @@ Widget framedAvatar(AvatarFrame frame, double radius, Widget child) {
   );
 }
 
-/// Versión más oscura de un color, para el degradado del avatar.
-Color _darkenColor(Color c) {
-  final hsl = HSLColor.fromColor(c);
-  return hsl.withLightness((hsl.lightness - 0.12).clamp(0.0, 1.0)).toColor();
-}
-
 /// Fuerza el texto a mayúsculas mientras se escribe (insignia de clan).
 class _UpperCaseFormatter extends TextInputFormatter {
   @override
@@ -2558,11 +2552,11 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
           decoration: BoxDecoration(
             color: selected
                 ? AppColors.accent.withAlpha(40)
-                : const Color(0xE011181F),
-            borderRadius: BorderRadius.circular(12),
+                : AppColors.bgElev,
+            borderRadius: BorderRadius.circular(AppShape.rChip),
             border: Border.all(
-              color: selected ? AppColors.accent : AppColors.white(0.1),
-              width: selected ? 1.5 : 1,
+              color: selected ? AppColors.accent : AppColors.white(0.25),
+              width: selected ? 2 : 1.5,
             ),
           ),
           child: Row(
@@ -2589,8 +2583,8 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
     final bg = clanColor(_color);
     final fg = clanTextColor(_textColor);
     final preview = _ctrl.text.trim().isEmpty ? 'CLAN' : _ctrl.text.trim();
+    // El fondo/forma los pone el dialogTheme global (neobrutalista).
     return AlertDialog(
-      backgroundColor: AppColors.bgElev,
       title: Text('Insignia de Clan',
           style: AppText.archivo(size: 18, weight: FontWeight.w800)),
       content: SizedBox(
@@ -2604,19 +2598,16 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
             Center(
               child: framedAvatar(
                 frameById(_frame),
-                20,
+                AppShape.rCard,
                 Container(
                   width: 64,
                   height: 64,
                   alignment: Alignment.center,
+                  // Preview coherente con el avatar real: plano + borde negro.
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: bg, width: 3),
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [bg, _darkenColor(bg)],
-                    ),
+                    borderRadius: BorderRadius.circular(AppShape.rCard),
+                    border: Border.all(color: AppColors.ink, width: 2),
+                    color: bg,
                   ),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -2643,9 +2634,9 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
-              color: const Color(0xE011181F),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.white(0.1)),
+              color: AppColors.bgElev,
+              borderRadius: BorderRadius.circular(AppShape.rBtn),
+              border: Border.all(color: AppColors.white(0.25), width: 1.5),
             ),
             child: TextField(
               controller: _ctrl,
@@ -2940,8 +2931,8 @@ class _PrivacyDialogState extends State<_PrivacyDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // El fondo/forma los pone el dialogTheme global (neobrutalista).
     return AlertDialog(
-      backgroundColor: AppColors.bgElev,
       scrollable: true,
       title: Text('Privacidad',
           style: AppText.archivo(size: 18, weight: FontWeight.w800)),
@@ -3078,16 +3069,15 @@ class _StatBox extends StatelessWidget {
     final box = Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        gradient: accent ? AppFx.accentGradient() : null,
-        color: accent ? null : const Color(0x991A2430),
+        // Caja destacada: acento plano + borde negro; el resto sólido con
+        // borde claro. Sombra dura solo en la destacada.
+        color: accent ? AppColors.accent : AppColors.card,
         border: accent
-            ? null
-            : Border.all(color: AppColors.accent.withAlpha(38)),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: accent
-            ? AppFx.neonGlow(AppColors.accent,
-                blur: 22, alpha: 90, offset: const Offset(0, 8))
-            : null,
+            ? Border.all(color: AppColors.ink, width: 2)
+            : Border.all(color: AppColors.white(0.25), width: 1.5),
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        boxShadow:
+            accent ? AppFx.hardShadow(offset: const Offset(3, 3)) : null,
       ),
       child: Row(
         children: [
@@ -3098,7 +3088,7 @@ class _StatBox extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: accent ? AppColors.white(0.18) : AppColors.accent.withAlpha(28),
-                borderRadius: BorderRadius.circular(11),
+                borderRadius: BorderRadius.circular(AppShape.rBtn),
               ),
               child: Icon(
                 icon,

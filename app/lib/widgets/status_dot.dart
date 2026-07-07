@@ -16,18 +16,8 @@ class StatusDot extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 7,
-          height: 7,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(color: color, blurRadius: 8),
-              BoxShadow(color: color.withAlpha(120), blurRadius: 16, spreadRadius: 1),
-            ],
-          ),
-        ),
+        // Cuadradito plano (neobrutalismo): sin glow, el color habla solo.
+        Container(width: 8, height: 8, color: color),
         const SizedBox(width: 6),
         Text(
           label,

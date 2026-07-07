@@ -23,7 +23,7 @@ import 'services/profiles_provider.dart';
 import 'services/session.dart';
 import 'services/sync_coordinator.dart';
 import 'theme/app_theme.dart';
-import 'widgets/bball_glyph.dart';
+import 'widgets/app_logo.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -195,19 +195,8 @@ class _Splash extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [AppColors.accent, AppColors.accentDark],
-                ),
-              ),
-              child: const Center(child: BBallGlyph(size: 34)),
-            ),
+            // Marca plana (neobrutalismo): el logo va limpio, sin caja ni glow.
+            const AppLogo(height: 96),
             const SizedBox(height: 20),
             SizedBox(
               width: 22,

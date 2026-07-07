@@ -16,10 +16,14 @@ class PermissionsModal extends StatefulWidget {
   final bool autoClose;
   const PermissionsModal({super.key, this.autoClose = true});
 
-  /// Muestra el modal si falta algún permiso obligatorio (uso automático).
+  /// Muestra el modal si falta algún permiso, INCLUIDA la batería recomendada:
+  /// conceder permisos desde Ajustes suele matar el proceso (comportamiento del
+  /// SO), y al reabrir el usuario necesita reencontrarse con el modal para
+  /// completar lo que le faltaba. "Ahora no" lo descarta sin insistir en la
+  /// sesión.
   static Future<void> showIfNeeded(BuildContext context) async {
     final state = await checkPermissions();
-    if (state.allGranted || !context.mounted) return;
+    if (state.missing.isEmpty || !context.mounted) return;
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -68,8 +72,9 @@ class _PermissionsModalState extends State<PermissionsModal>
     final st = await checkPermissions();
     if (!mounted) return;
     setState(() => _state = st);
-    // Si ya están todos, cerramos el modal (solo en el modo automático).
-    if (st.allGranted && widget.autoClose) {
+    // Se cierra solo cuando no falta NADA (batería incluida): si cerráramos con
+    // la batería pendiente, el modal se abriría y cerraría al instante.
+    if (st.missing.isEmpty && widget.autoClose) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) Navigator.of(context).maybePop();
       });
@@ -99,6 +104,12 @@ class _PermissionsModalState extends State<PermissionsModal>
       Icons.alarm,
       'Alarmas exactas',
       'Arranca y cierra tu partido solo, aunque tengas la app cerrada.',
+    ),
+    AppPerm.battery: (
+      Icons.battery_charging_full,
+      'Batería sin restricciones',
+      'Evita que el sistema congele la app en pleno partido. Sin esto tu '
+          'partido no se pierde, pero el cronómetro puede dejar de verse en vivo.',
     ),
   };
 
@@ -286,6 +297,9 @@ class _PermissionsModalState extends State<PermissionsModal>
 
   Widget _row(AppPerm p, bool granted) {
     final (icon, title, why) = _meta[p]!;
+    // La batería es recomendada, no obligatoria: no bloquea el cierre del modal
+    // (ver PermState.allGranted) y lo aclaramos con un badge.
+    final recommended = p == AppPerm.battery;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -299,9 +313,32 @@ class _PermissionsModalState extends State<PermissionsModal>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style:
-                        AppText.grotesk(size: 13, weight: FontWeight.w700)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(title,
+                          style: AppText.grotesk(
+                              size: 13, weight: FontWeight.w700)),
+                    ),
+                    if (recommended) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withAlpha(30),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text('RECOMENDADO',
+                            style: AppText.grotesk(
+                                size: 8,
+                                weight: FontWeight.w800,
+                                color: AppColors.accent,
+                                letterSpacing: 0.2)),
+                      ),
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 2),
                 Text(why,
                     style: AppText.grotesk(

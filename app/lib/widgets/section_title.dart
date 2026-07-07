@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 
 class SectionTitle extends StatelessWidget {
@@ -20,17 +19,12 @@ class SectionTitle extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Kicker neón: barrita de acento con glow antes del título.
+              // Kicker neobrutalista: bloque de acento plano, sin glow.
               Container(
-                width: 4,
+                width: 5,
                 height: 16,
                 margin: const EdgeInsets.only(right: 9, bottom: 1),
-                decoration: BoxDecoration(
-                  gradient: AppFx.accentGradient(),
-                  borderRadius: BorderRadius.circular(2),
-                  boxShadow:
-                      AppFx.neonGlow(AppColors.accent, blur: 8, alpha: 120),
-                ),
+                color: AppColors.accent,
               ),
               Text(
                 title.toUpperCase(),

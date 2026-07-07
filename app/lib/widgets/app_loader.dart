@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import 'app_logo.dart';
 import 'pop_background.dart';
@@ -41,14 +40,9 @@ class _AppLoaderState extends State<AppLoader> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Logo de 1of1 con glow neón de acento.
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      boxShadow:
-                          AppFx.neonGlow(AppColors.accent, blur: 34, alpha: 90),
-                    ),
-                    child: const AppLogo(height: 120),
-                  ),
+                  // Logo de 1of1 limpio: en neobrutalismo la marca va plana,
+                  // sin glow.
+                  const AppLogo(height: 120),
                   const SizedBox(height: 24),
                   SizedBox(
                     width: 22,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bball_glyph.dart';
 import '../widgets/under_construction.dart';
@@ -51,23 +52,23 @@ class CrewScreen extends StatelessWidget {
             Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(14),
+              // Card de chat: sólida, borde franco y sombra dura.
               decoration: BoxDecoration(
-                color: const Color(0x991A2430),
-                border: Border.all(color: AppColors.white(0.06)),
-                borderRadius: BorderRadius.circular(16),
+                color: AppColors.card,
+                border: Border.all(color: AppColors.line, width: 2),
+                borderRadius: BorderRadius.circular(AppShape.rCard),
+                boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
               ),
               child: Row(
                 children: [
                   Container(
                     width: 48,
                     height: 48,
+                    // Avatar: acento plano + borde negro (sin degradado).
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [AppColors.accent, AppColors.accentDark],
-                      ),
+                      borderRadius: BorderRadius.circular(AppShape.rBtn),
+                      color: AppColors.accent,
+                      border: Border.all(color: AppColors.ink, width: 2),
                     ),
                     child: const Center(child: BBallGlyph(size: 24)),
                   ),

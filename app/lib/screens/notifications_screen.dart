@@ -85,9 +85,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: AppColors.white(0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.white(0.08)),
+          color: AppColors.bgElev,
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: Border.all(color: AppColors.white(0.25), width: 1.5),
         ),
         child: Icon(icon, color: Colors.white, size: 18),
       ),
@@ -122,9 +122,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.white(0.04),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: e.color.withAlpha(60)),
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        // Borde pleno del color del evento (estado franco).
+        border: Border.all(color: e.color, width: 2),
       ),
       child: Row(
         children: [
@@ -133,8 +134,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             height: 40,
             decoration: BoxDecoration(
               color: e.color.withAlpha(32),
-              borderRadius: BorderRadius.circular(11),
-              border: Border.all(color: e.color.withAlpha(100)),
+              borderRadius: BorderRadius.circular(AppShape.rBtn),
+              border: Border.all(color: e.color, width: 1.5),
             ),
             child: Icon(e.icon, size: 20, color: e.color),
           ),

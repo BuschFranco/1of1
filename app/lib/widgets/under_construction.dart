@@ -11,8 +11,8 @@ class UnderConstructionBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: const Color(0xFFFFB020).withAlpha(36),
-        borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: const Color(0xFFFFB020).withAlpha(110)),
+        borderRadius: BorderRadius.circular(AppShape.rChip),
+        border: Border.all(color: const Color(0xFFFFB020), width: 1.5),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -47,8 +47,8 @@ class UnderConstructionBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: const Color(0xFFFFB020).withAlpha(28),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFFFB020).withAlpha(90)),
+        borderRadius: BorderRadius.circular(AppShape.rBtn),
+        border: Border.all(color: const Color(0xFFFFB020), width: 2),
       ),
       child: Row(
         children: [

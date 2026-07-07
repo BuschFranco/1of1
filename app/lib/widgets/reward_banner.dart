@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/play_session_service.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 
 /// Overlay que muestra, de a uno y con animación, los eventos de recompensa
@@ -104,20 +105,10 @@ class _RewardOverlayState extends State<RewardOverlay>
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: AppColors.bgElev,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: r.color.withAlpha(150)),
-          boxShadow: [
-            BoxShadow(
-              color: r.color.withAlpha(70),
-              blurRadius: 28,
-              spreadRadius: 1,
-            ),
-            BoxShadow(
-              color: AppColors.black(0.4),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(AppShape.rCard),
+          // Neobrutalismo: borde franco del color del evento + sombra dura.
+          border: Border.all(color: r.color, width: 2),
+          boxShadow: AppFx.hardShadow(),
         ),
         child: Row(
           children: [
@@ -126,8 +117,8 @@ class _RewardOverlayState extends State<RewardOverlay>
               height: 42,
               decoration: BoxDecoration(
                 color: r.color.withAlpha(36),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: r.color.withAlpha(110)),
+                borderRadius: BorderRadius.circular(AppShape.rChip),
+                border: Border.all(color: r.color, width: 1.5),
               ),
               child: Icon(r.icon, size: 22, color: r.color),
             ),

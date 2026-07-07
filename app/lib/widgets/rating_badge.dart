@@ -19,16 +19,8 @@ class RatingBadge extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Glow neón tenue detrás de la estrella.
-        Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(color: c.withAlpha(90), blurRadius: 10, spreadRadius: -2),
-            ],
-          ),
-          child: Icon(Icons.star_rounded, size: size + 2, color: c),
-        ),
+        // Estrella plana (neobrutalismo): sin glow.
+        Icon(Icons.star_rounded, size: size + 2, color: c),
         const SizedBox(width: 3),
         Text(
           value.toString(),

@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
@@ -14,42 +13,24 @@ class AppTabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xE011181F),
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: AppColors.white(0.08)),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.black(0.35),
-                blurRadius: 40,
-                offset: const Offset(0, 20),
-              ),
-              // Glow neón tenue de la barra (pop-futurismo).
-              BoxShadow(
-                color: AppColors.accent.withAlpha(28),
-                blurRadius: 30,
-                spreadRadius: -4,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _tabItem(AppTab.home, 'Mapa', Icons.map_outlined),
-              _tabItem(AppTab.list, 'Canchas', Icons.sports_basketball_outlined),
-              _PlusButton(onTap: () => onChange(AppTab.plus)),
-              _tabItem(AppTab.chat, 'Crew', Icons.chat_bubble_outline),
-              _tabItem(AppTab.profile, 'Perfil', Icons.person_outline),
-            ],
-          ),
-        ),
+    // Barra neobrutalista: sólida, borde franco y sombra dura. Sin blur.
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.glass,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        border: Border.all(color: AppColors.line, width: 2),
+        boxShadow: AppFx.hardShadow(),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _tabItem(AppTab.home, 'Mapa', Icons.map_outlined),
+          _tabItem(AppTab.list, 'Canchas', Icons.sports_basketball_outlined),
+          _PlusButton(onTap: () => onChange(AppTab.plus)),
+          _tabItem(AppTab.chat, 'Crew', Icons.chat_bubble_outline),
+          _tabItem(AppTab.profile, 'Perfil', Icons.person_outline),
+        ],
       ),
     );
   }
@@ -65,30 +46,14 @@ class AppTabBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Ícono activo con glow neón.
-            Container(
-              decoration: isActive
-                  ? BoxDecoration(
-                      shape: BoxShape.circle,
-                      boxShadow: AppFx.neonGlow(AppColors.accent,
-                          blur: 12, spread: 0, alpha: 130),
-                    )
-                  : null,
-              child: Icon(icon, color: color, size: 22),
-            ),
+            Icon(icon, color: color, size: 22),
             const SizedBox(height: 3),
-            // Indicador neón bajo la pestaña activa.
+            // Subrayado rectangular plano bajo la pestaña activa.
             AnimatedContainer(
               duration: const Duration(milliseconds: 220),
-              width: isActive ? 16 : 0,
-              height: 2,
-              decoration: BoxDecoration(
-                gradient: isActive ? AppFx.accentGradient() : null,
-                borderRadius: BorderRadius.circular(2),
-                boxShadow: isActive
-                    ? AppFx.neonGlow(AppColors.accent, blur: 6, alpha: 140)
-                    : null,
-              ),
+              width: isActive ? 18 : 0,
+              height: 3,
+              color: isActive ? AppColors.accent : Colors.transparent,
             ),
             const SizedBox(height: 2),
             Text(
@@ -172,19 +137,10 @@ class _PlusButtonState extends State<_PlusButton>
           width: 48,
           height: 48,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.accent, AppColors.accentDark],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.accent.withAlpha(85),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(AppShape.rBtn),
+            color: AppColors.accent,
+            border: Border.all(color: AppColors.ink, width: 2),
+            boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
           ),
           child: const Icon(Icons.add, color: Colors.white, size: 24),
         ),

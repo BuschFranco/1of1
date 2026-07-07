@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 
-/// Panel glass pop-futurista: borde "hairline" con degradado (ring neón) +
-/// relleno oscuro + glow opcional + un highlight superior sutil. Bloque base
-/// que estandariza los paneles `Color(0x..1A2430)` dispersos por la app.
+/// Panel neobrutalista: relleno SÓLIDO, borde franco del color del ring y
+/// sombra dura opcional ([glow] la activa, manteniendo el nombre histórico).
+/// Sin highlight de vidrio ni degradados.
 class PopPanel extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -19,45 +19,25 @@ class PopPanel extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(16),
-    this.radius = 18,
+    this.radius = AppShape.rCard,
     this.ringColor = AppColors.accent,
     this.fill = AppColors.panel,
     this.onTap,
     this.glow = false,
-    this.ringAlpha = 120,
+    this.ringAlpha = 255,
   });
 
   @override
   Widget build(BuildContext context) {
-    final panel = GradientRing(
-      radius: radius,
-      ringColor: ringColor,
-      ringTopAlpha: ringAlpha,
-      fill: fill,
-      glow: glow ? AppFx.neonGlow(ringColor, blur: 22, alpha: 60) : null,
-      child: Stack(
-        children: [
-          // Highlight superior sutil (reflejo de "vidrio").
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: radius + 6,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(radius - 1)),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [AppColors.white(0.05), Colors.transparent],
-                ),
-              ),
-            ),
-          ),
-          Padding(padding: padding, child: child),
-        ],
+    final panel = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: ringColor.withAlpha(ringAlpha), width: 2),
+        boxShadow: glow ? AppFx.hardShadow() : null,
       ),
+      child: child,
     );
     if (onTap != null) {
       return GestureDetector(

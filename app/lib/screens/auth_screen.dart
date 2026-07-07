@@ -1,8 +1,6 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/session.dart';
-import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/pop_background.dart';
@@ -45,16 +43,42 @@ class _AuthScreenState extends State<AuthScreen> {
 
   bool get _isSignup => _mode == AuthMode.signup;
 
+  // Dirección del deslizamiento al cambiar de modo (+1: el formulario nuevo
+  // entra desde la derecha; -1: desde la izquierda), como las pestañas de la app.
+  int _modeSlideDir = 1;
+
+  /// Cambia de modo con la animación de entrada correspondiente. Limpia el
+  /// error para no arrastrar mensajes del formulario anterior.
+  void _setMode(AuthMode mode) {
+    if (_loading || mode == _mode) return;
+    setState(() {
+      // Orden visual: [Ingresar | Registrarse] → ir a signup entra desde la
+      // derecha; volver a login, desde la izquierda.
+      _modeSlideDir = mode == AuthMode.signup ? 1 : -1;
+      _mode = mode;
+      _error = null;
+    });
+  }
+
+  /// Swipe horizontal para alternar login/registro (mismo gesto que las
+  /// pestañas dentro de la app): izquierda → Registrarse, derecha → Ingresar.
+  void _handleModeSwipe(DragEndDetails d) {
+    final v = d.primaryVelocity ?? 0;
+    if (v == 0) return;
+    _setMode(v < 0 ? AuthMode.signup : AuthMode.login);
+  }
+
   // Email bien formado: parte local + dominio con extensión válida (al menos
   // 2 letras). "user@gmail" o "user@gmail.c" no pasan; "user@gmail.com" sí.
-  static final _emailRe =
-      RegExp(r'^[\w.+-]+@[\w-]+(\.[\w-]+)*\.[a-zA-Z]{2,}$');
+  static final _emailRe = RegExp(r'^[\w.+-]+@[\w-]+(\.[\w-]+)*\.[a-zA-Z]{2,}$');
 
   Future<void> _submit() async {
     // Validaciones locales antes de pegarle a la red.
     final email = _emailCtrl.text.trim();
     if (!_emailRe.hasMatch(email)) {
-      setState(() => _error = 'Ingresá un email válido (ej. nombre@gmail.com).');
+      setState(
+        () => _error = 'Ingresá un email válido (ej. nombre@gmail.com).',
+      );
       return;
     }
     if (_isSignup && _passCtrl.text != _pass2Ctrl.text) {
@@ -75,8 +99,11 @@ class _AuthScreenState extends State<AuthScreen> {
             city: _cityCtrl.text,
             phone: _phoneCtrl.text,
           )
-        : await session.login(_emailCtrl.text, _passCtrl.text,
-            persist: _keepLoggedIn);
+        : await session.login(
+            _emailCtrl.text,
+            _passCtrl.text,
+            persist: _keepLoggedIn,
+          );
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -93,63 +120,103 @@ class _AuthScreenState extends State<AuthScreen> {
         children: [
           const Positioned.fill(child: PopBackground()),
           SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _brand(),
-                  const SizedBox(height: 40),
-                  Text(
-                    _isSignup ? 'Creá tu cuenta' : 'Bienvenido de vuelta',
-                    style: AppText.archivo(size: 30, weight: FontWeight.w900, height: 1.05),
+            // Swipe horizontal en toda la pantalla para alternar login/registro
+            // (el scroll es vertical, así que no compite con este gesto).
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragEnd: _handleModeSwipe,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+                // Entrada animada del formulario al cambiar de modo: se desliza
+                // desde el lado del swipe (un solo hijo montado: los controllers
+                // de los campos son compartidos y no admiten doble montaje).
+                child: TweenAnimationBuilder<double>(
+                  key: ValueKey(_mode),
+                  tween: Tween(begin: 1, end: 0),
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, t, child) => Transform.translate(
+                    offset: Offset(_modeSlideDir * 56 * t, 0),
+                    child: Opacity(opacity: (1 - t).clamp(0, 1), child: child),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _isSignup
-                        ? 'Unite a la comunidad de ballers.'
-                        : 'Ingresá para encontrar tu próxima cancha.',
-                    style: AppText.grotesk(size: 14, color: AppColors.white(0.6)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _brand(),
+                      const SizedBox(height: 40),
+                      Text(
+                        _isSignup ? 'Creá tu cuenta' : 'Bienvenido de vuelta',
+                        style: AppText.archivo(
+                          size: 30,
+                          weight: FontWeight.w900,
+                          height: 1.05,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _isSignup
+                            ? 'Unite a la comunidad de ballers.'
+                            : 'Ingresá para encontrar tu próxima cancha.',
+                        style: AppText.grotesk(
+                          size: 14,
+                          color: AppColors.white(0.6),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      _tabs(),
+                      const SizedBox(height: 20),
+                      if (_isSignup) ...[
+                        _label('Nombre'),
+                        _field(_nameCtrl, 'Tu nombre y apellido'),
+                        const SizedBox(height: 16),
+                      ],
+                      _label('Email'),
+                      _field(
+                        _emailCtrl,
+                        'tu@email.com',
+                        keyboard: TextInputType.emailAddress,
+                      ),
+                      const SizedBox(height: 16),
+                      _label('Contraseña'),
+                      _field(
+                        _passCtrl,
+                        'Mínimo 6 caracteres',
+                        isPassword: true,
+                      ),
+                      if (_isSignup) ...[
+                        const SizedBox(height: 16),
+                        _label('Confirmar contraseña'),
+                        _field(
+                          _pass2Ctrl,
+                          'Repetí tu contraseña',
+                          isPassword: true,
+                        ),
+                        const SizedBox(height: 16),
+                        _label('Ciudad (opcional)'),
+                        _field(_cityCtrl, 'Ej. Buenos Aires'),
+                        const SizedBox(height: 16),
+                        _label('Teléfono (opcional)'),
+                        _field(
+                          _phoneCtrl,
+                          '+54 11 ...',
+                          keyboard: TextInputType.phone,
+                        ),
+                      ],
+                      if (!_isSignup) ...[
+                        const SizedBox(height: 14),
+                        _keepLoggedInRow(),
+                      ],
+                      if (_error != null) ...[
+                        const SizedBox(height: 16),
+                        _errorBox(_error!),
+                      ],
+                      const SizedBox(height: 28),
+                      _submitBtn(),
+                      const SizedBox(height: 16),
+                      Center(child: _switchModeLink()),
+                    ],
                   ),
-                  const SizedBox(height: 24),
-                  _tabs(),
-                  const SizedBox(height: 20),
-                  if (_isSignup) ...[
-                    _label('Nombre'),
-                    _field(_nameCtrl, 'Tu nombre y apellido'),
-                    const SizedBox(height: 16),
-                  ],
-                  _label('Email'),
-                  _field(_emailCtrl, 'tu@email.com',
-                      keyboard: TextInputType.emailAddress),
-                  const SizedBox(height: 16),
-                  _label('Contraseña'),
-                  _field(_passCtrl, 'Mínimo 6 caracteres', isPassword: true),
-                  if (_isSignup) ...[
-                    const SizedBox(height: 16),
-                    _label('Confirmar contraseña'),
-                    _field(_pass2Ctrl, 'Repetí tu contraseña', isPassword: true),
-                    const SizedBox(height: 16),
-                    _label('Ciudad (opcional)'),
-                    _field(_cityCtrl, 'Ej. Buenos Aires'),
-                    const SizedBox(height: 16),
-                    _label('Teléfono (opcional)'),
-                    _field(_phoneCtrl, '+54 11 ...',
-                        keyboard: TextInputType.phone),
-                  ],
-                  if (!_isSignup) ...[
-                    const SizedBox(height: 14),
-                    _keepLoggedInRow(),
-                  ],
-                  if (_error != null) ...[
-                    const SizedBox(height: 16),
-                    _errorBox(_error!),
-                  ],
-                  const SizedBox(height: 28),
-                  _submitBtn(),
-                  const SizedBox(height: 16),
-                  Center(child: _switchModeLink()),
-                ],
+                ),
               ),
             ),
           ),
@@ -169,9 +236,9 @@ class _AuthScreenState extends State<AuthScreen> {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: const Color(0x331A2430),
-        borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: AppColors.white(0.08)),
+        color: AppColors.bgElev,
+        borderRadius: BorderRadius.circular(AppShape.rBtn),
+        border: Border.all(color: AppColors.white(0.25), width: 1.5),
       ),
       child: Row(
         children: [
@@ -186,21 +253,15 @@ class _AuthScreenState extends State<AuthScreen> {
     final active = _mode == mode;
     return Expanded(
       child: GestureDetector(
-        onTap: _loading
-            ? null
-            : () => setState(() {
-                  _mode = mode;
-                  _error = null;
-                }),
+        onTap: () => _setMode(mode),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 11),
           decoration: BoxDecoration(
-            gradient: active ? AppFx.accentGradient() : null,
-            borderRadius: BorderRadius.circular(100),
-            boxShadow: active
-                ? AppFx.neonGlow(AppColors.accent, blur: 14, alpha: 80)
-                : null,
+            // Acento plano (sin degradado ni glow); radio chip por estar
+            // anidado dentro del selector rBtn.
+            color: active ? AppColors.accent : null,
+            borderRadius: BorderRadius.circular(AppShape.rChip),
           ),
           alignment: Alignment.center,
           child: Text(
@@ -217,17 +278,17 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(
-          text.toUpperCase(),
-          style: AppText.grotesk(
-            size: 11,
-            weight: FontWeight.w700,
-            color: AppColors.white(0.45),
-            letterSpacing: 0.08,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(
+      text.toUpperCase(),
+      style: AppText.grotesk(
+        size: 11,
+        weight: FontWeight.w700,
+        color: AppColors.white(0.45),
+        letterSpacing: 0.08,
+      ),
+    ),
+  );
 
   Widget _field(
     TextEditingController controller,
@@ -241,8 +302,9 @@ class _AuthScreenState extends State<AuthScreen> {
       isPassword: isPassword,
       keyboard: keyboard,
       obscure: isPassword && _obscurePass,
-      onToggleObscure:
-          isPassword ? () => setState(() => _obscurePass = !_obscurePass) : null,
+      onToggleObscure: isPassword
+          ? () => setState(() => _obscurePass = !_obscurePass)
+          : null,
     );
   }
 
@@ -287,16 +349,22 @@ class _AuthScreenState extends State<AuthScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: const Color(0xFFE5484D).withAlpha(28),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5484D).withAlpha(90)),
+        borderRadius: BorderRadius.circular(AppShape.rBtn),
+        // Estado de error: borde rojo pleno, franco.
+        border: Border.all(color: const Color(0xFFE5484D), width: 2),
       ),
       child: Row(
         children: [
           const Icon(Icons.error_outline, size: 16, color: Color(0xFFE5484D)),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(msg,
-                style: AppText.grotesk(size: 12.5, color: const Color(0xFFFF8A8D))),
+            child: Text(
+              msg,
+              style: AppText.grotesk(
+                size: 12.5,
+                color: const Color(0xFFFF8A8D),
+              ),
+            ),
           ),
         ],
       ),
@@ -313,20 +381,21 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Widget _switchModeLink() {
     return GestureDetector(
-      onTap: _loading
-          ? null
-          : () => setState(() {
-                _mode = _isSignup ? AuthMode.login : AuthMode.signup;
-                _error = null;
-              }),
+      onTap: () => _setMode(_isSignup ? AuthMode.login : AuthMode.signup),
       child: RichText(
         text: TextSpan(
           style: AppText.grotesk(size: 12.5, color: AppColors.white(0.5)),
           children: [
-            TextSpan(text: _isSignup ? '¿Ya tenés cuenta? ' : '¿No tenés cuenta? '),
+            TextSpan(
+              text: _isSignup ? '¿Ya tenés cuenta? ' : '¿No tenés cuenta? ',
+            ),
             TextSpan(
               text: _isSignup ? 'Ingresar' : 'Registrate',
-              style: AppText.grotesk(size: 12.5, weight: FontWeight.w700, color: AppColors.accent),
+              style: AppText.grotesk(
+                size: 12.5,
+                weight: FontWeight.w700,
+                color: AppColors.accent,
+              ),
             ),
           ],
         ),
@@ -376,62 +445,55 @@ class _GlowFieldState extends State<_GlowField> {
   @override
   Widget build(BuildContext context) {
     final focused = _node.hasFocus;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          decoration: BoxDecoration(
-            color: const Color(0xE011181F),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: focused
-                  ? AppColors.accent.withAlpha(180)
-                  : AppColors.white(0.1),
-              width: focused ? 1.4 : 1,
+    // Neobrutalismo: relleno sólido y borde franco (acento pleno en foco);
+    // sin BackdropFilter ni glow.
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      decoration: BoxDecoration(
+        color: AppColors.bgElev,
+        borderRadius: BorderRadius.circular(AppShape.rBtn),
+        border: Border.all(
+          color: focused ? AppColors.accent : AppColors.white(0.25),
+          width: focused ? 2 : 1.5,
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: widget.controller,
+              focusNode: _node,
+              obscureText: widget.obscure,
+              keyboardType: widget.keyboard,
+              style: AppText.grotesk(size: 14),
+              cursorColor: AppColors.accent,
+              decoration: InputDecoration(
+                hintText: widget.hint,
+                hintStyle: AppText.grotesk(
+                  size: 14,
+                  color: AppColors.white(0.35),
+                ),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 16),
+              ),
             ),
-            boxShadow: focused
-                ? AppFx.neonGlow(AppColors.accent, blur: 16, alpha: 70)
-                : null,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: widget.controller,
-                  focusNode: _node,
-                  obscureText: widget.obscure,
-                  keyboardType: widget.keyboard,
-                  style: AppText.grotesk(size: 14),
-                  cursorColor: AppColors.accent,
-                  decoration: InputDecoration(
-                    hintText: widget.hint,
-                    hintStyle:
-                        AppText.grotesk(size: 14, color: AppColors.white(0.35)),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
+          if (widget.isPassword)
+            GestureDetector(
+              onTap: widget.onToggleObscure,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Icon(
+                  widget.obscure ? Icons.visibility_off : Icons.visibility,
+                  size: 18,
+                  color: AppColors.white(0.5),
                 ),
               ),
-              if (widget.isPassword)
-                GestureDetector(
-                  onTap: widget.onToggleObscure,
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Icon(
-                      widget.obscure ? Icons.visibility_off : Icons.visibility,
-                      size: 18,
-                      color: AppColors.white(0.5),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
+            ),
+        ],
       ),
     );
   }

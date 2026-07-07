@@ -112,9 +112,9 @@ class _FiltersScreenState extends State<FiltersScreen> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: AppColors.white(0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.white(0.08)),
+                color: AppColors.bgElev,
+                borderRadius: BorderRadius.circular(AppShape.rBtn),
+                border: Border.all(color: AppColors.white(0.25), width: 1.5),
               ),
               child: const Icon(Icons.close, color: Colors.white, size: 16),
             ),
@@ -226,8 +226,10 @@ class _FiltersScreenState extends State<FiltersScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
       decoration: BoxDecoration(
-        color: const Color(0xE60A0F14),
-        border: Border(top: BorderSide(color: AppColors.white(0.06))),
+        // Barra inferior sólida con separador franco.
+        color: AppColors.bg,
+        border: Border(
+            top: BorderSide(color: AppColors.white(0.25), width: 1.5)),
       ),
       child: SizedBox(
         width: double.infinity,
@@ -237,11 +239,13 @@ class _FiltersScreenState extends State<FiltersScreen> {
             backgroundColor: AppColors.accent,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
+            // CTA neobrutalista: rectángulo con borde negro, sin elevación
+            // difusa.
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(100),
+              borderRadius: BorderRadius.circular(AppShape.rBtn),
+              side: const BorderSide(color: AppColors.ink, width: 2),
             ),
-            elevation: 12,
-            shadowColor: AppColors.accent.withAlpha(85),
+            elevation: 0,
           ),
           child: Text(
             'VER 127 CANCHAS',

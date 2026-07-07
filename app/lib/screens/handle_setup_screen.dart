@@ -1,8 +1,8 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../services/session.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 
 /// Pantalla obligatoria que se muestra justo después del registro para que el
@@ -47,20 +47,6 @@ class _HandleSetupScreenState extends State<HandleSetupScreen> {
       backgroundColor: AppColors.bg,
       body: Stack(
         children: [
-          Positioned(
-            top: -120,
-            right: -60,
-            child: Container(
-              width: 260,
-              height: 260,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [AppColors.accent.withAlpha(70), Colors.transparent],
-                ),
-              ),
-            ),
-          ),
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(24, 40, 24, 40),
@@ -132,19 +118,16 @@ class _HandleSetupScreenState extends State<HandleSetupScreen> {
       );
 
   Widget _handleField() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xE011181F),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.white(0.1)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
+    // Input protagonista: sólido con borde franco (sin blur "glass").
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.glass,
+        borderRadius: BorderRadius.circular(AppShape.rBtn),
+        border: Border.all(color: AppColors.line, width: 2),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
               Text('@',
                   style: AppText.archivo(
                       size: 18, weight: FontWeight.w800, color: AppColors.accent)),
@@ -172,8 +155,6 @@ class _HandleSetupScreenState extends State<HandleSetupScreen> {
               ),
             ],
           ),
-        ),
-      ),
     );
   }
 
@@ -183,8 +164,9 @@ class _HandleSetupScreenState extends State<HandleSetupScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: const Color(0xFFE5484D).withAlpha(28),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5484D).withAlpha(90)),
+        borderRadius: BorderRadius.circular(AppShape.rBtn),
+        // Estado de error: borde rojo pleno, franco.
+        border: Border.all(color: const Color(0xFFE5484D), width: 2),
       ),
       child: Row(
         children: [
@@ -207,24 +189,14 @@ class _HandleSetupScreenState extends State<HandleSetupScreen> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          gradient: _loading
+          // CTA: acento plano + borde negro + sombra dura (sin degradado ni
+          // glow).
+          color: _loading ? AppColors.white(0.1) : AppColors.accent,
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: _loading
               ? null
-              : const LinearGradient(
-                  colors: [AppColors.accent, AppColors.accentDark],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-          color: _loading ? AppColors.white(0.1) : null,
-          borderRadius: BorderRadius.circular(100),
-          boxShadow: _loading
-              ? null
-              : [
-                  BoxShadow(
-                    color: AppColors.accent.withAlpha(80),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
+              : Border.all(color: AppColors.ink, width: 2),
+          boxShadow: _loading ? null : AppFx.hardShadow(),
         ),
         alignment: Alignment.center,
         child: _loading

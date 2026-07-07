@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../data/courts.dart';
@@ -67,9 +66,11 @@ class DetailScreen extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 12),
                           decoration: BoxDecoration(
-                            color: const Color(0x801A2430),
-                            border: Border.all(color: AppColors.white(0.06)),
-                            borderRadius: BorderRadius.circular(14),
+                            color: AppColors.card,
+                            border: Border.all(
+                                color: AppColors.white(0.25), width: 1.5),
+                            borderRadius:
+                                BorderRadius.circular(AppShape.rBtn),
                           ),
                           child: Row(
                             children: [
@@ -261,9 +262,10 @@ class DetailScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
-                    color: const Color(0x801A2430),
-                    border: Border.all(color: AppColors.white(0.06)),
-                    borderRadius: BorderRadius.circular(14),
+                    color: AppColors.card,
+                    border:
+                        Border.all(color: AppColors.white(0.25), width: 1.5),
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
                   ),
                   child: Row(
                     children: [
@@ -312,7 +314,7 @@ class DetailScreen extends StatelessWidget {
 
   Widget _ratingStrip(Court court) {
     return PopPanel(
-      radius: 18,
+      radius: AppShape.rCard,
       padding: const EdgeInsets.all(14),
       child: Row(
         children: [
@@ -378,9 +380,9 @@ class DetailScreen extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       height: 160,
       decoration: BoxDecoration(
-        color: const Color(0x991A2430),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.white(0.08)),
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        border: Border.all(color: AppColors.white(0.25), width: 1.5),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -394,16 +396,9 @@ class DetailScreen extends StatelessWidget {
                     width: 14,
                     height: vals[i].toDouble(),
                     decoration: BoxDecoration(
+                      // Barra destacada en acento plano, sin glow.
                       color: i == 3 ? AppColors.accent : AppColors.white(0.12),
-                      borderRadius: BorderRadius.circular(4),
-                      boxShadow: i == 3
-                          ? [
-                              BoxShadow(
-                                color: AppColors.accent.withAlpha(136),
-                                blurRadius: 16,
-                              ),
-                            ]
-                          : null,
+                      borderRadius: BorderRadius.circular(AppShape.rChip),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -460,7 +455,7 @@ class DetailScreen extends StatelessWidget {
                   height: 36,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.white(0.08),
+                    color: AppColors.bgElev,
                     border: Border.all(color: AppColors.bg, width: 2),
                   ),
                   alignment: Alignment.center,
@@ -497,21 +492,16 @@ class DetailScreen extends StatelessWidget {
   Widget _iconBtn(IconData icon, {VoidCallback? onTap, Color color = Colors.white}) {
     return GestureDetector(
       onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xB311181F),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.white(0.1)),
-            ),
-            child: Icon(icon, color: color, size: 18),
-          ),
+      // Botón sólido con borde franco (sin blur "glass" sobre la foto).
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: AppColors.glass,
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: Border.all(color: AppColors.line, width: 2),
         ),
+        child: Icon(icon, color: color, size: 18),
       ),
     );
   }
@@ -548,9 +538,9 @@ class DetailScreen extends StatelessWidget {
         width: 54,
         height: 54,
         decoration: BoxDecoration(
-          color: AppColors.white(0.08),
-          border: Border.all(color: AppColors.white(0.12)),
-          borderRadius: BorderRadius.circular(16),
+          color: AppColors.glass,
+          border: Border.all(color: AppColors.line, width: 2),
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
         ),
         child: Icon(icon, color: color, size: 20),
       ),
@@ -624,9 +614,10 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 decoration: BoxDecoration(
-                  color: const Color(0x801A2430),
-                  border: Border.all(color: AppColors.white(0.06)),
-                  borderRadius: BorderRadius.circular(14),
+                  color: AppColors.card,
+                  border:
+                      Border.all(color: AppColors.white(0.25), width: 1.5),
+                  borderRadius: BorderRadius.circular(AppShape.rCard),
                 ),
                 child: Text(
                   'Todavía no hay reseñas. ¡Sé el primero!',
@@ -648,9 +639,9 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0x801A2430),
-        border: Border.all(color: AppColors.white(0.06)),
-        borderRadius: BorderRadius.circular(14),
+        color: AppColors.card,
+        border: Border.all(color: AppColors.white(0.25), width: 1.5),
+        borderRadius: BorderRadius.circular(AppShape.rCard),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -689,8 +680,8 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
     await showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
+        // El fondo/forma los pone el dialogTheme global (neobrutalista).
         builder: (ctx, setLocal) => AlertDialog(
-          backgroundColor: AppColors.bgElev,
           title: Text('Tu reseña', style: AppText.archivo(size: 18, weight: FontWeight.w800)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -719,12 +710,14 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
                   hintText: 'Contá tu experiencia...',
                   hintStyle: AppText.grotesk(size: 13, color: AppColors.white(0.35)),
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: AppColors.white(0.1)),
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                    borderSide:
+                        BorderSide(color: AppColors.white(0.25), width: 1.5),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.accent),
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                    borderSide:
+                        const BorderSide(color: AppColors.accent, width: 2),
                   ),
                 ),
               ),

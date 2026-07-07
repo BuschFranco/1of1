@@ -1,36 +1,44 @@
 import 'package:flutter/material.dart';
 import 'app_theme.dart';
 
-/// Helpers de "efectos" del lenguaje pop-futurista: degradados de acento y glows
-/// neón, centralizados para no repetir los mismos `LinearGradient`/`BoxShadow`
-/// inline por toda la app. Todo dentro de la paleta actual (naranja/ámbar/verde).
+/// Helpers de "efectos" del lenguaje NEOBRUTALISTA (dark): colores planos,
+/// bordes francos y sombras duras desplazadas sin blur. Mantiene las firmas de
+/// la era pop-futurista (gradientes/glows) para no tocar los call-sites: los
+/// gradientes ahora son planos y los "glows" son sombras duras.
 class AppFx {
   AppFx._();
 
-  /// Degradado diagonal del acento: naranja → ámbar (más "pop"/neón) o, en modo
-  /// [deep], naranja → naranja oscuro (para superficies más sobrias).
+  /// Sombra dura neobrutalista: negra, desplazada, SIN blur. Es el reemplazo
+  /// universal de los glows neón.
+  static List<BoxShadow> hardShadow({
+    Offset offset = const Offset(4, 4),
+    Color? color,
+  }) =>
+      [
+        BoxShadow(
+          color: color ?? AppColors.black(0.85),
+          offset: offset,
+          blurRadius: 0,
+          spreadRadius: 0,
+        ),
+      ];
+
+  /// Antes: degradado naranja→ámbar. Ahora PLANO (acento sólido): un gradiente
+  /// con ambos extremos iguales pinta color liso sin tocar los call-sites.
   static LinearGradient accentGradient({bool deep = false}) => LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
         colors: deep
-            ? const [AppColors.accent, AppColors.accentDark]
-            : const [AppColors.accentAmber, AppColors.accent],
+            ? const [AppColors.accentDark, AppColors.accentDark]
+            : const [AppColors.accent, AppColors.accent],
       );
 
-  /// Ring hairline: degradado del color (arriba-izq) a casi-transparente
-  /// (abajo-der). Se usa como "borde" pintando un contenedor de 1px por detrás
-  /// del contenido (Flutter no soporta bordes con degradado nativo).
-  static LinearGradient hairline(Color color, {int topAlpha = 140}) =>
-      LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          color.withAlpha(topAlpha),
-          color.withAlpha(16),
-        ],
-      );
+  /// Antes: ring hairline con degradado. Ahora un "borde" plano del color dado
+  /// (sin fade), acorde a los bordes francos del neobrutalismo.
+  static LinearGradient hairline(Color color, {int topAlpha = 255}) =>
+      LinearGradient(colors: [color, color]);
 
-  /// Glow neón estándar (halo de color). [alpha] 0–255.
+  /// Antes: glow neón. Ahora sombra dura negra (los parámetros de blur/alpha se
+  /// ignoran a propósito para no tocar los call-sites). [offset] se respeta si
+  /// alguien pasa uno distinto de cero.
   static List<BoxShadow> neonGlow(
     Color color, {
     double blur = 22,
@@ -38,37 +46,22 @@ class AppFx {
     int alpha = 90,
     Offset offset = Offset.zero,
   }) =>
-      [
-        BoxShadow(
-          color: color.withAlpha(alpha),
-          blurRadius: blur,
-          spreadRadius: spread,
-          offset: offset,
-        ),
-      ];
+      hardShadow(
+        offset: offset == Offset.zero ? const Offset(3, 3) : offset,
+      );
 
-  /// Glow neón + sombra de profundidad (para elementos elevados: banners, CTAs).
+  /// Antes: glow + profundidad. Ahora una sombra dura más protagonista (para
+  /// banners y CTAs elevados).
   static List<BoxShadow> glowElevated(
     Color color, {
     double glowBlur = 24,
     int glowAlpha = 90,
   }) =>
-      [
-        BoxShadow(
-          color: color.withAlpha(glowAlpha),
-          blurRadius: glowBlur,
-          spreadRadius: 1,
-        ),
-        BoxShadow(
-          color: AppColors.black(0.4),
-          blurRadius: 18,
-          offset: const Offset(0, 8),
-        ),
-      ];
+      hardShadow(offset: const Offset(5, 5));
 }
 
-/// Envuelve [child] en un "ring" de 1px con degradado (borde hairline neón).
-/// El interior se pinta con [fill]; opcionalmente agrega [glow].
+/// Antes: ring con degradado. Ahora una caja con borde SÓLIDO del color dado
+/// (2px por defecto) y relleno plano — mismo contrato, look neobrutalista.
 class GradientRing extends StatelessWidget {
   final Widget child;
   final double radius;
@@ -82,32 +75,26 @@ class GradientRing extends StatelessWidget {
   const GradientRing({
     super.key,
     required this.child,
-    this.radius = 18,
-    this.thickness = 1.2,
+    this.radius = 8,
+    this.thickness = 2,
     this.ringColor = AppColors.accent,
     this.fill = AppColors.panel,
     this.padding,
     this.glow,
-    this.ringTopAlpha = 140,
+    this.ringTopAlpha = 255,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      padding: padding,
       decoration: BoxDecoration(
+        color: fill,
         borderRadius: BorderRadius.circular(radius),
-        gradient: AppFx.hairline(ringColor, topAlpha: ringTopAlpha),
+        border: Border.all(color: ringColor, width: thickness),
         boxShadow: glow,
       ),
-      padding: EdgeInsets.all(thickness),
-      child: Container(
-        padding: padding,
-        decoration: BoxDecoration(
-          color: fill,
-          borderRadius: BorderRadius.circular(radius - thickness),
-        ),
-        child: child,
-      ),
+      child: child,
     );
   }
 }
