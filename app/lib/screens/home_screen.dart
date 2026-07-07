@@ -286,7 +286,8 @@ class _HomeScreenState extends State<HomeScreen>
     // DEV: si el servicio restauró una ubicación simulada tras un reinicio del
     // proceso, retomamos el modo prueba en la UI (el pin sigue gobernando).
     _syncMockMode();
-    // Modal de permisos sobre el mapa (si falta ubicación / notif / alarmas).
+    // Modal de permisos sobre el mapa: UNA sola vez por usuario (tras el primer
+    // login/registro). Después se abre a mano desde el perfil.
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowPerms());
   }
 
@@ -303,15 +304,16 @@ class _HomeScreenState extends State<HomeScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _syncMockMode();
-      _maybeShowPerms();
+      // OJO: acá NO se re-muestra el modal de permisos (molestaba en cada
+      // minimizar/maximizar). Solo se muestra una vez, en initState.
     }
   }
 
-  /// Muestra el modal de permisos si falta alguno. Evita apilarlo.
+  /// Muestra el modal de permisos una única vez por usuario. Evita apilarlo.
   Future<void> _maybeShowPerms() async {
     if (_permOpen || !mounted) return;
     _permOpen = true;
-    await PermissionsModal.showIfNeeded(context);
+    await PermissionsModal.showOnceIfNeeded(context);
     if (mounted) _permOpen = false;
   }
 

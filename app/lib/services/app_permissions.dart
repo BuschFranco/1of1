@@ -116,6 +116,14 @@ Future<void> requestBattery() async {
   } catch (_) {}
 }
 
+/// Abre la pantalla de Health Connect (fallback manual para conceder los
+/// permisos de salud si el diálogo in-app no aparece).
+Future<void> openHealthConnect() async {
+  try {
+    await _alarmChannel.invokeMethod('openHealthConnect');
+  } catch (_) {}
+}
+
 /// Dispara la acción de activación del permiso dado.
 Future<void> requestPerm(AppPerm p) async {
   switch (p) {

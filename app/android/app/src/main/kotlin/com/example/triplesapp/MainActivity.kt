@@ -7,11 +7,14 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+// FlutterFragmentActivity (no FlutterActivity): el plugin `health` necesita las
+// Activity Result APIs de androidx para lanzar el diálogo de permisos de Health
+// Connect; con FlutterActivity la solicitud falla en silencio.
+class MainActivity : FlutterFragmentActivity() {
     private val channelName = "oneofone/alarm_perm"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -74,6 +77,17 @@ class MainActivity : FlutterActivity() {
                                 startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
                             } catch (_: Exception) {
                             }
+                        }
+                        result.success(null)
+                    }
+                    // Abre la pantalla de Health Connect (fallback manual para
+                    // conceder los permisos de salud si el diálogo in-app falla).
+                    "openHealthConnect" -> {
+                        try {
+                            startActivity(
+                                Intent("androidx.health.ACTION_HEALTH_CONNECT_SETTINGS")
+                            )
+                        } catch (_: Exception) {
                         }
                         result.success(null)
                     }

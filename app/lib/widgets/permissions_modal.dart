@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/app_permissions.dart';
 import '../services/play_session_service.dart';
+import '../services/session.dart';
 import '../theme/app_theme.dart';
 
 /// Modal que aparece sobre el mapa cuando faltan permisos clave (ubicación,
@@ -16,11 +18,7 @@ class PermissionsModal extends StatefulWidget {
   final bool autoClose;
   const PermissionsModal({super.key, this.autoClose = true});
 
-  /// Muestra el modal si falta algún permiso, INCLUIDA la batería recomendada:
-  /// conceder permisos desde Ajustes suele matar el proceso (comportamiento del
-  /// SO), y al reabrir el usuario necesita reencontrarse con el modal para
-  /// completar lo que le faltaba. "Ahora no" lo descarta sin insistir en la
-  /// sesión.
+  /// Muestra el modal si falta algún permiso (incluida la batería recomendada).
   static Future<void> showIfNeeded(BuildContext context) async {
     final state = await checkPermissions();
     if (state.missing.isEmpty || !context.mounted) return;
@@ -29,6 +27,23 @@ class PermissionsModal extends StatefulWidget {
       barrierDismissible: true,
       builder: (_) => const PermissionsModal(),
     );
+  }
+
+  /// Muestra el modal UNA sola vez por usuario (tras login/registro): un flag
+  /// persistido namespaced por usuario evita re-mostrarlo en cada apertura o
+  /// resume de la app. Después, el usuario lo abre a mano desde el perfil
+  /// (tuerquita → Permisos y salud). El flag se marca ANTES de mostrar: si el
+  /// usuario lo descarta con "Listo", no volvemos a insistir.
+  static Future<void> showOnceIfNeeded(BuildContext context) async {
+    final email = context.read<Session>().email ?? '';
+    final userKey = email.trim().toLowerCase();
+    final flagKey =
+        userKey.isEmpty ? 'perms_prompted' : 'perms_prompted::$userKey';
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(flagKey) ?? false) return;
+    await prefs.setBool(flagKey, true);
+    if (!context.mounted) return;
+    await showIfNeeded(context);
   }
 
   /// Abre el modal siempre (acceso manual desde el perfil), sin auto-cerrarse.
@@ -153,8 +168,11 @@ class _PermissionsModalState extends State<PermissionsModal>
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).maybePop(),
-          child: Text('Ahora no',
-              style: AppText.grotesk(size: 13, color: AppColors.white(0.6))),
+          child: Text('Listo',
+              style: AppText.grotesk(
+                  size: 13,
+                  weight: FontWeight.w700,
+                  color: AppColors.accent)),
         ),
       ],
     );
@@ -262,22 +280,46 @@ class _PermissionsModalState extends State<PermissionsModal>
                 ),
                 if (enabled) ...[
                   const SizedBox(height: 6),
-                  GestureDetector(
-                    onTap: _busy ? null : _testHealth,
-                    behavior: HitTestBehavior.opaque,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.science_outlined,
-                            size: 13, color: AppColors.accent),
-                        const SizedBox(width: 4),
-                        Text('Probar lectura',
-                            style: AppText.grotesk(
-                                size: 12,
-                                weight: FontWeight.w700,
-                                color: AppColors.accent)),
-                      ],
-                    ),
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: _busy ? null : _testHealth,
+                        behavior: HitTestBehavior.opaque,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.science_outlined,
+                                size: 13, color: AppColors.accent),
+                            const SizedBox(width: 4),
+                            Text('Probar lectura',
+                                style: AppText.grotesk(
+                                    size: 12,
+                                    weight: FontWeight.w700,
+                                    color: AppColors.accent)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      // Fallback manual: gestionar los permisos directamente en
+                      // Health Connect (por si el diálogo in-app no aparece).
+                      GestureDetector(
+                        onTap: _busy ? null : openHealthConnect,
+                        behavior: HitTestBehavior.opaque,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.open_in_new,
+                                size: 13, color: AppColors.accent),
+                            const SizedBox(width: 4),
+                            Text('Health Connect',
+                                style: AppText.grotesk(
+                                    size: 12,
+                                    weight: FontWeight.w700,
+                                    color: AppColors.accent)),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ],
