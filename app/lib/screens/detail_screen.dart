@@ -8,6 +8,7 @@ import '../services/notion_service.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
@@ -489,10 +490,12 @@ class DetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _iconBtn(IconData icon, {VoidCallback? onTap, Color color = Colors.white}) {
+  Widget _iconBtn(IconData icon,
+      {VoidCallback? onTap, Color color = AppColors.ink}) {
     return GestureDetector(
       onTap: onTap,
-      // Botón sólido con borde franco (sin blur "glass" sobre la foto).
+      // Pill blanca con borde negro y sombra dura (retro-pop): el ícono va en
+      // tinta negra para que se vea sobre la superficie clara.
       child: Container(
         width: 44,
         height: 44,
@@ -500,6 +503,7 @@ class DetailScreen extends StatelessWidget {
           color: AppColors.glass,
           borderRadius: BorderRadius.circular(AppShape.rBtn),
           border: Border.all(color: AppColors.line, width: 2),
+          boxShadow: AppFx.hardShadow(offset: const Offset(2, 2)),
         ),
         child: Icon(icon, color: color, size: 18),
       ),
@@ -531,7 +535,7 @@ class DetailScreen extends StatelessWidget {
 
   /// Botón cuadrado de acción (favoritos / ubicar en el mapa) al pie del detalle.
   Widget _squareBtn(IconData icon,
-      {VoidCallback? onTap, Color color = Colors.white}) {
+      {VoidCallback? onTap, Color color = AppColors.ink}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -541,6 +545,7 @@ class DetailScreen extends StatelessWidget {
           color: AppColors.glass,
           border: Border.all(color: AppColors.line, width: 2),
           borderRadius: BorderRadius.circular(AppShape.rBtn),
+          boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
         ),
         child: Icon(icon, color: color, size: 20),
       ),

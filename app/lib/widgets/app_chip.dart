@@ -23,15 +23,11 @@ class AppChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tint = color;
-    // Neobrutalismo: rectángulo de radio chico, colores planos, borde franco
-    // y sombra dura solo en el estado activo.
-    final bg = tint != null
-        ? tint.withAlpha(28)
-        : (active ? AppColors.accent : AppColors.paper);
-    final col = tint ?? (active ? Colors.white : AppColors.ink);
-    final border = tint != null
-        ? tint.withAlpha(160)
-        : AppColors.ink;
+    // Retro-pop: pills planas con borde negro. La variante coloreada (ej. el
+    // título equipado, con su color de rareza) va SÓLIDA con texto blanco y
+    // sombra dura — como los chips de la referencia.
+    final bg = tint ?? (active ? AppColors.accent : AppColors.paper);
+    final col = (tint != null || active) ? Colors.white : AppColors.ink;
 
     return GestureDetector(
       onTap: onTap,
@@ -40,9 +36,10 @@ class AppChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(AppShape.rChip),
-          border: Border.all(color: border, width: active ? 2 : 1.5),
-          boxShadow:
-              active ? AppFx.hardShadow(offset: const Offset(2, 2)) : null,
+          border: Border.all(color: AppColors.ink, width: active ? 2 : 1.5),
+          boxShadow: (active || tint != null)
+              ? AppFx.hardShadow(offset: const Offset(2, 2))
+              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

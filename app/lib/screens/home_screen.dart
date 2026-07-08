@@ -1489,8 +1489,11 @@ class _CourtSwipeCard extends StatelessWidget {
               children: [
                 CourtImage(
                   url: court.img,
-                  borderRadius: BorderRadius.circular(AppShape.rBtn),
+                  // Radio fijo chico: rBtn ahora es pill (100) y deformaría la
+                  // miniatura.
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                // Distancia a la cancha: chip retro-pop (papel + borde negro).
                 Positioned(
                   top: 6,
                   left: 6,
@@ -1500,14 +1503,16 @@ class _CourtSwipeCard extends StatelessWidget {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.black(0.75),
+                      color: AppColors.paper,
                       borderRadius: BorderRadius.circular(AppShape.rChip),
+                      border: Border.all(color: AppColors.ink, width: 1.5),
                     ),
                     child: Text(
                       court.dist.toUpperCase(),
                       style: AppText.grotesk(
                         size: 9,
-                        weight: FontWeight.w700,
+                        weight: FontWeight.w800,
+                        color: AppColors.ink,
                         letterSpacing: 0.06,
                       ),
                     ),

@@ -52,16 +52,34 @@ class _ListScreenState extends State<ListScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '340 CANCHAS · BUENOS AIRES',
-                  style: AppText.grotesk(
-                    size: 11,
-                    weight: FontWeight.w700,
-                    color: AppColors.accent,
-                    letterSpacing: 0.16,
-                  ),
+                // Kicker retro-pop: punto de acento con borde negro + texto en
+                // tinta (mismo lenguaje que los SectionTitle).
+                Row(
+                  children: [
+                    Container(
+                      width: 11,
+                      height: 11,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.accent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.ink, width: 1.5),
+                      ),
+                    ),
+                    Text(
+                      '340 CANCHAS · BUENOS AIRES',
+                      style: AppText.grotesk(
+                        size: 11,
+                        weight: FontWeight.w800,
+                        color: AppColors.ink,
+                        letterSpacing: 0.16,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
+                // Headline con la sombra dura clásica del estilo (offset, sin
+                // blur), como los paneles y botones.
                 Text(
                   'Canchas\ncerca tuyo.',
                   style: AppText.archivo(
@@ -69,7 +87,11 @@ class _ListScreenState extends State<ListScreen> {
                     weight: FontWeight.w900,
                     color: AppColors.sun,
                     letterSpacing: -0.01,
-                    height: 1.0,
+                    height: 1.05,
+                  ).copyWith(
+                    shadows: const [
+                      Shadow(color: AppColors.ink, offset: Offset(3, 3)),
+                    ],
                   ),
                 ),
               ],
@@ -153,10 +175,11 @@ class _CourtListItem extends StatelessWidget {
                   url: court.img,
                   height: 140,
                   width: double.infinity,
-                  // 6 = rCard (8) menos el borde de 2px de la card.
+                  // 18 = rCard (20) menos el borde de 2px de la card, para que
+                  // la foto acompañe las esquinas redondeadas del contenedor.
                   borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(6),
-                    topRight: Radius.circular(6),
+                    topLeft: Radius.circular(18),
+                    topRight: Radius.circular(18),
                   ),
                 ),
                 // Scrim de LEGIBILIDAD sobre la foto: se conserva (no es
@@ -171,8 +194,8 @@ class _CourtListItem extends StatelessWidget {
                       stops: [0.4, 1],
                     ),
                     borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(6),
-                      topRight: Radius.circular(6),
+                      topLeft: Radius.circular(18),
+                      topRight: Radius.circular(18),
                     ),
                   ),
                 ),

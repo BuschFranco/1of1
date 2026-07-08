@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 
-/// Color dorado para logros/títulos desbloqueados.
-const Color kGold = Color(0xFFE9B949);
+/// Color dorado para logros/títulos desbloqueados. Oscurecido para leer bien
+/// sobre las superficies claras del branding retro-pop.
+const Color kGold = Color(0xFFB8860B);
 
 /// Nivel de rareza de un título. Define su color al mostrarse.
 enum TitleRarity { comun, raro, epico, legendario }
 
 extension TitleRarityX on TitleRarity {
   /// Color asociado a la rareza (verde común, azul raro, violeta épico,
-  /// dorado legendario).
+  /// dorado legendario). Tonos oscuros: legibles como texto sobre fondo claro.
   Color get color => switch (this) {
-        TitleRarity.comun => const Color(0xFF4ADE80), // verde
-        TitleRarity.raro => const Color(0xFF3B82F6), // azul
-        TitleRarity.epico => const Color(0xFFA855F7), // violeta
+        TitleRarity.comun => const Color(0xFF2E9E5B), // verde
+        TitleRarity.raro => const Color(0xFF2563EB), // azul
+        TitleRarity.epico => const Color(0xFF7E22CE), // violeta
         TitleRarity.legendario => kGold, // dorado
       };
 

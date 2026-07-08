@@ -19,12 +19,17 @@ class SectionTitle extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Kicker neobrutalista: bloque de acento plano, sin glow.
+              // Kicker retro-pop: punto redondo de acento con borde negro
+              // (mismo lenguaje que los chips/círculos de la referencia).
               Container(
-                width: 5,
-                height: 16,
-                margin: const EdgeInsets.only(right: 9, bottom: 1),
-                color: AppColors.accent,
+                width: 11,
+                height: 11,
+                margin: const EdgeInsets.only(right: 8, bottom: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.accent,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.ink, width: 1.5),
+                ),
               ),
               Text(
                 title.toUpperCase(),

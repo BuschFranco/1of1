@@ -78,11 +78,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final session = context.watch<Session>();
     final profile = session.profile ?? const Profile(name: 'Invitado');
 
+    // Fondo elegido por el usuario (tuerquita → Fondo del perfil); default oliva.
+    final bg = AppColors.profileBg(session.profileBg);
     return Container(
-      color: AppColors.sun,
+      color: bg,
       child: Stack(
         children: [
-          const Positioned.fill(child: PopBackground(color: AppColors.sun)),
+          Positioned.fill(child: PopBackground(color: bg)),
           Column(
             children: [
               const SizedBox(height: 56),
@@ -91,13 +93,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    // Headline retro-pop (Fraunces), como "Crew" o "Canchas".
                     Text(
-                      'MI PERFIL',
-                      style: AppText.grotesk(
-                        size: 11,
-                        weight: FontWeight.w700,
-                        color: AppColors.white(0.4),
-                        letterSpacing: 0.2,
+                      'Perfil',
+                      style: AppText.archivo(
+                        size: 30,
+                        weight: FontWeight.w900,
+                        color: AppColors.ink,
+                        letterSpacing: -0.01,
                       ),
                     ),
                     Row(
@@ -211,12 +214,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _tabs() {
+    // Selector pill retro-pop: papel + borde negro + sombra dura.
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: AppColors.bgElev,
+        color: AppColors.paper,
         borderRadius: BorderRadius.circular(AppShape.rBtn),
-        border: Border.all(color: AppColors.white(0.25), width: 1.5),
+        border: Border.all(color: AppColors.ink, width: 2),
+        boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
       ),
       child: Row(
         children: [
@@ -245,8 +250,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             label,
             style: AppText.grotesk(
               size: 13,
-              weight: active ? FontWeight.w700 : FontWeight.w500,
-              color: active ? Colors.white : AppColors.white(0.6),
+              weight: FontWeight.w700,
+              color: active ? Colors.white : AppColors.ink,
             ),
           ),
         ),
@@ -311,13 +316,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: GestureDetector(
               onTap: () => _editClanBadge(context, profile),
               behavior: HitTestBehavior.opaque,
+              // Card retro-pop: papel + borde negro + sombra dura.
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(AppShape.rBtn),
-                  border:
-                      Border.all(color: AppColors.white(0.25), width: 1.5),
+                  color: AppColors.paper,
+                  borderRadius: BorderRadius.circular(AppShape.rCard),
+                  border: Border.all(color: AppColors.ink, width: 2),
+                  boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
                 ),
                 child: Row(
                   children: [
@@ -343,13 +349,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: GestureDetector(
               onTap: _editPosition,
               behavior: HitTestBehavior.opaque,
+              // Card retro-pop: papel + borde negro + sombra dura.
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(AppShape.rBtn),
-                  border:
-                      Border.all(color: AppColors.white(0.25), width: 1.5),
+                  color: AppColors.paper,
+                  borderRadius: BorderRadius.circular(AppShape.rCard),
+                  border: Border.all(color: AppColors.ink, width: 2),
+                  boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
                 ),
                 child: Row(
                   children: [
@@ -990,28 +997,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // el set permanente (sobrevive al reinstalar, sembrado desde Notion).
     final badges = context.watch<PlaySessionService>().unlockedBadges;
     final unlocked = badges.contains(a.id) || a.unlocked(s);
-    final color = unlocked ? kGold : AppColors.white(0.3);
+    final color = unlocked ? kGold : AppColors.white(0.35);
+    // Card retro-pop (mismo lenguaje que los títulos): papel + borde negro;
+    // el dorado vive en el tile circular del ícono, no en el borde.
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.card,
-        // Desbloqueado: borde dorado pleno (color de estado).
+        color: AppColors.paper,
         border: Border.all(
-            color: unlocked ? kGold : AppColors.white(0.25),
-            width: unlocked ? 2 : 1.5),
+            color: unlocked ? AppColors.ink : AppColors.white(0.3), width: 2),
         borderRadius: BorderRadius.circular(AppShape.rCard),
       ),
       child: Row(
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 36,
+            height: 36,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: color.withAlpha(unlocked ? 38 : 20),
-              borderRadius: BorderRadius.circular(AppShape.rBtn),
+              color: color.withAlpha(unlocked ? 33 : 15),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: unlocked ? color : AppColors.white(0.25),
+                width: 1.5,
+              ),
             ),
-            child: Icon(a.icon, size: 20, color: color),
+            child: Icon(a.icon, size: 18, color: color),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1021,7 +1032,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 Text(a.name,
                     style: AppText.grotesk(
-                        size: 13, weight: FontWeight.w700, color: color)),
+                        size: 13,
+                        weight: FontWeight.w700,
+                        color:
+                            unlocked ? AppColors.ink : AppColors.white(0.4))),
                 const SizedBox(height: 1),
                 Text(
                   a.desc,
@@ -1034,8 +1048,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           unlocked
               ? Icon(Icons.verified, size: 18, color: kGold)
               : Text('${a.progress(s)}/${a.goal}',
-                  style:
-                      AppText.grotesk(size: 12, color: AppColors.white(0.45))),
+                  style: AppText.grotesk(
+                      size: 12,
+                      weight: FontWeight.w700,
+                      color: AppColors.white(0.45))),
         ],
       ),
     );
@@ -1081,29 +1097,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
         .every((id) => badges.contains(id) || (achievementById(id)?.unlocked(s) ?? false));
     final equipped = profile.title == t.name;
     final loggedIn = context.read<Session>().isLoggedIn;
-    // Desbloqueado: color de su rareza. Bloqueado: gris.
+    // Card retro-pop: papel + borde negro; la rareza vive en el tile del ícono
+    // y en su etiqueta, no en el borde. Equipado se destaca con tinte + sombra.
     final rarity = t.color;
-    final color = unlocked ? rarity : AppColors.white(0.3);
+    final iconColor = unlocked ? rarity : AppColors.white(0.35);
     return GestureDetector(
       onTap: (unlocked && loggedIn) ? () => _toggleTitle(t.name, equipped) : null,
       behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: equipped ? rarity.withAlpha(30) : AppColors.card,
-          // Rareza como borde pleno; bloqueado queda con el borde neutro.
+          color: equipped
+              ? Color.alphaBlend(rarity.withAlpha(26), AppColors.paper)
+              : AppColors.paper,
           border: Border.all(
-            color: equipped
-                ? rarity
-                : (unlocked ? rarity : AppColors.white(0.25)),
-            width: equipped ? 2 : 1.5,
+            color: unlocked ? AppColors.ink : AppColors.white(0.3),
+            width: 2,
           ),
           borderRadius: BorderRadius.circular(AppShape.rCard),
+          boxShadow: equipped
+              ? AppFx.hardShadow(offset: const Offset(2, 2))
+              : null,
         ),
         child: Row(
           children: [
-            Icon(unlocked ? Icons.workspace_premium : Icons.lock_outline,
-                size: 20, color: color),
+            // Tile circular con el color de rareza (lenguaje de la referencia).
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: iconColor.withAlpha(unlocked ? 33 : 15),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: unlocked ? iconColor : AppColors.white(0.25),
+                  width: 1.5,
+                ),
+              ),
+              child: Icon(
+                  unlocked ? Icons.workspace_premium : Icons.lock_outline,
+                  size: 18,
+                  color: iconColor),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -1112,11 +1147,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   Text(t.name,
                       style: AppText.grotesk(
-                          size: 13, weight: FontWeight.w700, color: color)),
+                          size: 13,
+                          weight: FontWeight.w700,
+                          color: unlocked
+                              ? AppColors.ink
+                              : AppColors.white(0.4))),
                   const SizedBox(height: 2),
-                  Text(
-                    '${t.rarity.label} · ${t.unlockDesc}',
-                    style: AppText.grotesk(size: 11, color: AppColors.white(0.45)),
+                  Row(
+                    children: [
+                      Text(
+                        t.rarity.label.toUpperCase(),
+                        style: AppText.grotesk(
+                            size: 10,
+                            weight: FontWeight.w800,
+                            color: iconColor,
+                            letterSpacing: 0.06),
+                      ),
+                      Flexible(
+                        child: Text(
+                          ' · ${t.unlockDesc}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppText.grotesk(
+                              size: 11, color: AppColors.white(0.45)),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1131,9 +1187,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         size: 11, weight: FontWeight.w700, color: rarity)),
               ])
             else if (unlocked && loggedIn)
-              Text('Equipar',
-                  style: AppText.grotesk(
-                      size: 12, weight: FontWeight.w600, color: AppColors.accent)),
+              Text(
+                'Equipar',
+                style: AppText.grotesk(
+                  size: 12,
+                  weight: FontWeight.w700,
+                  color: AppColors.accent,
+                ).copyWith(
+                  decoration: TextDecoration.underline,
+                  decorationColor: AppColors.accent,
+                ),
+              ),
           ],
         ),
       ),
@@ -1736,7 +1800,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// Menú de la tuerquita: privacidad + permisos y salud (Health Connect).
+  /// Menú de la tuerquita: privacidad + permisos y salud + fondo del perfil.
   void _openSettings(BuildContext context, Profile profile) {
     _showSheet('Ajustes', (ctx) {
       final health = ctx.watch<PlaySessionService>().healthEnabled;
@@ -1765,6 +1829,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
           trailingOn: health,
         ),
+        const SizedBox(height: 8),
+        _settingsRow(
+          ctx,
+          Icons.format_paint_outlined,
+          'Fondo del perfil',
+          'Elegí el color de fondo de tu perfil',
+          () {
+            Navigator.pop(ctx);
+            _editProfileBg(context);
+          },
+        ),
+      ];
+    });
+  }
+
+  /// Selector del color de fondo del perfil (local, se guarda en el equipo).
+  void _editProfileBg(BuildContext context) {
+    _showSheet('Fondo del perfil', (ctx) {
+      final current = ctx.watch<Session>().profileBg;
+      return [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final e in AppColors.profileBgs.entries)
+                GestureDetector(
+                  onTap: () {
+                    ctx.read<Session>().setProfileBg(e.key);
+                    Navigator.pop(ctx);
+                  },
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: e.value,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.ink,
+                        // Marcado: el elegido (o el default oliva si no eligió).
+                        width: (current.isEmpty ? 'cream' : current) == e.key
+                            ? 3
+                            : 1.5,
+                      ),
+                    ),
+                    child: (current.isEmpty ? 'cream' : current) == e.key
+                        ? Icon(Icons.check,
+                            size: 18,
+                            color: e.value.computeLuminance() > 0.6
+                                ? AppColors.ink
+                                : Colors.white)
+                        : null,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
       ];
     });
   }
@@ -2551,10 +2675,11 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
           decoration: BoxDecoration(
             color: selected
                 ? AppColors.accent.withAlpha(40)
-                : AppColors.bgElev,
+                : AppColors.paper,
             borderRadius: BorderRadius.circular(AppShape.rChip),
+            // Borde franco del branding: negro (accent cuando está elegido).
             border: Border.all(
-              color: selected ? AppColors.accent : AppColors.white(0.25),
+              color: selected ? AppColors.accent : AppColors.ink,
               width: selected ? 2 : 1.5,
             ),
           ),
@@ -2639,7 +2764,7 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
             ),
             child: TextField(
               controller: _ctrl,
-              autofocus: true,
+              // Sin autofocus: que el teclado no tape las opciones al abrir.
               textAlign: TextAlign.center,
               style: AppText.archivo(size: 18, weight: FontWeight.w800),
               cursorColor: AppColors.accent,
@@ -2715,7 +2840,11 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
                   selected: _font == f.family,
                   unlockLevel: f.unlockLevel,
                   onTap: () => setState(() => _font = f.family),
-                  child: Text(preview, style: clanFontStyle(f.family, size: 18)),
+                  // Tinta negra: el default blanco era invisible sobre el chip
+                  // claro del branding actual.
+                  child: Text(preview,
+                      style: clanFontStyle(f.family,
+                          size: 18, color: AppColors.ink)),
                 ),
             ],
           ),
@@ -2835,10 +2964,13 @@ class _ColorPickerState extends State<_ColorPicker> {
                       decoration: BoxDecoration(
                         color: clanColor(c.hex),
                         shape: BoxShape.circle,
+                        // Aro negro (el blanco desaparecía sobre el diálogo
+                        // claro); seleccionado bien marcado.
                         border: Border.all(
-                          color:
-                              selected ? Colors.white : AppColors.white(0.15),
-                          width: selected ? 2.5 : 1,
+                          color: selected
+                              ? AppColors.ink
+                              : AppColors.black(0.3),
+                          width: selected ? 2.5 : 1.5,
                         ),
                       ),
                       child: !unlocked

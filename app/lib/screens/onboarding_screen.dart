@@ -58,7 +58,7 @@ class OnboardingScreen extends StatelessWidget {
             style: AppText.grotesk(
               size: 11,
               weight: FontWeight.w700,
-              color: AppColors.accent,
+              color: AppColors.ink,
               letterSpacing: 0.2,
             ),
           ),
