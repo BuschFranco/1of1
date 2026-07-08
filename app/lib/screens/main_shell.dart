@@ -6,6 +6,7 @@ import '../services/app_loading_state.dart';
 import '../services/courts_provider.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
+import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_loader.dart';
 import '../widgets/app_tab_bar.dart';
@@ -78,13 +79,15 @@ class _MainShellState extends State<MainShell> {
   // vuelva a la anterior en vez de salir de la app.
   final List<AppTab> _tabHistory = [];
 
-  // Color de fondo por pestaña (retro-pop, un color por sección).
+  // Color de fondo por pestaña (retro-pop, un color por sección). El del
+  // perfil lo elige el usuario (tuerquita → Fondo del perfil; default oliva).
   Color _bgForTab(AppTab t) => switch (t) {
         AppTab.home => AppColors.cream,
         AppTab.list => AppColors.lilac,
         AppTab.plus => AppColors.cream,
         AppTab.chat => AppColors.red,
-        AppTab.profile => AppColors.sun,
+        AppTab.profile =>
+          AppColors.profileBg(context.watch<Session>().profileBg),
       };
 
   void _selectTab(AppTab t) {

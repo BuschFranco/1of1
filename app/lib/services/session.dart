@@ -23,10 +23,14 @@ class Session extends ChangeNotifier {
   // Posición de juego elegida por el usuario. Es puramente local (cosmética):
   // NO se sube a Notion ni se comparte con los amigos.
   static const _kLocalPosition = 'local_position';
+  // Color de fondo del perfil elegido por el usuario (clave de
+  // AppColors.profileBgs). Local y cosmético, como la posición.
+  static const _kProfileBg = 'profile_bg_color';
 
   Profile? _profile;
   String? _email;
   String _localPosition = '';
+  String _profileBg = '';
   bool _restoring = true;
   // Hay cambios de perfil (stats, nivel, título, clan, privacidad, tiempo,
   // logros) staged localmente sin subir. El batch los sube juntos en flush().
@@ -38,6 +42,9 @@ class Session extends ChangeNotifier {
   String? get email => _email;
   /// Posición de juego elegida (local, cosmética). '' si no eligió ninguna.
   String get localPosition => _localPosition;
+
+  /// Clave del fondo de perfil elegido ('' = default). Ver AppColors.profileBgs.
+  String get profileBg => _profileBg;
   bool get restoring => _restoring;
   bool get isLoggedIn => _profile != null;
   bool get notionReady => _notion.isConfigured;
@@ -56,6 +63,7 @@ class Session extends ChangeNotifier {
   Future<void> restore() async {
     final prefs = await SharedPreferences.getInstance();
     _localPosition = prefs.getString(_kLocalPosition) ?? '';
+    _profileBg = prefs.getString(_kProfileBg) ?? '';
     final persist = prefs.getBool(_kPersist) ?? true;
     if (!persist) {
       await prefs.remove(_kEmail);
@@ -352,6 +360,19 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Define (o limpia, con '') el fondo del perfil. Local y cosmético: se
+  /// guarda solo en SharedPreferences, no toca Notion ni el batch.
+  Future<void> setProfileBg(String key) async {
+    _profileBg = key;
+    final prefs = await SharedPreferences.getInstance();
+    if (key.isEmpty) {
+      await prefs.remove(_kProfileBg);
+    } else {
+      await prefs.setString(_kProfileBg, key);
+    }
+    notifyListeners();
+  }
+
   /// "Stagea" los agregados de juego en el perfil local y los marca para subir.
   /// NO pega a la red: el envío real lo hace [flush] en el próximo batch. Si los
   /// valores no cambiaron, no marca nada (evita peticiones inútiles).
@@ -419,9 +440,11 @@ class Session extends ChangeNotifier {
     await prefs.remove(_kEmail);
     await prefs.remove(_kProfile);
     await prefs.remove(_kLocalPosition);
+    await prefs.remove(_kProfileBg);
     _profile = null;
     _email = null;
     _localPosition = '';
+    _profileBg = '';
     notifyListeners();
   }
 

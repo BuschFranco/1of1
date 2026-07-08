@@ -28,8 +28,22 @@ class AppColors {
   static const Color sun = Color(0xFFF5A94B);
   static const Color red = Color(0xFFC94040);
   static const Color cream = Color(0xFFF4EBDD);
+  static const Color olive = Color(0xFF8FA05A); // verde oliva de la paleta
   static const Color paper = Color(0xFFFFFFFF); // pills/nav/cards sobre saturado
   static const Color blush = Color(0xFFF7CFC4); // relleno de botones / headlines
+
+  /// Fondos de perfil elegibles por el usuario (clave persistida → color).
+  /// El default es el crema (el mismo de la sección "+").
+  static const Map<String, Color> profileBgs = {
+    'cream': cream,
+    'olive': olive,
+    'sun': sun,
+    'lilac': lilac,
+    'red': red,
+  };
+
+  /// Resuelve la clave guardada al color de fondo del perfil (default crema).
+  static Color profileBg(String key) => profileBgs[key] ?? cream;
 
   // "glass" (histórico): overlays sobre el mapa y la tab bar → pills BLANCAS.
   static const Color glass = Color(0xFFFFFFFF);
