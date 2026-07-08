@@ -50,6 +50,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   int get _tab => widget.activeTab ?? _localTab;
 
+  /// True si el fondo elegido del perfil es saturado oscuro (lila/oliva/rojo):
+  /// los textos que apoyan directo sobre el fondo van en blanco con la sombra
+  /// dura clásica del brand.
+  bool get _onDarkBg {
+    final key = context.watch<Session>().profileBg;
+    return key == 'lilac' || key == 'olive' || key == 'red';
+  }
+
   void _setTab(int idx) {
     if (widget.onTabChange != null) {
       widget.onTabChange!(idx);
@@ -94,13 +102,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // Headline retro-pop (Fraunces), como "Crew" o "Canchas".
+                    // Sobre fondo saturado oscuro: blanco + sombra dura.
                     Text(
                       'Perfil',
                       style: AppText.archivo(
                         size: 30,
                         weight: FontWeight.w900,
-                        color: AppColors.ink,
+                        color: _onDarkBg ? Colors.white : AppColors.ink,
                         letterSpacing: -0.01,
+                      ).copyWith(
+                        shadows: _onDarkBg
+                            ? const [
+                                Shadow(
+                                    color: AppColors.ink,
+                                    offset: Offset(3, 3)),
+                              ]
+                            : null,
                       ),
                     ),
                     Row(
@@ -275,7 +292,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     Text(
                       profile.name.isEmpty ? 'Jugador' : profile.name,
-                      style: AppText.archivo(size: 24, weight: FontWeight.w900),
+                      style: AppText.archivo(
+                        size: 24,
+                        weight: FontWeight.w900,
+                        color: _onDarkBg ? Colors.white : AppColors.ink,
+                      ).copyWith(
+                        shadows: _onDarkBg
+                            ? const [
+                                Shadow(
+                                    color: AppColors.ink,
+                                    offset: Offset(2, 2)),
+                              ]
+                            : null,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Row(
@@ -429,19 +458,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SectionTitle(title: 'Canchas más jugadas'),
+              SectionTitle(title: 'Canchas más jugadas', onDark: _onDarkBg),
               _topCourtsSection(),
               const SizedBox(height: 24),
-              const SectionTitle(title: 'Favoritos'),
+              SectionTitle(title: 'Favoritos', onDark: _onDarkBg),
               _favoritesSection(),
               const SizedBox(height: 24),
-              const SectionTitle(title: 'Títulos'),
+              SectionTitle(title: 'Títulos', onDark: _onDarkBg),
               _titlesSection(profile),
               const SizedBox(height: 24),
-              const SectionTitle(title: 'Logros'),
+              SectionTitle(title: 'Logros', onDark: _onDarkBg),
               _achievementsSection(),
               const SizedBox(height: 24),
-              SectionTitle(key: _historyKey, title: 'Últimos partidos'),
+              SectionTitle(
+                  key: _historyKey,
+                  title: 'Últimos partidos',
+                  onDark: _onDarkBg),
               _historySection(),
             ],
           ),

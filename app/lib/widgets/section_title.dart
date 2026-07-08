@@ -6,7 +6,17 @@ class SectionTitle extends StatelessWidget {
   final String? right;
   final VoidCallback? onRight;
 
-  const SectionTitle({super.key, required this.title, this.right, this.onRight});
+  /// Sobre fondos saturados oscuros (lila/oliva/rojo del perfil): título en
+  /// blanco con la sombra dura clásica del brand, y link en blanco.
+  final bool onDark;
+
+  const SectionTitle({
+    super.key,
+    required this.title,
+    this.right,
+    this.onRight,
+    this.onDark = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +46,14 @@ class SectionTitle extends StatelessWidget {
                 style: AppText.archivo(
                   size: 13,
                   weight: FontWeight.w700,
+                  color: onDark ? Colors.white : AppColors.ink,
                   letterSpacing: 0.1,
+                ).copyWith(
+                  shadows: onDark
+                      ? const [
+                          Shadow(color: AppColors.ink, offset: Offset(2, 2)),
+                        ]
+                      : null,
                 ),
               ),
             ],
@@ -49,12 +66,12 @@ class SectionTitle extends StatelessWidget {
                 style: AppText.grotesk(
                   size: 11,
                   weight: FontWeight.w700,
-                  color: AppColors.ink,
+                  color: onDark ? Colors.white : AppColors.ink,
                   letterSpacing: 0.04,
                   height: 1,
                 ).copyWith(
                   decoration: TextDecoration.underline,
-                  decorationColor: AppColors.ink,
+                  decorationColor: onDark ? Colors.white : AppColors.ink,
                 ),
               ),
             ),
