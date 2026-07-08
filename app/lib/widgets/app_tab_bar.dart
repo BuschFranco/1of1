@@ -2,17 +2,90 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
+import 'bball_glyph.dart';
 
 enum AppTab { home, list, plus, chat, profile }
 
-/// Barra de navegación neobrutalista: pill oscura con botones circulares.
-/// La pestaña activa es un círculo relleno de acento con ícono negro; las
-/// inactivas son círculos oscuros con ícono blanco. Sin labels ni subrayado.
-class AppTabBar extends StatelessWidget {
+/// Barra de navegación retro-pop: pill blanca con botones circulares. El
+/// indicador activo es UNA pelota de básquet naranja (con sus líneas, como la
+/// "O" del logo) que SALTA en arco hasta la pestaña elegida. La pelota no
+/// lleva ícono: actúa como "máscara" de color — cuando pasa por encima de un
+/// ícono, ese ícono se pinta de blanco.
+class AppTabBar extends StatefulWidget {
   final AppTab active;
   final ValueChanged<AppTab> onChange;
 
   const AppTabBar({super.key, required this.active, required this.onChange});
+
+  @override
+  State<AppTabBar> createState() => _AppTabBarState();
+}
+
+class _AppTabBarState extends State<AppTabBar>
+    with SingleTickerProviderStateMixin {
+  static const List<AppTab> _slots = [
+    AppTab.home,
+    AppTab.list,
+    AppTab.plus,
+    AppTab.chat,
+    AppTab.profile,
+  ];
+  static const double _item = 46; // diámetro de cada botón circular
+  static const double _hop = 26; // altura del salto de la pelota
+
+  /// Naranja pelota de básquet (como la "O" del logo).
+  static const Color _ballOrange = Color(0xFFFF6B1A);
+
+  // El salto va de [_from] a [_to] mientras corre el controller.
+  late AppTab _from = widget.active;
+  late AppTab _to = widget.active;
+
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 420),
+    value: 1, // sin animación inicial: la pelota arranca apoyada
+  );
+
+  @override
+  void didUpdateWidget(covariant AppTabBar old) {
+    super.didUpdateWidget(old);
+    if (old.active != widget.active) {
+      setState(() {
+        _from = _to;
+        _to = widget.active;
+      });
+      _ctrl.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  IconData _iconFor(AppTab t) => switch (t) {
+        AppTab.home => Icons.map_outlined,
+        AppTab.list => Icons.sports_basketball_outlined,
+        AppTab.plus => Icons.add,
+        AppTab.chat => Icons.chat_bubble_outline,
+        AppTab.profile => Icons.person_outline,
+      };
+
+  /// Centro horizontal del slot [i] dentro del ancho interno [innerW]
+  /// (la Row usa spaceBetween con items de ancho fijo).
+  double _slotCenter(double innerW, int i) {
+    final gap = (innerW - _slots.length * _item) / (_slots.length - 1);
+    return i * (_item + gap) + _item / 2;
+  }
+
+  /// Posición X actual del centro de la pelota (interpolando el salto).
+  double _ballX(double innerW) {
+    final t = Curves.easeInOut.transform(_ctrl.value);
+    final fromX = _slotCenter(innerW, _slots.indexOf(_from));
+    final toX = _slotCenter(innerW, _slots.indexOf(_to));
+    return fromX + (toX - fromX) * t;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,69 +97,135 @@ class AppTabBar extends StatelessWidget {
         boxShadow: AppFx.hardShadow(),
       ),
       padding: const EdgeInsets.all(6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _TabCircle(
-            active: active == AppTab.home,
-            icon: Icons.map_outlined,
-            onTap: () => onChange(AppTab.home),
-          ),
-          _TabCircle(
-            active: active == AppTab.list,
-            icon: Icons.sports_basketball_outlined,
-            onTap: () => onChange(AppTab.list),
-          ),
-          _PlusButton(onTap: () => onChange(AppTab.plus)),
-          _TabCircle(
-            active: active == AppTab.chat,
-            icon: Icons.chat_bubble_outline,
-            onTap: () => onChange(AppTab.chat),
-          ),
-          _TabCircle(
-            active: active == AppTab.profile,
-            icon: Icons.person_outline,
-            onTap: () => onChange(AppTab.profile),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, cons) {
+          final innerW = cons.maxWidth;
+          return SizedBox(
+            height: _item,
+            child: Stack(
+              clipBehavior: Clip.none, // la pelota se eleva por fuera del pill
+              children: [
+                // Capa 1: fondos de los botones (capturan los taps).
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    for (final t in _slots)
+                      t == AppTab.plus
+                          ? _PlusButton(
+                              color: _ballOrange,
+                              onTap: () => widget.onChange(t))
+                          : _TabCircle(onTap: () => widget.onChange(t)),
+                  ],
+                ),
+                // Capa 2: la pelota de básquet (sin ícono), saltando en arco.
+                AnimatedBuilder(
+                  animation: _ctrl,
+                  builder: (context, _) {
+                    final x = _ballX(innerW);
+                    // Arco del salto: sube y baja una sola vez.
+                    final y = -_hop * math.sin(math.pi * _ctrl.value);
+                    return Positioned(
+                      left: x - _item / 2,
+                      top: y,
+                      child: IgnorePointer(
+                        // Relleno + sombra ABAJO, líneas del glyph al medio y
+                        // el aro negro arriba (si la sombra fuera del aro
+                        // transparente, se pintaría sobre el glyph y taparía
+                        // la pelota con un disco negro).
+                        child: Container(
+                          width: _item,
+                          height: _item,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _ballOrange,
+                            boxShadow:
+                                AppFx.hardShadow(offset: const Offset(2, 2)),
+                          ),
+                          child: Stack(
+                            children: [
+                              // ClipOval: las costuras del glyph no deben
+                              // sobrepasar el límite del círculo.
+                              const Positioned.fill(
+                                child: ClipOval(
+                                  child: BBallGlyph(
+                                      size: _item, color: _ballOrange),
+                                ),
+                              ),
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                        color: AppColors.ink, width: 2),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                // Capa 3: los íconos, por ENCIMA de la pelota. Quedan siempre
+                // en su pestaña; cuando la pelota está debajo se pintan de
+                // blanco (efecto "máscara"). El + va siempre blanco (su botón
+                // es naranja).
+                AnimatedBuilder(
+                  animation: _ctrl,
+                  builder: (context, _) {
+                    final ballX = _ballX(innerW);
+                    return IgnorePointer(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          for (var i = 0; i < _slots.length; i++)
+                            SizedBox(
+                              width: _item,
+                              height: _item,
+                              child: Icon(
+                                _iconFor(_slots[i]),
+                                size: _slots[i] == AppTab.plus ? 24 : 21,
+                                color: _slots[i] == AppTab.plus ||
+                                        (ballX - _slotCenter(innerW, i))
+                                                .abs() <
+                                            _item / 2
+                                    ? Colors.white
+                                    : AppColors.ink,
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 }
 
-/// Botón circular de pestaña: relleno de acento + ícono negro si está activa;
-/// círculo oscuro + ícono blanco si no.
+/// Fondo circular de pestaña (sin ícono: los íconos van en una capa superior).
 class _TabCircle extends StatelessWidget {
-  final bool active;
-  final IconData icon;
   final VoidCallback onTap;
 
-  const _TabCircle({
-    required this.active,
-    required this.icon,
-    required this.onTap,
-  });
+  const _TabCircle({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
+      child: Container(
         width: 46,
         height: 46,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: active ? AppColors.accent : AppColors.card,
+          color: AppColors.card,
           border: Border.all(color: AppColors.ink, width: 2),
-          boxShadow: active ? AppFx.hardShadow(offset: const Offset(2, 2)) : null,
-        ),
-        child: Icon(
-          icon,
-          size: 21,
-          // Activo: círculo rojo → ícono blanco. Inactivo: crema → ícono negro.
-          color: active ? Colors.white : AppColors.ink,
         ),
       ),
     );
@@ -94,8 +233,9 @@ class _TabCircle extends StatelessWidget {
 }
 
 class _PlusButton extends StatefulWidget {
+  final Color color;
   final VoidCallback onTap;
-  const _PlusButton({required this.onTap});
+  const _PlusButton({required this.color, required this.onTap});
 
   @override
   State<_PlusButton> createState() => _PlusButtonState();
@@ -146,23 +286,25 @@ class _PlusButtonState extends State<_PlusButton>
                     height: 46 + t * 34,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: AppColors.accent.withAlpha(((1 - t) * 110).round()),
+                      color:
+                          widget.color.withAlpha(((1 - t) * 110).round()),
                     ),
                   ),
                 Transform.scale(scale: scale, child: child),
               ],
             );
           },
+          // Naranja pelota (el ícono "+" vive en la capa de íconos de la
+          // barra, así la pelota que se posa encima no lo tapa).
           child: Container(
             width: 46,
             height: 46,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppColors.accent,
+              color: widget.color,
               border: Border.all(color: AppColors.ink, width: 2),
               boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
             ),
-            child: const Icon(Icons.add, color: Colors.white, size: 24),
           ),
         ),
       ),
