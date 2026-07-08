@@ -400,17 +400,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 label: 'Partidos',
                 value: '${context.watch<PlaySessionService>().totalPlays}',
                 icon: Icons.sports_basketball,
-                accent: true,
               ),
               _StatBox(
                 label: 'Canchas',
                 value: '${context.watch<PlaySessionService>().uniqueCourtsCount}',
                 icon: Icons.place_outlined,
               ),
+              // Resaltada: es la única stat-botón (abre el modal de rachas).
               _StatBox(
                 label: 'Racha',
                 value: '${context.watch<PlaySessionService>().streak}',
                 icon: Icons.local_fire_department,
+                accent: true,
                 onTap: () => _showStreaks(context),
               ),
               _StatBox(
@@ -900,14 +901,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
         runSpacing: 6,
         children: [
           if (hasTitle)
+            // Tocable: despliega los títulos DESBLOQUEADOS para cambiarlo.
             AppChip(
               label: profile.title,
               color: titleByName(profile.title)?.color,
+              onTap: _showUnlockedTitles,
             ),
           if (localPos.isNotEmpty) AppChip(label: localPos),
         ],
       ),
     );
+  }
+
+  /// Bottom sheet con los títulos ya desbloqueados, para equipar uno rápido
+  /// desde el chip bajo el nombre (sin scrollear hasta la sección Títulos).
+  void _showUnlockedTitles() {
+    _showSheet('Elegí tu título', (ctx) {
+      final profile = ctx.watch<Session>().profile ?? const Profile(name: '');
+      final ps = ctx.watch<PlaySessionService>();
+      final s = _statsOf(ps);
+      final badges = ps.unlockedBadges;
+      final unlockedTitles = kTitles
+          .where((t) => t.requires.every((id) =>
+              badges.contains(id) ||
+              (achievementById(id)?.unlocked(s) ?? false)))
+          .toList();
+      if (unlockedTitles.isEmpty) {
+        return [
+          _emptyCard('Todavía no desbloqueaste títulos. '
+              'Completá logros para conseguirlos.'),
+        ];
+      }
+      return [
+        for (var i = 0; i < unlockedTitles.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          _titleRow(unlockedTitles[i], profile),
+        ],
+      ];
+    });
   }
 
   /// Selector de posición (bottom sheet). Guarda la elección en local.
@@ -3196,7 +3227,9 @@ class _StatBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final labelColor = accent ? AppColors.white(0.9) : AppColors.white(0.55);
+    // OJO: sobre la caja de acento el texto va BLANCO real (AppColors.white(op)
+    // devuelve negro tras el rebrand claro).
+    final labelColor = accent ? Colors.white : AppColors.white(0.55);
     final box = Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -3218,7 +3251,7 @@ class _StatBox extends StatelessWidget {
               height: 38,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: accent ? AppColors.white(0.18) : AppColors.accent.withAlpha(28),
+                color: accent ? Colors.white24 : AppColors.accent.withAlpha(28),
                 borderRadius: BorderRadius.circular(AppShape.rBtn),
               ),
               child: Icon(
@@ -3242,6 +3275,7 @@ class _StatBox extends StatelessWidget {
                   style: AppText.archivo(
                     size: 24,
                     weight: FontWeight.w900,
+                    color: accent ? Colors.white : AppColors.ink,
                     letterSpacing: -0.02,
                     height: 1.0,
                   ),
@@ -3267,7 +3301,7 @@ class _StatBox extends StatelessWidget {
                       Icon(Icons.construction,
                           size: 11,
                           color: accent
-                              ? AppColors.white(0.7)
+                              ? Colors.white70
                               : AppColors.white(0.35)),
                     ],
                   ],
@@ -3278,7 +3312,7 @@ class _StatBox extends StatelessWidget {
           if (onTap != null)
             Icon(Icons.chevron_right,
                 size: 16,
-                color: accent ? AppColors.white(0.7) : AppColors.white(0.3)),
+                color: accent ? Colors.white : AppColors.white(0.3)),
         ],
       ),
     );
