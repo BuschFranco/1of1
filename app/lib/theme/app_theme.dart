@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 /// Paleta RETRO-POP CARTOON (clara). Fondos planos saturados por pantalla,
 /// superficies claras (crema/blanco), tinta negra, bordes negros y sombras
@@ -71,17 +70,17 @@ class AppShape {
 }
 
 class AppText {
-  /// Fuente display de la marca (títulos): Fraunces — serif ultra pesada y
-  /// redondeada, con onda retro-pop. Pesa hasta 900 (default). El color default
-  /// es tinta negra (fondos claros). `letterSpacing` es una fracción del tamaño.
+  /// Fuente display de la marca (títulos): Jost — geometric sans-serif
+  /// inspirada en Futura (estilo Nike). Bold por defecto.
   static TextStyle display({
     double size = 14,
-    FontWeight weight = FontWeight.w900,
+    FontWeight weight = FontWeight.w700,
     Color color = AppColors.ink,
     double letterSpacing = 0,
     double? height,
   }) {
-    return GoogleFonts.fraunces(
+    return TextStyle(
+      fontFamily: 'Jost',
       fontSize: size,
       fontWeight: weight,
       color: color,
@@ -91,7 +90,7 @@ class AppText {
   }
 
   /// Alias histórico. Todo el código existente que usaba `AppText.archivo`
-  /// ahora renderiza con la fuente display (Fraunces) sin tocar call-sites.
+  /// ahora renderiza con la fuente display (Jost) sin tocar call-sites.
   static TextStyle archivo({
     double size = 14,
     FontWeight weight = FontWeight.w900,
@@ -114,7 +113,8 @@ class AppText {
     double letterSpacing = 0,
     double? height,
   }) {
-    return GoogleFonts.spaceGrotesk(
+    return TextStyle(
+      fontFamily: 'Jost',
       fontSize: size,
       fontWeight: weight,
       color: color,
@@ -133,8 +133,13 @@ ThemeData buildAppTheme() {
       secondary: AppColors.accent,
       surface: AppColors.bg,
     ),
-    textTheme: GoogleFonts.spaceGroteskTextTheme(
-      ThemeData.light().textTheme,
+    textTheme: ThemeData.light().textTheme.copyWith(
+      bodyLarge: const TextStyle(fontFamily: 'Jost'),
+      bodyMedium: const TextStyle(fontFamily: 'Jost'),
+      bodySmall: const TextStyle(fontFamily: 'Jost'),
+      labelLarge: const TextStyle(fontFamily: 'Jost'),
+      labelMedium: const TextStyle(fontFamily: 'Jost'),
+      labelSmall: const TextStyle(fontFamily: 'Jost'),
     ),
     // Diálogos retro-pop GLOBALES: fondo claro, borde negro franco, esquinas
     // redondeadas. Cubre todos los AlertDialog sin tocarlos uno por uno.

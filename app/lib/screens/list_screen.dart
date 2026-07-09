@@ -85,7 +85,7 @@ class _ListScreenState extends State<ListScreen> {
                   style: AppText.archivo(
                     size: 38,
                     weight: FontWeight.w900,
-                    color: AppColors.sun,
+                    color: Colors.white,
                     letterSpacing: -0.01,
                     height: 1.05,
                   ).copyWith(

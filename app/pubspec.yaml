@@ -52,3 +52,24 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+  fonts:
+    - family: Jost
+      fonts:
+        - asset: assets/fonts/jost/Jost-400-Book.otf
+          weight: 400
+        - asset: assets/fonts/jost/Jost-400-BookItalic.otf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/jost/Jost-500-Medium.otf
+          weight: 500
+        - asset: assets/fonts/jost/Jost-600-Semi.otf
+          weight: 600
+        - asset: assets/fonts/jost/Jost-700-Bold.otf
+          weight: 700
+        - asset: assets/fonts/jost/Jost-700-BoldItalic.otf
+          weight: 700
+          style: italic
+        - asset: assets/fonts/jost/Jost-800-Hevy.otf
+          weight: 800
+        - asset: assets/fonts/jost/Jost-900-Black.otf
+          weight: 900

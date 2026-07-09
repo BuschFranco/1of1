@@ -117,50 +117,63 @@ class _AppTabBarState extends State<AppTabBar>
                           : _TabCircle(onTap: () => widget.onChange(t)),
                   ],
                 ),
-                // Capa 2: la pelota de básquet (sin ícono), saltando en arco.
+                // Capa 2: la pelota de básquet (sin ícono), saltando en arco
+                // con squash & stretch (se estira al volar, se aplasta al aterrizar).
                 AnimatedBuilder(
                   animation: _ctrl,
                   builder: (context, _) {
                     final x = _ballX(innerW);
+                    final t = _ctrl.value;
                     // Arco del salto: sube y baja una sola vez.
-                    final y = -_hop * math.sin(math.pi * _ctrl.value);
+                    final y = -_hop * math.sin(math.pi * t);
+                    // Squash & stretch: deform es 0 en suelo (t=0,1) y 1 en el
+                    // pico (t=0.5). scaleY se estira en el aire, scaleX se
+                    // contrae para preservar volumen. Al tocar el suelo ambos
+                    // vuelven a 1.0.
+                    final deform = math.sin(math.pi * t);
+                    final scaleY = 1.0 + 0.12 * deform;
+                    final scaleX = 1.0 / math.sqrt(scaleY);
                     return Positioned(
                       left: x - _item / 2,
                       top: y,
                       child: IgnorePointer(
-                        // Relleno + sombra ABAJO, líneas del glyph al medio y
-                        // el aro negro arriba (si la sombra fuera del aro
-                        // transparente, se pintaría sobre el glyph y taparía
-                        // la pelota con un disco negro).
-                        child: Container(
-                          width: _item,
-                          height: _item,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _ballOrange,
-                            boxShadow:
-                                AppFx.hardShadow(offset: const Offset(2, 2)),
-                          ),
-                          child: Stack(
-                            children: [
-                              // ClipOval: las costuras del glyph no deben
-                              // sobrepasar el límite del círculo.
-                              const Positioned.fill(
-                                child: ClipOval(
-                                  child: BBallGlyph(
-                                      size: _item, color: _ballOrange),
-                                ),
-                              ),
-                              Positioned.fill(
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                        color: AppColors.ink, width: 2),
+                        child: Transform.scale(
+                          scaleX: scaleX,
+                          scaleY: scaleY,
+                          // Relleno + sombra ABAJO, líneas del glyph al medio y
+                          // el aro negro arriba (si la sombra fuera del aro
+                          // transparente, se pintaría sobre el glyph y taparía
+                          // la pelota con un disco negro).
+                          child: Container(
+                            width: _item,
+                            height: _item,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _ballOrange,
+                              boxShadow:
+                                  AppFx.hardShadow(offset: const Offset(2, 2)),
+                            ),
+                            child: Stack(
+                              children: [
+                                // ClipOval: las costuras del glyph no deben
+                                // sobrepasar el límite del círculo.
+                                const Positioned.fill(
+                                  child: ClipOval(
+                                    child: BBallGlyph(
+                                        size: _item, color: _ballOrange),
                                   ),
                                 ),
-                              ),
-                            ],
+                                Positioned.fill(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                          color: AppColors.ink, width: 2),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),

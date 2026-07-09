@@ -7,6 +7,7 @@ import '../services/courts_provider.dart';
 import '../services/notion_service.dart';
 import '../services/session.dart';
 import '../theme/app_theme.dart';
+import '../widgets/basketball_graffiti.dart';
 import '../widgets/under_construction.dart';
 import 'add_court_screen.dart';
 
@@ -271,65 +272,75 @@ class CreateScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: AppColors.bg,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 56, 20, 160),
+      child: Stack(
         children: [
-          Text(
-            'Nuevo',
-            style: AppText.archivo(
-              size: 34,
-              weight: FontWeight.w900,
-              letterSpacing: -0.01,
+          // Capa de graffiti decorativa centrada en el fondo.
+          const Positioned.fill(
+            child: Center(
+              child: BasketballGraffiti(size: 300, color: AppColors.ink),
             ),
           ),
-          const SizedBox(height: 20),
-          for (var i = 0; i < _options.length; i++)
-            GestureDetector(
-              onTap: () => _onTap(context, i),
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(18),
-                // Card de opción: sólida con borde claro franco.
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  border: Border.all(color: AppColors.line, width: 2),
-                  borderRadius: BorderRadius.circular(AppShape.rCard),
-                ),
-                child: Row(
-                  children: [
-                    Icon(_options[i].$3, size: 28, color: AppColors.accent),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  _options[i].$1,
-                                  style: AppText.archivo(size: 16, weight: FontWeight.w800),
-                                ),
-                              ),
-                              if (_wip.contains(i)) ...[
-                                const SizedBox(width: 8),
-                                const UnderConstructionBadge(),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _options[i].$2,
-                            style: AppText.grotesk(size: 12, color: AppColors.white(0.55)),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.chevron_right, color: Colors.white, size: 20),
-                  ],
+          ListView(
+            padding: const EdgeInsets.fromLTRB(20, 56, 20, 160),
+            children: [
+              Text(
+                'Nuevo',
+                style: AppText.archivo(
+                  size: 34,
+                  weight: FontWeight.w900,
+                  letterSpacing: -0.01,
                 ),
               ),
-            ),
+              const SizedBox(height: 20),
+              for (var i = 0; i < _options.length; i++)
+                GestureDetector(
+                  onTap: () => _onTap(context, i),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(18),
+                    // Card de opción: sólida con borde claro franco.
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      border: Border.all(color: AppColors.line, width: 2),
+                      borderRadius: BorderRadius.circular(AppShape.rCard),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(_options[i].$3, size: 28, color: AppColors.accent),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      _options[i].$1,
+                                      style: AppText.archivo(size: 16, weight: FontWeight.w800),
+                                    ),
+                                  ),
+                                  if (_wip.contains(i)) ...[
+                                    const SizedBox(width: 8),
+                                    const UnderConstructionBadge(),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _options[i].$2,
+                                style: AppText.grotesk(size: 12, color: AppColors.white(0.55)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right, color: Colors.white, size: 20),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );

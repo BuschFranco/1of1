@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/session.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/pop_background.dart';
-import '../widgets/pop_button.dart';
 
 enum AuthMode { login, signup }
 
@@ -115,10 +115,10 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.sun,
+      backgroundColor: const Color(0xFFFFD600),
       body: Stack(
         children: [
-          const Positioned.fill(child: PopBackground(color: AppColors.sun)),
+          const Positioned.fill(child: PopBackground(color: Color(0xFFFFD600))),
           SafeArea(
             // Swipe horizontal en toda la pantalla para alternar login/registro
             // (el scroll es vertical, así que no compite con este gesto).
@@ -373,10 +373,38 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _submitBtn() {
-    return PopButton(
-      label: _isSignup ? 'Crear cuenta' : 'Ingresar',
-      loading: _loading,
-      onPressed: _loading ? null : _submit,
+    return GestureDetector(
+      onTap: _loading ? null : _submit,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 90),
+        height: 54,
+        width: double.infinity,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _loading ? AppColors.black(0.08) : AppColors.ink,
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: Border.all(color: AppColors.ink, width: 2),
+          boxShadow: !_loading
+              ? AppFx.hardShadow(offset: const Offset(4, 4))
+              : null,
+        ),
+        child: _loading
+            ? SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: AppColors.white(0.6)),
+              )
+            : Text(
+                (_isSignup ? 'Crear cuenta' : 'Ingresar').toUpperCase(),
+                style: AppText.display(
+                  size: 14,
+                  weight: FontWeight.w800,
+                  letterSpacing: 0.04,
+                  color: Colors.white,
+                ),
+              ),
+      ),
     );
   }
 
