@@ -101,10 +101,10 @@ class _PopButtonState extends State<PopButton>
               widget.expand ? null : const EdgeInsets.symmetric(horizontal: 26),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: enabled ? AppColors.blush : AppColors.black(0.08),
+            color: enabled ? AppColors.accent : AppColors.black(0.08),
             borderRadius: BorderRadius.circular(AppShape.rBtn),
             border: Border.all(
-              color: enabled ? AppColors.ink : AppColors.black(0.25),
+              color: enabled ? AppColors.accentDark : AppColors.black(0.25),
               width: 1,
             ),
             boxShadow: enabled ? AppFx.hardShadow() : null,

@@ -42,13 +42,23 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
+    // Usar la pestaña de inicio elegida por el usuario (Personalización).
+    final defaultTab = context.read<Session>().defaultTab;
+    _tab = _tabFromName(defaultTab);
+    _previousTab = _tab;
     _loaderTimer = Timer(const Duration(seconds: 6), () {
       if (mounted) setState(() => _loaderTimedOut = true);
     });
-    // Los permisos (ubicación, notificaciones, alarmas) NO se piden solos al
-    // abrir la app: los pide el modal de permisos sobre el mapa cuando el
-    // usuario activa cada switch.
   }
+
+  /// Convierte un nombre de string a AppTab, con fallback a home.
+  static AppTab _tabFromName(String name) => switch (name) {
+        'list' => AppTab.list,
+        'plus' => AppTab.plus,
+        'chat' => AppTab.chat,
+        'profile' => AppTab.profile,
+        _ => AppTab.home,
+      };
 
   @override
   void dispose() {

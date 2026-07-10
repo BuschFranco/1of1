@@ -358,6 +358,37 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         .length;
   }
 
+  /// Puntos de la semana actual (lunes a hoy).
+  int get pointsThisWeek {
+    final now = DateTime.now();
+    final monday = now.subtract(Duration(days: now.weekday - 1));
+    final startMs = DateTime(monday.year, monday.month, monday.day)
+        .millisecondsSinceEpoch;
+    return _log
+        .where((e) => e.endedAtMillis >= startMs)
+        .fold(0, (sum, e) => sum + e.points);
+  }
+
+  /// Puntos del mes actual.
+  int get pointsThisMonth {
+    final now = DateTime.now();
+    final startMs = DateTime(now.year, now.month, 1)
+        .millisecondsSinceEpoch;
+    return _log
+        .where((e) => e.endedAtMillis >= startMs)
+        .fold(0, (sum, e) => sum + e.points);
+  }
+
+  /// Puntos de la temporada (últimos 6 meses).
+  int get pointsSeason {
+    final cutoff = DateTime.now()
+        .subtract(const Duration(days: 180))
+        .millisecondsSinceEpoch;
+    return _log
+        .where((e) => e.endedAtMillis >= cutoff)
+        .fold(0, (sum, e) => sum + e.points);
+  }
+
   /// Mejor racha alcanzada (la actual o la más alta del historial).
   int get bestStreak {
     var best = _streak;

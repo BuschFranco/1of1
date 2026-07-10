@@ -92,6 +92,19 @@ Future<void> _ensureNotionSchema() async {
       NotionConfig.dbReviews,
       const {'UserHandle': 'rich_text'},
     );
+    await notion.ensureProperties(
+      NotionConfig.dbPickups,
+      const {
+        'TeamSize': 'number',
+        'TeamAName': 'rich_text',
+        'TeamBName': 'rich_text',
+        'TeamAColor': 'rich_text',
+        'TeamBColor': 'rich_text',
+        'TeamAMembers': 'rich_text',
+        'TeamBMembers': 'rich_text',
+        'TargetScore': 'number',
+      },
+    );
   } catch (_) {
     // Permisos insuficientes u otro error: se puede crear a mano en Notion.
   }

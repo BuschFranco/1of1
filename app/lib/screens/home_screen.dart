@@ -343,7 +343,14 @@ class _HomeScreenState extends State<HomeScreen>
             _userPos = pos;
             _updateUserScreenPos();
             if (firstFix) {
-              // Primer fix: aplicar el orden "Cerca" una única vez.
+              // Primer fix: centrar el mapa en la ubicación del usuario.
+              _mapCtrl?.animateCamera(
+                CameraUpdate.newLatLngZoom(
+                  LatLng(pos.latitude, pos.longitude),
+                  14,
+                ),
+              );
+              // Aplicar el orden "Cerca" una única vez.
               setState(_applyFilters);
               _syncPageToIndex();
             }

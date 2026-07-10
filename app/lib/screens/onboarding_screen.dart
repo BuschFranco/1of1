@@ -12,12 +12,11 @@ class OnboardingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.lilac,
+      backgroundColor: AppColors.bg,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Fondo plano de sección (retro-pop): lila.
-          const PopBackground(color: AppColors.lilac),
+          const PopBackground(color: AppColors.bg),
           SafeArea(
             child: Column(
               children: [
@@ -68,7 +67,7 @@ class OnboardingScreen extends StatelessWidget {
             style: AppText.archivo(
               size: 46,
               weight: FontWeight.w900,
-              color: AppColors.sun,
+              color: AppColors.accent,
               letterSpacing: -0.01,
               height: 0.98,
             ),
@@ -105,9 +104,9 @@ class OnboardingScreen extends StatelessWidget {
               // Cajita sólida con borde franco (sin blur "glass").
               child: Container(
                 decoration: BoxDecoration(
-                  color: AppColors.glass,
+                  color: AppColors.card,
                   borderRadius: BorderRadius.circular(AppShape.rCard),
-                  border: Border.all(color: AppColors.white(0.25), width: 1.5),
+                  border: Border.all(color: AppColors.line, width: 1),
                 ),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

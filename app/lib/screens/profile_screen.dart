@@ -95,89 +95,87 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Stack(
         children: [
           Positioned.fill(child: PopBackground(color: bg)),
-          Column(
-            children: [
-              const SizedBox(height: 56),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          _tab == 0
+              ? _profileView(profile)
+              : Column(
                   children: [
-                    // Headline retro-pop (Fraunces), como "Crew" o "Canchas".
-                    // Sobre fondo saturado oscuro: blanco + sombra dura.
-                    Text(
-                      'Perfil',
-                      style: AppText.archivo(
-                        size: 30,
-                        weight: FontWeight.w900,
-                        color: _onDarkBg ? Colors.white : AppColors.ink,
-                        letterSpacing: -0.01,
-                      ).copyWith(
-                        shadows: _onDarkBg
-                            ? const [
-                                Shadow(
-                                    color: Colors.black,
-                                    offset: Offset(3, 3)),
-                              ]
-                            : null,
+                    const SizedBox(height: 56),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Perfil',
+                            style: AppText.archivo(
+                              size: 30,
+                              weight: FontWeight.w900,
+                              color: _onDarkBg ? Colors.white : AppColors.ink,
+                              letterSpacing: -0.01,
+                            ).copyWith(
+                              shadows: _onDarkBg
+                                  ? const [
+                                      Shadow(
+                                          color: Colors.black,
+                                          offset: Offset(3, 3)),
+                                    ]
+                                  : null,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              _notifButton(context),
+                              const SizedBox(width: 8),
+                                if (context.read<Session>().isLoggedIn)
+                                PressableWidget(
+                                  onTap: () => _openSettings(context, profile),
+                                  child: Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.bgElev,
+                                      borderRadius:
+                                          BorderRadius.circular(AppShape.rBtn),
+                                      border: Border.all(
+                                          color: AppColors.white(0.25), width: 1.5),
+                                    ),
+                                    child: const Icon(Icons.settings_outlined,
+                                        color: AppColors.ink, size: 18),
+                                  ),
+                                ),
+                              const SizedBox(width: 8),
+                              PressableWidget(
+                                onTap: () => _confirmLogout(context),
+                                child: Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.bgElev,
+                                    borderRadius:
+                                        BorderRadius.circular(AppShape.rBtn),
+                                    border: Border.all(
+                                        color: AppColors.white(0.25), width: 1.5),
+                                  ),
+                                  child: const Icon(Icons.logout,
+                                      color: AppColors.ink, size: 18),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                    Row(
-                      children: [
-                        _notifButton(context),
-                        const SizedBox(width: 8),
-                          if (context.read<Session>().isLoggedIn)
-                          PressableWidget(
-                            onTap: () => _openSettings(context, profile),
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: AppColors.bgElev,
-                                borderRadius:
-                                    BorderRadius.circular(AppShape.rBtn),
-                                border: Border.all(
-                                    color: AppColors.white(0.25), width: 1.5),
-                              ),
-                              child: const Icon(Icons.settings_outlined,
-                                  color: AppColors.ink, size: 18),
-                            ),
-                          ),
-                        const SizedBox(width: 8),
-                        PressableWidget(
-                          onTap: () => _confirmLogout(context),
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: AppColors.bgElev,
-                              borderRadius:
-                                  BorderRadius.circular(AppShape.rBtn),
-                              border: Border.all(
-                                  color: AppColors.white(0.25), width: 1.5),
-                            ),
-                            child: const Icon(Icons.logout,
-                                color: AppColors.ink, size: 18),
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: _tabs(),
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: _FriendsTab(profile: profile),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _tabs(),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: _tab == 0
-                    ? _profileView(profile)
-                    : _FriendsTab(profile: profile),
-              ),
-            ],
-          ),
         ],
       ),
     );
@@ -283,6 +281,78 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.only(top: 4, bottom: 180),
       clipBehavior: Clip.none,
       children: [
+        const SizedBox(height: 56),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Perfil',
+                style: AppText.archivo(
+                  size: 30,
+                  weight: FontWeight.w900,
+                  color: _onDarkBg ? Colors.white : AppColors.ink,
+                  letterSpacing: -0.01,
+                ).copyWith(
+                  shadows: _onDarkBg
+                      ? const [
+                          Shadow(
+                              color: Colors.black,
+                              offset: Offset(3, 3)),
+                        ]
+                      : null,
+                ),
+              ),
+              Row(
+                children: [
+                  _notifButton(context),
+                  const SizedBox(width: 8),
+                    if (context.read<Session>().isLoggedIn)
+                    PressableWidget(
+                      onTap: () => _openSettings(context, profile),
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.bgElev,
+                          borderRadius:
+                              BorderRadius.circular(AppShape.rBtn),
+                          border: Border.all(
+                              color: AppColors.white(0.25), width: 1.5),
+                        ),
+                        child: const Icon(Icons.settings_outlined,
+                            color: AppColors.ink, size: 18),
+                      ),
+                    ),
+                  const SizedBox(width: 8),
+                  PressableWidget(
+                    onTap: () => _confirmLogout(context),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.bgElev,
+                        borderRadius:
+                            BorderRadius.circular(AppShape.rBtn),
+                        border: Border.all(
+                            color: AppColors.white(0.25), width: 1.5),
+                      ),
+                      child: const Icon(Icons.logout,
+                          color: AppColors.ink, size: 18),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: _tabs(),
+        ),
+        const SizedBox(height: 16),
         RevealOnScroll(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -417,9 +487,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 _StatBox(
                   label: 'Rating',
-                  value: profile.rating > 0 ? profile.rating.toStringAsFixed(1) : '—',
+                  value: '${context.watch<PlaySessionService>().points}',
                   icon: Icons.star_rounded,
-                  note: 'en construcción',
+                  onTap: () => _showRanking(context),
                 ),
               ],
             ),
@@ -1798,6 +1868,178 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return '${d.day}/${d.month}/${d.year}';
   }
 
+  Future<void> _showRanking(BuildContext context) async {
+    final session = context.read<Session>();
+    final ps = context.read<PlaySessionService>();
+    final friendsService = FriendsService();
+    final profiles = context.read<ProfilesProvider>();
+
+    // Cargar amigos.
+    List<Friend> friends = [];
+    if (session.email != null && friendsService.isConfigured) {
+      try {
+        friends = await friendsService.listFriends(session.email!);
+      } catch (_) {}
+    }
+
+    // Construir la lista de ranking: usuario + amigos.
+    final entries = <({
+      String name,
+      String handle,
+      int points,
+      bool isMe,
+    })>[
+      (
+        name: session.profile?.name.isNotEmpty == true
+            ? session.profile!.name
+            : 'Invitado',
+        handle: session.profile?.handle ?? '',
+        points: ps.points,
+        isMe: true,
+      ),
+    ];
+
+    for (final f in friends) {
+      final fp = profiles.byEmail(f.friendEmail);
+      entries.add((
+        name: f.friendName.isNotEmpty ? f.friendName : f.friendHandle,
+        handle: f.friendHandle,
+        points: fp?.points ?? 0,
+        isMe: false,
+      ));
+    }
+
+    entries.sort((a, b) => b.points.compareTo(a.points));
+
+    if (!context.mounted) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        height: MediaQuery.of(ctx).size.height * 0.7,
+        decoration: const BoxDecoration(
+          color: AppColors.bgElev,
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppShape.rCard)),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Handle.
+              Container(
+                margin: const EdgeInsets.only(top: 10),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.white(0.2),
+                  borderRadius: BorderRadius.circular(100),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text('Ranking',
+                  style: AppText.archivo(size: 20, weight: FontWeight.w900)),
+              const SizedBox(height: 6),
+              Text('Puntos totales',
+                  style: AppText.grotesk(size: 12, color: AppColors.white(0.4))),
+              const SizedBox(height: 14),
+              // Lista de ranking.
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  itemCount: entries.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) {
+                    final e = entries[i];
+                    final medal = i == 0
+                        ? '\u{1F947}'
+                        : i == 1
+                            ? '\u{1F948}'
+                            : i == 2
+                                ? '\u{1F949}'
+                                : '';
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: e.isMe
+                            ? AppColors.accent.withAlpha(20)
+                            : AppColors.card,
+                        borderRadius: BorderRadius.circular(AppShape.rCard),
+                        border: Border.all(
+                          color: e.isMe
+                              ? AppColors.accent.withAlpha(80)
+                              : AppColors.line,
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 28,
+                            child: Text(
+                              medal.isNotEmpty ? medal : '${i + 1}',
+                              style: AppText.grotesk(
+                                size: 13,
+                                weight: FontWeight.w800,
+                                color: AppColors.white(0.5),
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  e.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppText.grotesk(
+                                    size: 13,
+                                    weight: FontWeight.w700,
+                                    color: e.isMe
+                                        ? AppColors.accent
+                                        : AppColors.ink,
+                                  ),
+                                ),
+                                if (e.handle.isNotEmpty)
+                                  Text(
+                                    e.handle,
+                                    style: AppText.grotesk(
+                                      size: 10,
+                                      color: AppColors.white(0.4),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Text('${e.points}',
+                              style: AppText.archivo(
+                                  size: 15,
+                                  weight: FontWeight.w800,
+                                  color: e.isMe
+                                      ? AppColors.accent
+                                      : AppColors.ink)),
+                          const SizedBox(width: 4),
+                          Text('pts',
+                              style: AppText.grotesk(
+                                  size: 10, color: AppColors.white(0.35))),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _editPrivacy(BuildContext context, Profile profile) async {
     await showDialog<void>(
       context: context,
@@ -1838,11 +2080,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _settingsRow(
           ctx,
           Icons.format_paint_outlined,
-          'Fondo del perfil',
-          'Elegí el color de fondo de tu perfil',
+          'Personalización',
+          'Fondo del perfil y pantalla de inicio',
           () {
             Navigator.pop(ctx);
-            _editProfileBg(context);
+            _openPersonalization(context);
           },
         ),
       ];
@@ -1894,6 +2136,121 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         const SizedBox(height: 12),
+      ];
+    });
+  }
+
+  /// Pantalla de personalización: fondo del perfil + pantalla de inicio.
+  void _openPersonalization(BuildContext context) {
+    _showSheet('Personalización', (ctx) {
+      final currentBg = ctx.watch<Session>().profileBg;
+      final currentTab = ctx.watch<Session>().defaultTab;
+
+      final tabOptions = [
+        ('home', 'Mapa', Icons.map_outlined),
+        ('list', 'Canchas', Icons.stadium_outlined),
+        ('profile', 'Perfil', Icons.person_outline),
+        ('plus', 'Nuevo', Icons.add_circle_outline),
+        ('chat', 'Crew', Icons.group_outlined),
+      ];
+
+      return [
+        // Sección: Fondo del perfil.
+        Text('Fondo del perfil',
+            style: AppText.grotesk(
+                size: 13, weight: FontWeight.w700, color: AppColors.white(0.6))),
+        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final e in AppColors.profileBgs.entries)
+                PressableWidget(
+                  onTap: () {
+                    ctx.read<Session>().setProfileBg(e.key);
+                  },
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: e.value,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.ink,
+                        width: (currentBg.isEmpty ? 'cream' : currentBg) == e.key
+                            ? 3
+                            : 1.5,
+                      ),
+                    ),
+                    child: (currentBg.isEmpty ? 'cream' : currentBg) == e.key
+                        ? Icon(Icons.check,
+                            size: 18,
+                            color: e.value.computeLuminance() > 0.6
+                                ? AppColors.ink
+                                : Colors.white)
+                        : null,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        // Sección: Pantalla de inicio.
+        Text('Pantalla de inicio',
+            style: AppText.grotesk(
+                size: 13, weight: FontWeight.w700, color: AppColors.white(0.6))),
+        const SizedBox(height: 4),
+        Text('Qué pestaña se abre al iniciar la app',
+            style: AppText.grotesk(size: 11, color: AppColors.white(0.4))),
+        const SizedBox(height: 10),
+        for (final opt in tabOptions)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: GestureDetector(
+              onTap: () => ctx.read<Session>().setDefaultTab(opt.$1),
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: currentTab == opt.$1
+                      ? AppColors.accent.withAlpha(20)
+                      : AppColors.card,
+                  borderRadius: BorderRadius.circular(AppShape.rCard),
+                  border: Border.all(
+                    color: currentTab == opt.$1
+                        ? AppColors.accent
+                        : AppColors.line,
+                    width: currentTab == opt.$1 ? 1.5 : 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(opt.$3,
+                        size: 18,
+                        color: currentTab == opt.$1
+                            ? AppColors.accent
+                            : AppColors.white(0.5)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(opt.$2,
+                          style: AppText.grotesk(
+                              size: 14,
+                              weight: FontWeight.w600,
+                              color: currentTab == opt.$1
+                                  ? AppColors.accent
+                                  : AppColors.ink)),
+                    ),
+                    if (currentTab == opt.$1)
+                      Icon(Icons.check_circle, size: 18, color: AppColors.accent),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        const SizedBox(height: 8),
       ];
     });
   }

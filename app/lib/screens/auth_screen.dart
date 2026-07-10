@@ -116,10 +116,10 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFD600),
+      backgroundColor: AppColors.bg,
       body: Stack(
         children: [
-          const Positioned.fill(child: PopBackground(color: Color(0xFFFFD600))),
+          const Positioned.fill(child: PopBackground(color: AppColors.bg)),
           SafeArea(
             // Swipe horizontal en toda la pantalla para alternar login/registro
             // (el scroll es vertical, así que no compite con este gesto).
@@ -381,9 +381,9 @@ class _AuthScreenState extends State<AuthScreen> {
         width: double.infinity,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: _loading ? AppColors.black(0.08) : AppColors.ink,
+          color: _loading ? AppColors.black(0.08) : AppColors.accent,
           borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.line, width: 1),
+          border: Border.all(color: AppColors.accentDark, width: 1),
           boxShadow: !_loading
               ? AppFx.hardShadow(offset: const Offset(4, 4))
               : null,
@@ -482,8 +482,8 @@ class _GlowFieldState extends State<_GlowField> {
         color: AppColors.bgElev,
         borderRadius: BorderRadius.circular(AppShape.rBtn),
         border: Border.all(
-          color: focused ? AppColors.accent : AppColors.ink,
-          width: 2,
+          color: focused ? AppColors.accent : AppColors.line,
+          width: focused ? 2 : 1.5,
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16),

@@ -26,11 +26,13 @@ class Session extends ChangeNotifier {
   // Color de fondo del perfil elegido por el usuario (clave de
   // AppColors.profileBgs). Local y cosmético, como la posición.
   static const _kProfileBg = 'profile_bg_color';
+  static const _kDefaultTab = 'default_start_tab';
 
   Profile? _profile;
   String? _email;
   String _localPosition = '';
   String _profileBg = '';
+  String _defaultTab = 'home';
   bool _restoring = true;
   // Hay cambios de perfil (stats, nivel, título, clan, privacidad, tiempo,
   // logros) staged localmente sin subir. El batch los sube juntos en flush().
@@ -45,6 +47,8 @@ class Session extends ChangeNotifier {
 
   /// Clave del fondo de perfil elegido ('' = default). Ver AppColors.profileBgs.
   String get profileBg => _profileBg;
+  /// Pestaña de inicio elegida ('home' = default). Ver AppTab.
+  String get defaultTab => _defaultTab;
   bool get restoring => _restoring;
   bool get isLoggedIn => _profile != null;
   bool get notionReady => _notion.isConfigured;
@@ -64,6 +68,7 @@ class Session extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _localPosition = prefs.getString(_kLocalPosition) ?? '';
     _profileBg = prefs.getString(_kProfileBg) ?? '';
+    _defaultTab = prefs.getString(_kDefaultTab) ?? 'home';
     final persist = prefs.getBool(_kPersist) ?? true;
     if (!persist) {
       await prefs.remove(_kEmail);
@@ -373,6 +378,14 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Define la pestaña de inicio por defecto al abrir la app.
+  Future<void> setDefaultTab(String tab) async {
+    _defaultTab = tab;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kDefaultTab, tab);
+    notifyListeners();
+  }
+
   /// "Stagea" los agregados de juego en el perfil local y los marca para subir.
   /// NO pega a la red: el envío real lo hace [flush] en el próximo batch. Si los
   /// valores no cambiaron, no marca nada (evita peticiones inútiles).
@@ -441,10 +454,12 @@ class Session extends ChangeNotifier {
     await prefs.remove(_kProfile);
     await prefs.remove(_kLocalPosition);
     await prefs.remove(_kProfileBg);
+    await prefs.remove(_kDefaultTab);
     _profile = null;
     _email = null;
     _localPosition = '';
     _profileBg = '';
+    _defaultTab = 'home';
     notifyListeners();
   }
 

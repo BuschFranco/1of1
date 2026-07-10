@@ -283,7 +283,6 @@ class _PlusButtonState extends State<_PlusButton>
   void pulse() => _ctrl.forward(from: 0);
 
   void _handleTap() {
-    pulse();
     widget.onTap();
   }
 

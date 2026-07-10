@@ -283,6 +283,14 @@ class Pickup {
   final int maxPlayers;
   final String vibe;
   final String notes;
+  final int teamSize;
+  final String teamAName;
+  final String teamBName;
+  final String teamAColor;
+  final String teamBColor;
+  final List<String> teamAMembers;
+  final List<String> teamBMembers;
+  final int targetScore;
 
   const Pickup({
     this.pageId = '',
@@ -293,10 +301,20 @@ class Pickup {
     this.maxPlayers = 10,
     this.vibe = 'Casual',
     this.notes = '',
+    this.teamSize = 3,
+    this.teamAName = 'Equipo A',
+    this.teamBName = 'Equipo B',
+    this.teamAColor = '#FF6B1A',
+    this.teamBColor = '#3B82F6',
+    this.teamAMembers = const [],
+    this.teamBMembers = const [],
+    this.targetScore = 21,
   });
 
   factory Pickup.fromNotion(Map<String, dynamic> page) {
     final p = page['properties'] as Map<String, dynamic>;
+    final rawA = NotionService.readText(p, 'TeamAMembers');
+    final rawB = NotionService.readText(p, 'TeamBMembers');
     return Pickup(
       pageId: page['id']?.toString() ?? '',
       title: NotionService.readTitle(p, 'Title'),
@@ -306,6 +324,14 @@ class Pickup {
       maxPlayers: NotionService.readInt(p, 'MaxPlayers', fallback: 10),
       vibe: NotionService.readSelect(p, 'Vibe', fallback: 'Casual'),
       notes: NotionService.readText(p, 'Notes'),
+      teamSize: NotionService.readInt(p, 'TeamSize', fallback: 3),
+      teamAName: NotionService.readText(p, 'TeamAName').isEmpty ? 'Equipo A' : NotionService.readText(p, 'TeamAName'),
+      teamBName: NotionService.readText(p, 'TeamBName').isEmpty ? 'Equipo B' : NotionService.readText(p, 'TeamBName'),
+      teamAColor: NotionService.readText(p, 'TeamAColor').isEmpty ? '#FF6B1A' : NotionService.readText(p, 'TeamAColor'),
+      teamBColor: NotionService.readText(p, 'TeamBColor').isEmpty ? '#3B82F6' : NotionService.readText(p, 'TeamBColor'),
+      teamAMembers: rawA.isEmpty ? [] : rawA.split(',').where((e) => e.isNotEmpty).toList(),
+      teamBMembers: rawB.isEmpty ? [] : rawB.split(',').where((e) => e.isNotEmpty).toList(),
+      targetScore: NotionService.readInt(p, 'TargetScore', fallback: 21),
     );
   }
 
@@ -318,6 +344,14 @@ class Pickup {
       'MaxPlayers': NotionService.number(maxPlayers),
       'Vibe': NotionService.select(vibe),
       'Notes': NotionService.richText(notes),
+      'TeamSize': NotionService.number(teamSize),
+      'TeamAName': NotionService.richText(teamAName),
+      'TeamBName': NotionService.richText(teamBName),
+      'TeamAColor': NotionService.richText(teamAColor),
+      'TeamBColor': NotionService.richText(teamBColor),
+      'TeamAMembers': NotionService.richText(teamAMembers.join(',')),
+      'TeamBMembers': NotionService.richText(teamBMembers.join(',')),
+      'TargetScore': NotionService.number(targetScore),
     };
   }
 }
