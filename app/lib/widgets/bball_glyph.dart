@@ -25,13 +25,13 @@ class _BBallPainter extends CustomPainter {
     final center = Offset(r, r);
 
     final fill = Paint()
-      ..color = color.withAlpha(242)
+      ..color = color
       ..style = PaintingStyle.fill;
     canvas.drawCircle(center, r, fill);
 
     final stroke = Paint()
-      ..color = const Color(0xFF000000)
-      ..strokeWidth = size.width * 0.05
+      ..color = Colors.white.withAlpha(80)
+      ..strokeWidth = size.width * 0.06
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 

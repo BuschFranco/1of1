@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
+import 'pressable_widget.dart';
 
 class AppChip extends StatelessWidget {
   final String label;
   final bool active;
-  // Variante coloreada (ej. la rareza de un título equipado). Tiñe fondo,
-  // borde y texto con este color.
   final Color? color;
   final String? icon;
   final VoidCallback? onTap;
@@ -23,22 +22,19 @@ class AppChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tint = color;
-    // Retro-pop: pills planas con borde negro. La variante coloreada (ej. el
-    // título equipado, con su color de rareza) va SÓLIDA con texto blanco y
-    // sombra dura — como los chips de la referencia.
     final bg = tint ?? (active ? AppColors.accent : AppColors.paper);
     final col = (tint != null || active) ? Colors.white : AppColors.ink;
 
-    return GestureDetector(
+    return PressableWidget(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(AppShape.rChip),
-          border: Border.all(color: AppColors.ink, width: active ? 2 : 1.5),
+          border: Border.all(color: AppColors.line, width: active ? 1.5 : 1),
           boxShadow: (active || tint != null)
-              ? AppFx.hardShadow(offset: const Offset(2, 2))
+              ? AppFx.hardShadow(offset: const Offset(1, 2))
               : null,
         ),
         child: Row(

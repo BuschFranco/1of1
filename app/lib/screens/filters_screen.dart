@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
+import '../widgets/pressable_widget.dart';
 
 class FiltersScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -106,7 +107,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          GestureDetector(
+          PressableWidget(
             onTap: widget.onBack,
             child: Container(
               width: 40,
@@ -203,7 +204,7 @@ class _FiltersScreenState extends State<FiltersScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             for (final v in [1, 5, 10, 15, 20])
-              GestureDetector(
+              PressableWidget(
                 onTap: () => setState(() => _distance = v.toDouble()),
                 child: Text(
                   '${v}km',

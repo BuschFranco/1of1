@@ -1,44 +1,67 @@
 import 'package:flutter/material.dart';
 import 'app_theme.dart';
 
-/// Helpers de "efectos" del lenguaje NEOBRUTALISTA (dark): colores planos,
-/// bordes francos y sombras duras desplazadas sin blur. Mantiene las firmas de
-/// la era pop-futurista (gradientes/glows) para no tocar los call-sites: los
-/// gradientes ahora son planos y los "glows" son sombras duras.
+/// Helpers de efectos — dark mode Nike: sombras profundas sobre fondos oscuros.
 class AppFx {
   AppFx._();
 
-  /// Sombra dura neobrutalista: negra, desplazada, SIN blur. Es el reemplazo
-  /// universal de los glows neón.
+  /// Sombra dura: negra con opacidad media, sin blur.
   static List<BoxShadow> hardShadow({
-    Offset offset = const Offset(4, 4),
+    Offset offset = const Offset(1, 2),
+    double blur = 0,
     Color? color,
   }) =>
       [
         BoxShadow(
-          color: color ?? AppColors.ink,
+          color: (color ?? Colors.black).withValues(alpha: 0.5),
           offset: offset,
-          blurRadius: 0,
+          blurRadius: blur,
           spreadRadius: 0,
         ),
       ];
 
-  /// Antes: degradado naranja→ámbar. Ahora PLANO (acento sólido): un gradiente
-  /// con ambos extremos iguales pinta color liso sin tocar los call-sites.
+  /// Sombra sutil para cards secundarias / elementos pasivos.
+  static List<BoxShadow> softShadow({
+    Offset offset = const Offset(0, 1),
+    double blur = 1,
+    Color? color,
+  }) =>
+      [
+        BoxShadow(
+          color: (color ?? Colors.black).withValues(alpha: 0.3),
+          offset: offset,
+          blurRadius: blur,
+          spreadRadius: 0,
+        ),
+      ];
+
+  /// Sombra para elementos elevados (banners, CTAs).
+  static List<BoxShadow> elevatedShadow({
+    Offset offset = const Offset(0, 2),
+    double blur = 2,
+    Color? color,
+  }) =>
+      [
+        BoxShadow(
+          color: (color ?? Colors.black).withValues(alpha: 0.6),
+          offset: offset,
+          blurRadius: blur,
+          spreadRadius: 0,
+        ),
+      ];
+
+  /// Gradiente de acento (plano — ambos extremos iguales).
   static LinearGradient accentGradient({bool deep = false}) => LinearGradient(
         colors: deep
             ? const [AppColors.accentDark, AppColors.accentDark]
             : const [AppColors.accent, AppColors.accent],
       );
 
-  /// Antes: ring hairline con degradado. Ahora un "borde" plano del color dado
-  /// (sin fade), acorde a los bordes francos del neobrutalismo.
+  /// Borde plano del color dado.
   static LinearGradient hairline(Color color, {int topAlpha = 255}) =>
       LinearGradient(colors: [color, color]);
 
-  /// Antes: glow neón. Ahora sombra dura negra (los parámetros de blur/alpha se
-  /// ignoran a propósito para no tocar los call-sites). [offset] se respeta si
-  /// alguien pasa uno distinto de cero.
+  /// Sombra glow neon.
   static List<BoxShadow> neonGlow(
     Color color, {
     double blur = 22,
@@ -46,22 +69,25 @@ class AppFx {
     int alpha = 90,
     Offset offset = Offset.zero,
   }) =>
-      hardShadow(
-        offset: offset == Offset.zero ? const Offset(3, 3) : offset,
-      );
+      [
+        BoxShadow(
+          color: color.withValues(alpha: alpha / 255),
+          offset: offset == Offset.zero ? const Offset(0, 2) : offset,
+          blurRadius: blur,
+          spreadRadius: spread,
+        ),
+      ];
 
-  /// Antes: glow + profundidad. Ahora una sombra dura más protagonista (para
-  /// banners y CTAs elevados).
+  /// Sombra elevada para banners y CTAs protagonistas.
   static List<BoxShadow> glowElevated(
     Color color, {
     double glowBlur = 24,
     int glowAlpha = 90,
   }) =>
-      hardShadow(offset: const Offset(5, 5));
+      elevatedShadow();
 }
 
-/// Antes: ring con degradado. Ahora una caja con borde SÓLIDO del color dado
-/// (2px por defecto) y relleno plano — mismo contrato, look neobrutalista.
+/// Caja con borde SÓLIDO del color dado y relleno plano.
 class GradientRing extends StatelessWidget {
   final Widget child;
   final double radius;
@@ -76,7 +102,7 @@ class GradientRing extends StatelessWidget {
     super.key,
     required this.child,
     this.radius = 8,
-    this.thickness = 2,
+    this.thickness = 1,
     this.ringColor = AppColors.accent,
     this.fill = AppColors.panel,
     this.padding,

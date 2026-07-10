@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import 'pressable_widget.dart';
 
 class SectionTitle extends StatelessWidget {
   final String title;
@@ -29,18 +30,6 @@ class SectionTitle extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Kicker retro-pop: punto redondo de acento con borde negro
-              // (mismo lenguaje que los chips/círculos de la referencia).
-              Container(
-                width: 11,
-                height: 11,
-                margin: const EdgeInsets.only(right: 8, bottom: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.accent,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.ink, width: 1.5),
-                ),
-              ),
               Text(
                 title.toUpperCase(),
                 style: AppText.archivo(
@@ -51,7 +40,7 @@ class SectionTitle extends StatelessWidget {
                 ).copyWith(
                   shadows: onDark
                       ? const [
-                          Shadow(color: AppColors.ink, offset: Offset(2, 2)),
+                          Shadow(color: Colors.black, offset: Offset(2, 2)),
                         ]
                       : null,
                 ),
@@ -59,7 +48,7 @@ class SectionTitle extends StatelessWidget {
             ],
           ),
           if (right != null)
-            GestureDetector(
+            PressableWidget(
               onTap: onRight,
               child: Text(
                 right!,

@@ -7,7 +7,9 @@ import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
+import '../widgets/pressable_widget.dart';
 import '../widgets/rating_badge.dart';
+import '../widgets/reveal_on_scroll.dart';
 import '../widgets/status_dot.dart';
 
 class ListScreen extends StatefulWidget {
@@ -47,87 +49,76 @@ class _ListScreenState extends State<ListScreen> {
       child: ListView(
         padding: const EdgeInsets.only(top: 56, bottom: 160),
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Kicker retro-pop: punto de acento con borde negro + texto en
-                // tinta (mismo lenguaje que los SectionTitle).
-                Row(
-                  children: [
-                    Container(
-                      width: 11,
-                      height: 11,
-                      margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.accent,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.ink, width: 1.5),
-                      ),
+          RevealOnScroll(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '340 CANCHAS · BUENOS AIRES',
+                    style: AppText.grotesk(
+                      size: 11,
+                      weight: FontWeight.w800,
+                      color: AppColors.ink,
+                      letterSpacing: 0.16,
                     ),
-                    Text(
-                      '340 CANCHAS · BUENOS AIRES',
-                      style: AppText.grotesk(
-                        size: 11,
-                        weight: FontWeight.w800,
-                        color: AppColors.ink,
-                        letterSpacing: 0.16,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // Headline con la sombra dura clásica del estilo (offset, sin
-                // blur), como los paneles y botones.
-                Text(
-                  'Canchas\ncerca tuyo.',
-                  style: AppText.archivo(
-                    size: 38,
-                    weight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: -0.01,
-                    height: 1.05,
-                  ).copyWith(
-                    shadows: const [
-                      Shadow(color: AppColors.ink, offset: Offset(3, 3)),
-                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  Text(
+                    'Canchas\ncerca tuyo.',
+                    style: AppText.archivo(
+                      size: 38,
+                      weight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: -0.01,
+                      height: 1.05,
+                    ).copyWith(
+                      shadows: const [
+                        Shadow(color: Colors.black, offset: Offset(3, 3)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            height: 34,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              children: [
-                for (final c in const [
-                  ('near', 'Más cerca'),
-                  ('rate', 'Mejor rating'),
-                  ('busy', 'Más activas'),
-                  ('new', 'Nuevas'),
-                ]) ...[
-                  AppChip(
-                    label: c.$2,
-                    active: _sort == c.$1,
-                    onTap: () => setState(() => _sort = c.$1),
-                  ),
-                  const SizedBox(width: 8),
+          RevealOnScroll(
+            child: SizedBox(
+              height: 34,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                children: [
+                  for (final c in const [
+                    ('near', 'Más cerca'),
+                    ('rate', 'Mejor rating'),
+                    ('busy', 'Más activas'),
+                    ('new', 'Nuevas'),
+                  ]) ...[
+                    AppChip(
+                      label: c.$2,
+                      active: _sort == c.$1,
+                      onTap: () => setState(() => _sort = c.$1),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
           const SizedBox(height: 16),
           for (var i = 0; i < _sortedCourts.length; i++)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-              child: _CourtListItem(
-                court: _sortedCourts[i],
-                rank: i + 1,
-                onTap: () => widget.onSelectCourt?.call(_sortedCourts[i].id),
+            RevealOnScroll(
+              key: ValueKey(_sortedCourts[i].id),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                child: _CourtListItem(
+                  court: _sortedCourts[i],
+                  rank: i + 1,
+                  onTap: () => widget.onSelectCourt?.call(_sortedCourts[i].id),
+                ),
               ),
             ),
         ],
@@ -156,7 +147,7 @@ class _CourtListItem extends StatelessWidget {
           sessionProfile: session.profile,
           sessionEmail: session.email,
         );
-    return GestureDetector(
+    return PressableWidget(
       onTap: onTap,
       child: Container(
         // Card de lista protagonista: sólida, borde claro franco y sombra
@@ -164,7 +155,7 @@ class _CourtListItem extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.card,
           borderRadius: BorderRadius.circular(AppShape.rCard),
-          border: Border.all(color: AppColors.line, width: 2),
+          border: Border.all(color: AppColors.line, width: 1),
           boxShadow: AppFx.hardShadow(),
         ),
         child: Column(
@@ -186,11 +177,11 @@ class _CourtListItem extends StatelessWidget {
                 // decoración, da contraste a los badges y al ranking).
                 Container(
                   height: 140,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [Colors.transparent, Color(0xD90A0F14)],
+                      colors: [Colors.transparent, AppColors.black(0.85)],
                       stops: [0.4, 1],
                     ),
                     borderRadius: BorderRadius.only(

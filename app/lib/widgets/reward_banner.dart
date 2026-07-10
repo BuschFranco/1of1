@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/play_session_service.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
+import 'pressable_widget.dart';
 
 /// Overlay que muestra, de a uno y con animación, los eventos de recompensa
 /// encolados en [PlaySessionService] (logro/título desbloqueado, subida de
@@ -99,7 +100,7 @@ class _RewardOverlayState extends State<RewardOverlay>
   }
 
   Widget _card(RewardEvent r) {
-    return GestureDetector(
+    return PressableWidget(
       onTap: _dismiss,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -107,7 +108,7 @@ class _RewardOverlayState extends State<RewardOverlay>
           color: AppColors.bgElev,
           borderRadius: BorderRadius.circular(AppShape.rCard),
           // Neobrutalismo: borde franco del color del evento + sombra dura.
-          border: Border.all(color: r.color, width: 2),
+          border: Border.all(color: r.color, width: 1),
           boxShadow: AppFx.hardShadow(),
         ),
         child: Row(

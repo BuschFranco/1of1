@@ -18,6 +18,7 @@ import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
 import '../widgets/permissions_modal.dart';
 import '../widgets/rating_badge.dart';
+import '../widgets/pressable_widget.dart';
 import '../widgets/status_dot.dart';
 
 const _kApiKey = String.fromEnvironment('MAPS_API_KEY');
@@ -29,30 +30,29 @@ const CameraPosition _kInitialCam = CameraPosition(
   zoom: 12,
 );
 
-// Mapa CLARO retro-pop: geometría crema, calles blancas/crema, agua lila
-// (guiño a la paleta), POIs/transit ocultos. Solo cambia el string de estilo,
-// sin overlays sobre el GoogleMap.
+// Mapa DARK: geometría oscura, calles grises, agua azul oscuro,
+// POIs/transit ocultos.
 const _kMapStyle = '''
 [
-  {"elementType":"geometry","stylers":[{"color":"#f2e8d5"}]},
+  {"elementType":"geometry","stylers":[{"color":"#1a1a1a"}]},
   {"elementType":"labels.icon","stylers":[{"visibility":"off"}]},
-  {"elementType":"labels.text.fill","stylers":[{"color":"#6b6459"}]},
-  {"elementType":"labels.text.stroke","stylers":[{"color":"#f4ebdd"}]},
-  {"featureType":"administrative","elementType":"geometry","stylers":[{"color":"#e5dac2"}]},
+  {"elementType":"labels.text.fill","stylers":[{"color":"#888888"}]},
+  {"elementType":"labels.text.stroke","stylers":[{"color":"#1a1a1a"}]},
+  {"featureType":"administrative","elementType":"geometry","stylers":[{"color":"#2a2a2a"}]},
   {"featureType":"administrative.land_parcel","stylers":[{"visibility":"off"}]},
-  {"featureType":"administrative.locality","elementType":"labels.text.fill","stylers":[{"color":"#3d3833"}]},
-  {"featureType":"administrative.neighborhood","elementType":"labels.text.fill","stylers":[{"color":"#6b6459"}]},
+  {"featureType":"administrative.locality","elementType":"labels.text.fill","stylers":[{"color":"#cccccc"}]},
+  {"featureType":"administrative.neighborhood","elementType":"labels.text.fill","stylers":[{"color":"#888888"}]},
   {"featureType":"poi","stylers":[{"visibility":"off"}]},
-  {"featureType":"road","elementType":"geometry","stylers":[{"color":"#ffffff"}]},
-  {"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#e0d5bd"}]},
-  {"featureType":"road","elementType":"labels.text.fill","stylers":[{"color":"#8a8275"}]},
-  {"featureType":"road.arterial","elementType":"geometry","stylers":[{"color":"#fdf6e8"}]},
-  {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#f5c98a"}]},
-  {"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#d9a55e"}]},
-  {"featureType":"road.highway","elementType":"labels.text.fill","stylers":[{"color":"#7a6f5c"}]},
+  {"featureType":"road","elementType":"geometry","stylers":[{"color":"#2a2a2a"}]},
+  {"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#1a1a1a"}]},
+  {"featureType":"road","elementType":"labels.text.fill","stylers":[{"color":"#666666"}]},
+  {"featureType":"road.arterial","elementType":"geometry","stylers":[{"color":"#333333"}]},
+  {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#3a3a3a"}]},
+  {"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#2a2a2a"}]},
+  {"featureType":"road.highway","elementType":"labels.text.fill","stylers":[{"color":"#777777"}]},
   {"featureType":"transit","stylers":[{"visibility":"off"}]},
-  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#b7aeee"}]},
-  {"featureType":"water","elementType":"labels.text.fill","stylers":[{"color":"#5d539e"}]}
+  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#0d2137"}]},
+  {"featureType":"water","elementType":"labels.text.fill","stylers":[{"color":"#4a6fa5"}]}
 ]
 ''';
 
@@ -679,7 +679,7 @@ class _HomeScreenState extends State<HomeScreen>
                         color: AppColors.glass,
                         borderRadius: BorderRadius.circular(AppShape.rBtn),
                         border:
-                            Border.all(color: AppColors.accent, width: 2),
+                            Border.all(color: AppColors.accent, width: 1),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -747,7 +747,7 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 ),
                 if (_showSearch)
-                  GestureDetector(
+                  PressableWidget(
                     onTap: () {
                       setState(() {
                         _showSearch = false;
@@ -767,7 +767,7 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
         const SizedBox(width: 10),
-        GestureDetector(
+        PressableWidget(
           onTap: widget.onOpenFilters,
           child: _glassContainer(
             width: 44,
@@ -854,7 +854,7 @@ class _HomeScreenState extends State<HomeScreen>
           // Neobrutalismo: rectángulo franco con borde pleno del color de
           // estado (verde / gris) y sombra dura, sin glow.
           borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: accent, width: 2),
+          border: Border.all(color: accent, width: 1),
           boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
         ),
         child: Row(
@@ -968,7 +968,7 @@ class _HomeScreenState extends State<HomeScreen>
             const SizedBox(width: 10),
             // Botón pausa/reanudar (siempre visible: el banner es el mismo, jugues
             // o estés saliendo del radio).
-            GestureDetector(
+            PressableWidget(
               onTap: () => context.read<PlaySessionService>().togglePause(),
               child: Container(
                 width: 34,
@@ -976,7 +976,7 @@ class _HomeScreenState extends State<HomeScreen>
                 decoration: BoxDecoration(
                   color: AppColors.blush,
                   borderRadius: BorderRadius.circular(AppShape.rBtn),
-                  border: Border.all(color: AppColors.ink, width: 1.5),
+                  border: Border.all(color: AppColors.line, width: 1.5),
                 ),
                 child: Icon(
                   paused ? Icons.play_arrow : Icons.pause,
@@ -986,7 +986,7 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ),
             const SizedBox(width: 6),
-            GestureDetector(
+            PressableWidget(
               onTap: () => context.read<PlaySessionService>().stopNow(),
               child: Container(
                 padding: const EdgeInsets.symmetric(
@@ -996,7 +996,7 @@ class _HomeScreenState extends State<HomeScreen>
                 decoration: BoxDecoration(
                   color: AppColors.accent,
                   borderRadius: BorderRadius.circular(AppShape.rBtn),
-                  border: Border.all(color: AppColors.ink, width: 1.5),
+                  border: Border.all(color: AppColors.line, width: 1.5),
                 ),
                 child: Text(
                   'DETENER',
@@ -1029,7 +1029,7 @@ class _HomeScreenState extends State<HomeScreen>
           // Estado "inactivo": borde gris franco (se mantiene el gris de
           // estado, solo cambia el lenguaje de forma).
           borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.white(0.25), width: 2),
+          border: Border.all(color: AppColors.white(0.25), width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1073,7 +1073,7 @@ class _HomeScreenState extends State<HomeScreen>
         decoration: BoxDecoration(
           color: AppColors.glass,
           borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.accent, width: 2),
+          border: Border.all(color: AppColors.accent, width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1106,7 +1106,7 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ),
             const SizedBox(width: 12),
-            GestureDetector(
+            PressableWidget(
               onTap: () => context.read<PlaySessionService>().startNow(),
               child: Container(
                 padding: const EdgeInsets.symmetric(
@@ -1117,7 +1117,7 @@ class _HomeScreenState extends State<HomeScreen>
                   color: AppColors.accent,
                   borderRadius: BorderRadius.circular(AppShape.rBtn),
                   // Acento pleno → borde negro puro (contraste neobrutalista).
-                  border: Border.all(color: AppColors.ink, width: 2),
+                  border: Border.all(color: AppColors.line, width: 1),
                 ),
                 child: Text(
                   'EMPEZAR YA',
@@ -1255,7 +1255,7 @@ class _HomeScreenState extends State<HomeScreen>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: AppColors.accent,
-                      border: Border.all(color: AppColors.ink, width: 3),
+                      border: Border.all(color: AppColors.line, width: 3),
                       boxShadow: [
                         BoxShadow(
                           color: AppColors.accent.withAlpha(140),
@@ -1331,7 +1331,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _devBtn(IconData icon, Color color, VoidCallback onTap) {
-    return GestureDetector(
+    return PressableWidget(
       onTap: onTap,
       child: _glassContainer(
         width: 48,
@@ -1343,7 +1343,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _locateBtn() {
-    return GestureDetector(
+    return PressableWidget(
       onTap: _goToMyLocation,
       child: _glassContainer(
         width: 48,
@@ -1438,7 +1438,7 @@ class _HomeScreenState extends State<HomeScreen>
       decoration: BoxDecoration(
         color: AppColors.glass,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: AppColors.line, width: 2),
+        border: Border.all(color: AppColors.line, width: 1),
         boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
       ),
       child: child,
@@ -1476,7 +1476,7 @@ class _CourtSwipeCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.glass,
         borderRadius: BorderRadius.circular(AppShape.rCard),
-        border: Border.all(color: AppColors.line, width: 2),
+        border: Border.all(color: AppColors.line, width: 1),
         boxShadow: AppFx.hardShadow(),
       ),
       child: Row(
@@ -1505,7 +1505,7 @@ class _CourtSwipeCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: AppColors.paper,
                       borderRadius: BorderRadius.circular(AppShape.rChip),
-                      border: Border.all(color: AppColors.ink, width: 1.5),
+                      border: Border.all(color: AppColors.line, width: 1.5),
                     ),
                     child: Text(
                       court.dist.toUpperCase(),
@@ -1584,7 +1584,7 @@ class _CourtSwipeCard extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: GestureDetector(
+                      child: PressableWidget(
                         onTap: onSelect,
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1594,7 +1594,7 @@ class _CourtSwipeCard extends StatelessWidget {
                                 BorderRadius.circular(AppShape.rBtn),
                             // Acento pleno → borde negro puro.
                             border:
-                                Border.all(color: AppColors.ink, width: 2),
+                                Border.all(color: AppColors.line, width: 1),
                           ),
                           alignment: Alignment.center,
                           child: Text(
@@ -1623,7 +1623,7 @@ class _CourtSwipeCard extends StatelessWidget {
   }
 
   Widget _arrowBtn(IconData icon, VoidCallback onTap) {
-    return GestureDetector(
+    return PressableWidget(
       onTap: onTap,
       child: Container(
         width: 32,
@@ -1631,7 +1631,7 @@ class _CourtSwipeCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.bgElev,
           borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.ink, width: 1.5),
+          border: Border.all(color: AppColors.line, width: 1.5),
         ),
         child: Icon(icon, color: AppColors.ink, size: 16),
       ),

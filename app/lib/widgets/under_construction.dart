@@ -12,7 +12,7 @@ class UnderConstructionBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.paper,
         borderRadius: BorderRadius.circular(AppShape.rChip),
-        border: Border.all(color: AppColors.ink, width: 1.5),
+        border: Border.all(color: AppColors.line, width: 1.5),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -48,7 +48,7 @@ class UnderConstructionBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.paper,
         borderRadius: BorderRadius.circular(AppShape.rCard),
-        border: Border.all(color: AppColors.ink, width: 2),
+        border: Border.all(color: AppColors.line, width: 1),
       ),
       child: Row(
         children: [

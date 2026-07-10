@@ -21,7 +21,9 @@ import '../widgets/court_image.dart';
 import '../widgets/permissions_modal.dart';
 import '../widgets/pop_background.dart';
 import '../widgets/pop_panel.dart';
+import '../widgets/pressable_widget.dart';
 import '../widgets/rating_badge.dart';
+import '../widgets/reveal_on_scroll.dart';
 import '../widgets/section_title.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -114,7 +116,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         shadows: _onDarkBg
                             ? const [
                                 Shadow(
-                                    color: AppColors.ink,
+                                    color: Colors.black,
                                     offset: Offset(3, 3)),
                               ]
                             : null,
@@ -124,8 +126,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       children: [
                         _notifButton(context),
                         const SizedBox(width: 8),
-                        if (context.read<Session>().isLoggedIn)
-                          GestureDetector(
+                          if (context.read<Session>().isLoggedIn)
+                          PressableWidget(
                             onTap: () => _openSettings(context, profile),
                             child: Container(
                               width: 40,
@@ -142,7 +144,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                         const SizedBox(width: 8),
-                        GestureDetector(
+                        PressableWidget(
                           onTap: () => _confirmLogout(context),
                           child: Container(
                             width: 40,
@@ -184,7 +186,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   /// Botón de campana con badge de notificaciones sin leer. Abre el listado.
   Widget _notifButton(BuildContext context) {
     final unread = context.watch<PlaySessionService>().unreadCount;
-    return GestureDetector(
+    return PressableWidget(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const NotificationsScreen()),
       ),
@@ -212,7 +214,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 decoration: BoxDecoration(
                   color: AppColors.accent,
                   borderRadius: BorderRadius.circular(AppShape.rChip),
-                  border: Border.all(color: AppColors.bg, width: 2),
+                  border: Border.all(color: AppColors.bg, width: 1),
                 ),
                 alignment: Alignment.center,
                 child: Text(
@@ -237,7 +239,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: AppColors.paper,
         borderRadius: BorderRadius.circular(AppShape.rBtn),
-        border: Border.all(color: AppColors.ink, width: 2),
+        border: Border.all(color: AppColors.line, width: 1),
         boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
       ),
       child: Row(
@@ -278,178 +280,149 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _profileView(Profile profile) {
     return ListView(
-      padding: const EdgeInsets.only(bottom: 180),
+      padding: const EdgeInsets.only(top: 4, bottom: 180),
+      clipBehavior: Clip.none,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            children: [
-              _avatar(profile),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      profile.name.isEmpty ? 'Jugador' : profile.name,
-                      style: AppText.archivo(
-                        size: 24,
-                        weight: FontWeight.w900,
-                        color: _onDarkBg ? Colors.white : AppColors.ink,
-                      ).copyWith(
-                        shadows: _onDarkBg
-                            ? const [
-                                Shadow(
-                                    color: AppColors.ink,
-                                    offset: Offset(2, 2)),
-                              ]
-                            : null,
+        RevealOnScroll(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                _avatar(profile),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        profile.name.isEmpty ? 'Jugador' : profile.name,
+                        style: AppText.archivo(
+                          size: 24,
+                          weight: FontWeight.w900,
+                          color: _onDarkBg ? Colors.white : AppColors.ink,
+                        ).copyWith(
+                          shadows: _onDarkBg
+                              ? const [
+                                  Shadow(
+                                      color: Colors.black,
+                                      offset: Offset(2, 2)),
+                                ]
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              [
+                                if (profile.handle.isNotEmpty) profile.handle,
+                                if (profile.city.isNotEmpty) profile.city,
+                              ].join(' · '),
+                              style: AppText.grotesk(size: 12, color: AppColors.white(0.5)),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (context.read<Session>().isLoggedIn) ...[
+                            const SizedBox(width: 6),
+                            PressableWidget(
+                              onTap: () => _editHandle(context, profile.handle),
+                              child: Icon(Icons.edit, size: 13, color: AppColors.accent),
+                            ),
+                          ],
+                        ],
+                      ),
+                      _identityBadges(profile),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (context.read<Session>().isLoggedIn)
+          RevealOnScroll(
+            child: Column(
+              children: [
+                const SizedBox(height: 18),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: PressableWidget(
+                    onTap: () => _editClanBadge(context, profile),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: AppColors.paper,
+                        borderRadius: BorderRadius.circular(AppShape.rCard),
+                        border: Border.all(color: AppColors.line, width: 1),
+                        boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.shield_outlined, size: 18, color: AppColors.accent),
+                          const SizedBox(width: 12),
+                          Text('Insignia de Clan',
+                              style: AppText.grotesk(size: 14, weight: FontWeight.w600)),
+                          const Spacer(),
+                          Text(
+                            profile.clan.isEmpty ? 'Definir' : profile.clan,
+                            style: AppText.grotesk(size: 13, color: AppColors.white(0.5)),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(Icons.chevron_right, size: 18, color: AppColors.white(0.4)),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            [
-                              if (profile.handle.isNotEmpty) profile.handle,
-                              if (profile.city.isNotEmpty) profile.city,
-                            ].join(' · '),
-                            style: AppText.grotesk(size: 12, color: AppColors.white(0.5)),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (context.read<Session>().isLoggedIn) ...[
-                          const SizedBox(width: 6),
-                          GestureDetector(
-                            onTap: () => _editHandle(context, profile.handle),
-                            behavior: HitTestBehavior.opaque,
-                            child: Icon(Icons.edit, size: 13, color: AppColors.accent),
-                          ),
-                        ],
-                      ],
-                    ),
-                    // Título (coloreado por rareza) y posición (local) como
-                    // chips independientes. Cada uno se muestra solo si existe.
-                    _identityBadges(profile),
-                  ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        if (context.read<Session>().isLoggedIn) ...[
-          const SizedBox(height: 18),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: GestureDetector(
-              onTap: () => _editClanBadge(context, profile),
-              behavior: HitTestBehavior.opaque,
-              // Card retro-pop: papel + borde negro + sombra dura.
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: AppColors.paper,
-                  borderRadius: BorderRadius.circular(AppShape.rCard),
-                  border: Border.all(color: AppColors.ink, width: 2),
-                  boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.shield_outlined, size: 18, color: AppColors.accent),
-                    const SizedBox(width: 12),
-                    Text('Insignia de Clan',
-                        style: AppText.grotesk(size: 14, weight: FontWeight.w600)),
-                    const Spacer(),
-                    Text(
-                      profile.clan.isEmpty ? 'Definir' : profile.clan,
-                      style: AppText.grotesk(size: 13, color: AppColors.white(0.5)),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(Icons.chevron_right, size: 18, color: AppColors.white(0.4)),
-                  ],
-                ),
-              ),
+                const SizedBox(height: 10),
+              ],
             ),
           ),
-          const SizedBox(height: 10),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: GestureDetector(
-              onTap: _editPosition,
-              behavior: HitTestBehavior.opaque,
-              // Card retro-pop: papel + borde negro + sombra dura.
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: AppColors.paper,
-                  borderRadius: BorderRadius.circular(AppShape.rCard),
-                  border: Border.all(color: AppColors.ink, width: 2),
-                  boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.sports_basketball_outlined,
-                        size: 18, color: AppColors.accent),
-                    const SizedBox(width: 12),
-                    Text('Posición',
-                        style: AppText.grotesk(size: 14, weight: FontWeight.w600)),
-                    const Spacer(),
-                    Text(
-                      context.watch<Session>().localPosition.isEmpty
-                          ? 'Definir'
-                          : context.watch<Session>().localPosition,
-                      style: AppText.grotesk(size: 13, color: AppColors.white(0.5)),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(Icons.chevron_right, size: 18, color: AppColors.white(0.4)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
         const SizedBox(height: 24),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: _levelWithHistory(),
+        RevealOnScroll(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: _levelWithHistory(),
+          ),
         ),
         const SizedBox(height: 10),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            childAspectRatio: 2.5,
-            children: [
-              _StatBox(
-                label: 'Partidos',
-                value: '${context.watch<PlaySessionService>().totalPlays}',
-                icon: Icons.sports_basketball,
-              ),
-              _StatBox(
-                label: 'Canchas',
-                value: '${context.watch<PlaySessionService>().uniqueCourtsCount}',
-                icon: Icons.place_outlined,
-              ),
-              // Resaltada: es la única stat-botón (abre el modal de rachas).
-              _StatBox(
-                label: 'Racha',
-                value: '${context.watch<PlaySessionService>().streak}',
-                icon: Icons.local_fire_department,
-                accent: true,
-                onTap: () => _showStreaks(context),
-              ),
-              _StatBox(
-                label: 'Rating',
-                value: profile.rating > 0 ? profile.rating.toStringAsFixed(1) : '—',
-                icon: Icons.star_rounded,
-                note: 'en construcción',
-              ),
-            ],
+        RevealOnScroll(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 2.5,
+              children: [
+                _StatBox(
+                  label: 'Partidos',
+                  value: '${context.watch<PlaySessionService>().totalPlays}',
+                  icon: Icons.sports_basketball,
+                ),
+                _StatBox(
+                  label: 'Canchas',
+                  value: '${context.watch<PlaySessionService>().uniqueCourtsCount}',
+                  icon: Icons.place_outlined,
+                ),
+                _StatBox(
+                  label: 'Racha',
+                  value: '${context.watch<PlaySessionService>().streak}',
+                  icon: Icons.local_fire_department,
+                  accent: true,
+                  onTap: () => _showStreaks(context),
+                ),
+                _StatBox(
+                  label: 'Rating',
+                  value: profile.rating > 0 ? profile.rating.toStringAsFixed(1) : '—',
+                  icon: Icons.star_rounded,
+                  note: 'en construcción',
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 24),
@@ -458,23 +431,58 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SectionTitle(title: 'Canchas más jugadas', onDark: _onDarkBg),
-              _topCourtsSection(),
+              RevealOnScroll(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SectionTitle(title: 'Canchas más jugadas', onDark: _onDarkBg),
+                    _topCourtsSection(),
+                  ],
+                ),
+              ),
               const SizedBox(height: 24),
-              SectionTitle(title: 'Favoritos', onDark: _onDarkBg),
-              _favoritesSection(),
+              RevealOnScroll(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SectionTitle(title: 'Favoritos', onDark: _onDarkBg),
+                    _favoritesSection(),
+                  ],
+                ),
+              ),
               const SizedBox(height: 24),
-              SectionTitle(title: 'Títulos', onDark: _onDarkBg),
-              _titlesSection(profile),
+              RevealOnScroll(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SectionTitle(title: 'Títulos', onDark: _onDarkBg),
+                    _titlesSection(profile),
+                  ],
+                ),
+              ),
               const SizedBox(height: 24),
-              SectionTitle(title: 'Logros', onDark: _onDarkBg),
-              _achievementsSection(),
+              RevealOnScroll(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SectionTitle(title: 'Logros', onDark: _onDarkBg),
+                    _achievementsSection(),
+                  ],
+                ),
+              ),
               const SizedBox(height: 24),
-              SectionTitle(
-                  key: _historyKey,
-                  title: 'Últimos partidos',
-                  onDark: _onDarkBg),
-              _historySection(),
+              RevealOnScroll(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SectionTitle(
+                        key: _historyKey,
+                        title: 'Últimos partidos',
+                        onDark: _onDarkBg),
+                    _historySection(),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -500,7 +508,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // Avatar neobrutalista: relleno plano del color del clan, borde negro
         // puro y sombra dura chica (sin degradado ni glow).
         borderRadius: BorderRadius.circular(AppShape.rCard),
-        border: Border.all(color: AppColors.ink, width: 2),
+        border: Border.all(color: AppColors.line, width: 1),
         color: useImage ? null : color,
         image: useImage
             ? DecorationImage(image: NetworkImage(profile.avatar), fit: BoxFit.cover)
@@ -617,9 +625,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           left: 0,
           right: 0,
           bottom: 0,
-          child: GestureDetector(
+          child: PressableWidget(
             onTap: _scrollToHistory,
-            behavior: HitTestBehavior.opaque,
             child: SizedBox(
               height: stackH,
               child: Stack(
@@ -696,7 +703,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
         color: _resultBg(s.result),
-        border: Border.all(color: _resultBorder(s.result), width: 2),
+        border: Border.all(color: _resultBorder(s.result), width: 1),
         borderRadius: BorderRadius.circular(AppShape.rCard),
       ),
       child: Row(
@@ -727,7 +734,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: AppText.archivo(
                 size: 14, weight: FontWeight.w900, color: AppColors.accent),
           ),
-          const SizedBox(width: 2),
+          const SizedBox(width: 1),
           Text('pts',
               style: AppText.grotesk(size: 10, color: AppColors.white(0.45))),
         ],
@@ -849,9 +856,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   /// Botón "Ver más" que abre un modal con la lista completa.
   Widget _seeMore(String label, VoidCallback onTap) {
-    return GestureDetector(
+    return PressableWidget(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -891,7 +897,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Text(title,
                         style: AppText.archivo(size: 18, weight: FontWeight.w800)),
                     const Spacer(),
-                    GestureDetector(
+                    PressableWidget(
                       onTap: () => Navigator.pop(ctx),
                       child: Icon(Icons.close, color: AppColors.white(0.6)),
                     ),
@@ -912,20 +918,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   /// Posiciones de básquet seleccionables (local, cosmético).
-  static const List<String> _positions = [
-    'Base',
-    'Escolta',
-    'Alero',
-    'Ala-Pívot',
-    'Pívot',
-  ];
-
-  /// Chips de identidad bajo el nombre: título equipado (color de rareza) y
-  /// posición de juego (local). Cada uno aparece solo si está definido.
+  /// Chips de identidad bajo el nombre: título equipado (color de rareza).
   Widget _identityBadges(Profile profile) {
-    final localPos = context.watch<Session>().localPosition;
     final hasTitle = profile.title.isNotEmpty;
-    if (!hasTitle && localPos.isEmpty) return const SizedBox.shrink();
+    if (!hasTitle) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: Wrap(
@@ -933,13 +929,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         runSpacing: 6,
         children: [
           if (hasTitle)
-            // Tocable: despliega los títulos DESBLOQUEADOS para cambiarlo.
             AppChip(
               label: profile.title,
               color: titleByName(profile.title)?.color,
               onTap: _showUnlockedTitles,
             ),
-          if (localPos.isNotEmpty) AppChip(label: localPos),
         ],
       ),
     );
@@ -973,56 +967,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  /// Selector de posición (bottom sheet). Guarda la elección en local.
-  void _editPosition() {
-    final current = context.read<Session>().localPosition;
-    Widget row(BuildContext ctx, String label, {bool clear = false}) {
-      final selected = clear ? current.isEmpty : current == label;
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: GestureDetector(
-          onTap: () {
-            context.read<Session>().setLocalPosition(clear ? '' : label);
-            Navigator.pop(ctx);
-          },
-          behavior: HitTestBehavior.opaque,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-            decoration: BoxDecoration(
-              color: selected
-                  ? AppColors.accent.withAlpha(30)
-                  : AppColors.card,
-              border: Border.all(
-                color: selected ? AppColors.accent : AppColors.white(0.25),
-                width: selected ? 2 : 1.5,
-              ),
-              borderRadius: BorderRadius.circular(AppShape.rBtn),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  clear ? Icons.not_interested : Icons.sports_basketball,
-                  size: 18,
-                  color: selected ? AppColors.accent : AppColors.white(0.5),
-                ),
-                const SizedBox(width: 12),
-                Text(clear ? 'Sin posición' : label,
-                    style: AppText.grotesk(size: 14, weight: FontWeight.w600)),
-                const Spacer(),
-                if (selected)
-                  Icon(Icons.check_circle, size: 18, color: AppColors.accent),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    _showSheet('Elegí tu posición', (ctx) => [
-          for (final p in _positions) row(ctx, p),
-          row(ctx, '', clear: true),
-        ]);
-  }
 
 
   Widget _achievementsSection() {
@@ -1068,7 +1012,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: AppColors.paper,
         border: Border.all(
-            color: unlocked ? AppColors.ink : AppColors.white(0.3), width: 2),
+            color: unlocked ? AppColors.ink : AppColors.white(0.3), width: 1),
         borderRadius: BorderRadius.circular(AppShape.rCard),
       ),
       child: Row(
@@ -1300,7 +1244,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: _resultBg(s.result),
-          border: Border.all(color: _resultBorder(s.result), width: 2),
+          border: Border.all(color: _resultBorder(s.result), width: 1),
           borderRadius: BorderRadius.circular(AppShape.rCard),
         ),
         child: Row(
@@ -1358,7 +1302,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       size: 14,
                       weight: FontWeight.w900,
                       color: AppColors.accent)),
-              const SizedBox(width: 2),
+              const SizedBox(width: 1),
               Text('pts',
                   style:
                       AppText.grotesk(size: 10, color: AppColors.white(0.45))),
@@ -1394,7 +1338,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           color: AppColors.bgElev,
           borderRadius:
               const BorderRadius.vertical(top: Radius.circular(AppShape.rCard)),
-          border: Border.all(color: AppColors.line, width: 2),
+          border: Border.all(color: AppColors.line, width: 1),
         ),
         // Sumamos el inset de la barra de navegación del sistema para que el
         // botón inferior no quede tapado por ella.
@@ -1556,7 +1500,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(AppShape.rBtn),
                       side: const BorderSide(
-                          color: AppColors.accent, width: 2),
+                          color: AppColors.accent, width: 1),
                     ),
                   ),
                   child: Text('Ver cancha',
@@ -1676,9 +1620,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _favoriteCard(Court c) {
-    return GestureDetector(
+    return PressableWidget(
       onTap: () => widget.onSelectCourt?.call(c.id),
-      behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
@@ -1719,9 +1662,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(width: 8),
             RatingBadge(value: c.rating, size: 11),
             const SizedBox(width: 10),
-            GestureDetector(
+            PressableWidget(
               onTap: () => context.read<FavoritesProvider>().toggle(c.id),
-              behavior: HitTestBehavior.opaque,
               child: Icon(Icons.favorite, size: 18, color: AppColors.accent),
             ),
           ],
@@ -1919,7 +1861,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             runSpacing: 12,
             children: [
               for (final e in AppColors.profileBgs.entries)
-                GestureDetector(
+                PressableWidget(
                   onTap: () {
                     ctx.read<Session>().setProfileBg(e.key);
                     Navigator.pop(ctx);
@@ -2136,7 +2078,7 @@ class _FriendsTabState extends State<_FriendsTab> {
                     // Search bar protagonista: sólida y con borde claro franco.
                     color: AppColors.glass,
                     borderRadius: BorderRadius.circular(AppShape.rBtn),
-                    border: Border.all(color: AppColors.line, width: 2),
+                    border: Border.all(color: AppColors.line, width: 1),
                   ),
                   child: Row(
                     children: [
@@ -2162,7 +2104,7 @@ class _FriendsTabState extends State<_FriendsTab> {
                 ),
               ),
               const SizedBox(width: 10),
-              GestureDetector(
+              PressableWidget(
                 onTap: _adding ? null : _add,
                 child: Container(
                   width: 48,
@@ -2171,7 +2113,7 @@ class _FriendsTabState extends State<_FriendsTab> {
                     // Acento plano + borde negro (sin degradado).
                     color: AppColors.accent,
                     borderRadius: BorderRadius.circular(AppShape.rBtn),
-                    border: Border.all(color: AppColors.ink, width: 2),
+                    border: Border.all(color: AppColors.line, width: 1),
                   ),
                   child: _adding
                       ? const Padding(
@@ -2344,7 +2286,7 @@ class _FriendsTabState extends State<_FriendsTab> {
       decoration: BoxDecoration(
         // Avatar de amigo: plano, borde negro y sombra dura chica.
         borderRadius: BorderRadius.circular(AppShape.rBtn),
-        border: Border.all(color: AppColors.ink, width: 2),
+        border: Border.all(color: AppColors.line, width: 1),
         color: useImage ? null : color,
         image: useImage
             ? DecorationImage(image: NetworkImage(fp!.avatar), fit: BoxFit.cover)
@@ -2449,9 +2391,8 @@ class _FriendsTabState extends State<_FriendsTab> {
               ],
             ),
           ),
-          GestureDetector(
+          PressableWidget(
             onTap: () => _remove(f),
-            behavior: HitTestBehavior.opaque,
             child: Padding(
               padding: const EdgeInsets.all(6),
               child: Icon(Icons.person_remove_outlined, size: 20, color: AppColors.white(0.4)),
@@ -2618,20 +2559,23 @@ Color clanTextColor(String hex) {
 /// un resplandor exterior. Si el marco es 'none' devuelve el avatar tal cual.
 Widget framedAvatar(AvatarFrame frame, double radius, Widget child) {
   if (frame.isNone) return child;
-  return Container(
-    padding: const EdgeInsets.all(3),
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(radius + 5),
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: frame.ring,
+  return Padding(
+    padding: const EdgeInsets.all(4),
+    child: Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius + 5),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: frame.ring,
+        ),
+        boxShadow: [
+          BoxShadow(color: frame.glow.withAlpha(140), blurRadius: 16, spreadRadius: 0),
+        ],
       ),
-      boxShadow: [
-        BoxShadow(color: frame.glow.withAlpha(140), blurRadius: 20, spreadRadius: 1),
-      ],
+      child: child,
     ),
-    child: child,
   );
 }
 
@@ -2729,7 +2673,7 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
     required VoidCallback onTap,
     required Widget child,
   }) {
-    return GestureDetector(
+    return PressableWidget(
       onTap: unlocked ? onTap : null,
       child: Opacity(
         opacity: unlocked ? 1 : 0.45,
@@ -2753,7 +2697,7 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
               if (!unlocked) ...[
                 const SizedBox(width: 6),
                 Icon(Icons.lock, size: 12, color: AppColors.white(0.55)),
-                const SizedBox(width: 2),
+                const SizedBox(width: 1),
                 Text('Nv $unlockLevel',
                     style:
                         AppText.grotesk(size: 10, color: AppColors.white(0.55))),
@@ -2793,7 +2737,7 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
                   // Preview coherente con el avatar real: plano + borde negro.
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(AppShape.rCard),
-                    border: Border.all(color: AppColors.ink, width: 2),
+                    border: Border.all(color: AppColors.line, width: 1),
                     color: bg,
                   ),
                   child: Padding(
@@ -3016,7 +2960,7 @@ class _ColorPickerState extends State<_ColorPicker> {
                 final contrast = clanColor(c.hex).computeLuminance() > 0.6
                     ? Colors.black
                     : Colors.white;
-                return GestureDetector(
+                return PressableWidget(
                   onTap: unlocked ? () => _select(c.hex) : null,
                   child: Opacity(
                     opacity: unlocked ? 1 : 0.4,
@@ -3269,7 +3213,7 @@ class _StatBox extends StatelessWidget {
         // borde claro. Sombra dura solo en la destacada.
         color: accent ? AppColors.accent : AppColors.card,
         border: accent
-            ? Border.all(color: AppColors.ink, width: 2)
+            ? Border.all(color: AppColors.line, width: 1)
             : Border.all(color: AppColors.white(0.25), width: 1.5),
         borderRadius: BorderRadius.circular(AppShape.rCard),
         boxShadow:
@@ -3349,7 +3293,7 @@ class _StatBox extends StatelessWidget {
       ),
     );
     if (onTap == null) return box;
-    return GestureDetector(
-        onTap: onTap, behavior: HitTestBehavior.opaque, child: box);
+    return PressableWidget(
+        onTap: onTap, child: box);
   }
 }

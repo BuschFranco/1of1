@@ -10,23 +10,31 @@ import 'package:provider/provider.dart';
 import '../data/courts.dart';
 import '../services/courts_provider.dart';
 import '../services/session.dart';
+import '../widgets/pressable_widget.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 
 const _kMapStyle = '''
 [
-  {"elementType":"geometry","stylers":[{"color":"#0d1520"}]},
+  {"elementType":"geometry","stylers":[{"color":"#1a1a1a"}]},
   {"elementType":"labels.icon","stylers":[{"visibility":"off"}]},
-  {"elementType":"labels.text.fill","stylers":[{"color":"#8896a7"}]},
-  {"elementType":"labels.text.stroke","stylers":[{"color":"#0a0f14"}]},
+  {"elementType":"labels.text.fill","stylers":[{"color":"#888888"}]},
+  {"elementType":"labels.text.stroke","stylers":[{"color":"#1a1a1a"}]},
+  {"featureType":"administrative","elementType":"geometry","stylers":[{"color":"#2a2a2a"}]},
   {"featureType":"administrative.land_parcel","stylers":[{"visibility":"off"}]},
-  {"featureType":"administrative.locality","elementType":"labels.text.fill","stylers":[{"color":"#c0c8d8"}]},
+  {"featureType":"administrative.locality","elementType":"labels.text.fill","stylers":[{"color":"#cccccc"}]},
+  {"featureType":"administrative.neighborhood","elementType":"labels.text.fill","stylers":[{"color":"#888888"}]},
   {"featureType":"poi","stylers":[{"visibility":"off"}]},
-  {"featureType":"road","elementType":"geometry","stylers":[{"color":"#1a2a3a"}]},
-  {"featureType":"road.arterial","elementType":"geometry","stylers":[{"color":"#1e3040"}]},
-  {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#1a3a52"}]},
+  {"featureType":"road","elementType":"geometry","stylers":[{"color":"#2a2a2a"}]},
+  {"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#1a1a1a"}]},
+  {"featureType":"road","elementType":"labels.text.fill","stylers":[{"color":"#666666"}]},
+  {"featureType":"road.arterial","elementType":"geometry","stylers":[{"color":"#333333"}]},
+  {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#3a3a3a"}]},
+  {"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#2a2a2a"}]},
+  {"featureType":"road.highway","elementType":"labels.text.fill","stylers":[{"color":"#777777"}]},
   {"featureType":"transit","stylers":[{"visibility":"off"}]},
-  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#0a1929"}]}
+  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#0d2137"}]},
+  {"featureType":"water","elementType":"labels.text.fill","stylers":[{"color":"#4a6fa5"}]}
 ]
 ''';
 
@@ -384,7 +392,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
           Positioned(
             right: 10,
             bottom: 10,
-            child: GestureDetector(
+            child: PressableWidget(
               onTap: _locateMe,
               child: Container(
                 width: 36,
@@ -392,7 +400,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
                 decoration: BoxDecoration(
                   color: AppColors.glass,
                   borderRadius: BorderRadius.circular(AppShape.rBtn),
-                  border: Border.all(color: AppColors.line, width: 2),
+                  border: Border.all(color: AppColors.line, width: 1),
                 ),
                 child: _locating
                     ? Padding(
@@ -485,7 +493,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
 
   Widget _imgField() {
     final hasImg = _pickedImage != null;
-    return GestureDetector(
+    return PressableWidget(
       onTap: _showImageSourceSheet,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppShape.rCard),
@@ -564,7 +572,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
       runSpacing: 8,
       children: options.map((opt) {
         final active = opt == selected;
-        return GestureDetector(
+        return PressableWidget(
           onTap: () => onSelect(opt),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
@@ -616,7 +624,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
   }
 
   Widget _stepBtn(IconData icon, VoidCallback onTap) {
-    return GestureDetector(
+    return PressableWidget(
       onTap: onTap,
       child: Container(
         width: 36,
@@ -669,7 +677,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
                 decoration: BoxDecoration(
                   color: AppColors.glass,
                   borderRadius: BorderRadius.circular(AppShape.rBtn),
-                  border: Border.all(color: AppColors.accent, width: 2),
+                  border: Border.all(color: AppColors.accent, width: 1),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Row(
@@ -707,7 +715,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
 
   Widget _priceUnitChip(String unit) {
     final active = _priceUnit == unit;
-    return GestureDetector(
+    return PressableWidget(
       onTap: () => setState(() => _priceUnit = unit),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -733,7 +741,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
   }
 
   Widget _toggle(String label, IconData icon, bool value, ValueChanged<bool> onChanged) {
-    return GestureDetector(
+    return PressableWidget(
       onTap: () => onChanged(!value),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -770,7 +778,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
       runSpacing: 8,
       children: _amenityOptions.map((opt) {
         final active = _amenities.contains(opt);
-        return GestureDetector(
+        return PressableWidget(
           onTap: () => setState(() {
             if (active) {
               _amenities.remove(opt);
@@ -813,7 +821,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
   }
 
   Widget _submitBtn() {
-    return GestureDetector(
+    return PressableWidget(
       onTap: _submitted ? null : _submit,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),

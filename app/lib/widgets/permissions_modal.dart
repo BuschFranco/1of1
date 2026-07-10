@@ -5,6 +5,7 @@ import '../services/app_permissions.dart';
 import '../services/play_session_service.dart';
 import '../services/session.dart';
 import '../theme/app_theme.dart';
+import 'pressable_widget.dart';
 
 /// Modal que aparece sobre el mapa cuando faltan permisos clave (ubicación,
 /// notificaciones, alarmas exactas). Explica para qué sirve cada uno y ofrece
@@ -282,9 +283,8 @@ class _PermissionsModalState extends State<PermissionsModal>
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      GestureDetector(
+                      PressableWidget(
                         onTap: _busy ? null : _testHealth,
-                        behavior: HitTestBehavior.opaque,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -302,9 +302,8 @@ class _PermissionsModalState extends State<PermissionsModal>
                       const SizedBox(width: 14),
                       // Fallback manual: gestionar los permisos directamente en
                       // Health Connect (por si el diálogo in-app no aparece).
-                      GestureDetector(
+                      PressableWidget(
                         onTap: _busy ? null : openHealthConnect,
-                        behavior: HitTestBehavior.opaque,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [

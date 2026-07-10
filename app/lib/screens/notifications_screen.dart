@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/play_session_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/pressable_widget.dart';
 
 /// Listado del historial de notificaciones (logros, títulos y subidas de nivel).
 /// Se abre desde el botón de campana. Al entrar marca todo como leído.
@@ -79,7 +80,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _iconBtn(IconData icon, VoidCallback onTap) {
-    return GestureDetector(
+    return PressableWidget(
       onTap: onTap,
       child: Container(
         width: 40,
@@ -125,7 +126,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         color: AppColors.card,
         borderRadius: BorderRadius.circular(AppShape.rCard),
         // Borde pleno del color del evento (estado franco).
-        border: Border.all(color: e.color, width: 2),
+        border: Border.all(color: e.color, width: 1),
       ),
       child: Row(
         children: [

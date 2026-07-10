@@ -35,11 +35,10 @@ void main() async {
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
-    // Fondos claros: íconos del sistema en oscuro.
-    statusBarIconBrightness: Brightness.dark,
-    statusBarBrightness: Brightness.light,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
     systemNavigationBarColor: AppColors.bg,
-    systemNavigationBarIconBrightness: Brightness.dark,
+    systemNavigationBarIconBrightness: Brightness.light,
   ));
 
   // Notificaciones locales (recompensas). No bloquea el arranque si falla.
@@ -88,6 +87,10 @@ Future<void> _ensureNotionSchema() async {
     await notion.ensureProperties(
       NotionConfig.dbCourts,
       const {'CreatedByClan': 'rich_text', 'CreatedByEmail': 'rich_text'},
+    );
+    await notion.ensureProperties(
+      NotionConfig.dbReviews,
+      const {'UserHandle': 'rich_text'},
     );
   } catch (_) {
     // Permisos insuficientes u otro error: se puede crear a mano en Notion.

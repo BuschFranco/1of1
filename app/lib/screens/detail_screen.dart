@@ -13,6 +13,7 @@ import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
 import '../widgets/pop_panel.dart';
+import '../widgets/pressable_widget.dart';
 import '../widgets/section_title.dart';
 import '../widgets/status_dot.dart';
 
@@ -157,39 +158,18 @@ class DetailScreen extends StatelessWidget {
           Positioned.fill(child: CourtImage(url: court.img)),
           Positioned.fill(
             child: Container(
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Color(0x260A0F14),
-                    Color(0x990A0F14),
+                    AppColors.black(0.15),
+                    AppColors.black(0.6),
                     AppColors.bg,
                   ],
                   stops: [0, 0.65, 1],
                 ),
               ),
-            ),
-          ),
-          Positioned(
-            bottom: 110,
-            left: 0,
-            right: 0,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (var i = 0; i < 4; i++) ...[
-                  Container(
-                    width: i == 0 ? 20 : 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: i == 0 ? Colors.white : AppColors.white(0.4),
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                  ),
-                  if (i < 3) const SizedBox(width: 5),
-                ],
-              ],
             ),
           ),
           Positioned(
@@ -441,7 +421,7 @@ class DetailScreen extends StatelessWidget {
                     height: 36,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.bg, width: 2),
+                      border: Border.all(color: AppColors.bg, width: 1),
                       image: DecorationImage(
                         image: NetworkImage(avatars[i]),
                         fit: BoxFit.cover,
@@ -457,7 +437,7 @@ class DetailScreen extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: AppColors.bgElev,
-                    border: Border.all(color: AppColors.bg, width: 2),
+                    border: Border.all(color: AppColors.bg, width: 1),
                   ),
                   alignment: Alignment.center,
                   child: Text(
@@ -492,17 +472,15 @@ class DetailScreen extends StatelessWidget {
 
   Widget _iconBtn(IconData icon,
       {VoidCallback? onTap, Color color = AppColors.ink}) {
-    return GestureDetector(
+    return PressableWidget(
       onTap: onTap,
-      // Pill blanca con borde negro y sombra dura (retro-pop): el ícono va en
-      // tinta negra para que se vea sobre la superficie clara.
       child: Container(
         width: 44,
         height: 44,
         decoration: BoxDecoration(
           color: AppColors.glass,
           borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.line, width: 2),
+          border: Border.all(color: AppColors.line, width: 1),
           boxShadow: AppFx.hardShadow(offset: const Offset(2, 2)),
         ),
         child: Icon(icon, color: color, size: 18),
@@ -536,14 +514,14 @@ class DetailScreen extends StatelessWidget {
   /// Botón cuadrado de acción (favoritos / ubicar en el mapa) al pie del detalle.
   Widget _squareBtn(IconData icon,
       {VoidCallback? onTap, Color color = AppColors.ink}) {
-    return GestureDetector(
+    return PressableWidget(
       onTap: onTap,
       child: Container(
         width: 54,
         height: 54,
         decoration: BoxDecoration(
           color: AppColors.glass,
-          border: Border.all(color: AppColors.line, width: 2),
+          border: Border.all(color: AppColors.line, width: 1),
           borderRadius: BorderRadius.circular(AppShape.rBtn),
           boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
         ),
@@ -661,7 +639,7 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
                 ),
               const Spacer(),
               Text(
-                r.userEmail.split('@').first,
+                r.userHandle.isNotEmpty ? r.userHandle : r.userEmail.split('@').first,
                 style: AppText.grotesk(size: 11, color: AppColors.white(0.45)),
               ),
             ],
@@ -695,7 +673,7 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
               Row(
                 children: [
                   for (var i = 1; i <= 5; i++)
-                    GestureDetector(
+                    PressableWidget(
                       onTap: () => setLocal(() => rating = i),
                       child: Icon(
                         i <= rating ? Icons.star_rounded : Icons.star_outline_rounded,
@@ -722,7 +700,7 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppShape.rBtn),
                     borderSide:
-                        const BorderSide(color: AppColors.accent, width: 2),
+                        const BorderSide(color: AppColors.accent, width: 1),
                   ),
                 ),
               ),
@@ -744,6 +722,7 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
                           Review(
                             courtId: widget.courtId,
                             userEmail: session.email!,
+                            userHandle: session.profile?.handle ?? '',
                             rating: rating.toDouble(),
                             comment: commentCtrl.text.trim(),
                             createdAt: DateTime.now().toIso8601String(),

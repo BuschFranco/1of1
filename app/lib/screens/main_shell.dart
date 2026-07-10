@@ -28,6 +28,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   AppTab _tab = AppTab.home;
+  AppTab _previousTab = AppTab.home;
 
   // Subpestaña del Perfil (0 = Perfil, 1 = Amigos). Vive acá para que el swipe
   // del shell pueda alternarla antes de saltar a otra pestaña principal.
@@ -96,6 +97,7 @@ class _MainShellState extends State<MainShell> {
       _tabHistory.add(_tab);
       if (_tabHistory.length > 20) _tabHistory.removeAt(0);
       _slideDir = t.index >= _tab.index ? 1 : -1;
+      _previousTab = _tab;
       _tab = t;
     });
   }
@@ -121,6 +123,7 @@ class _MainShellState extends State<MainShell> {
       final prev = _tabHistory.removeLast();
       setState(() {
         _slideDir = -1;
+        _previousTab = _tab;
         _tab = prev;
       });
       return true;
@@ -128,6 +131,7 @@ class _MainShellState extends State<MainShell> {
     if (_tab != AppTab.home) {
       setState(() {
         _slideDir = -1;
+        _previousTab = _tab;
         _tab = AppTab.home;
       });
       return true;
@@ -204,6 +208,7 @@ class _MainShellState extends State<MainShell> {
         _slideDir = -1;
         _detailCourtId = null;
         _filtersOpen = false;
+        _previousTab = _tab;
         _tab = AppTab.home;
         _focusCourtId = courtId;
       });
@@ -300,7 +305,6 @@ class _MainShellState extends State<MainShell> {
         if (mounted) _askResult(pending);
       });
     }
-    final bottomInset = MediaQuery.of(context).padding.bottom;
 
     // Home (mapa) persistente: queda SIEMPRE montado (no se recrea el platform
     // view) y solo se oculta con Offstage cuando no estás en Home o hay overlay,
@@ -405,10 +409,19 @@ class _MainShellState extends State<MainShell> {
           ),
           if (!hideTabs)
             Positioned(
-              left: 16,
-              right: 16,
-              bottom: 16 + bottomInset,
-              child: AppTabBar(active: _tab, onChange: _selectTab),
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewPadding.bottom,
+                ),
+                child: AppTabBar(
+                  active: _tab,
+                  previous: _previousTab,
+                  onChange: _selectTab,
+                ),
+              ),
             ),
           // Banner de recompensas (logro/título/nivel) por encima de todo.
           // Va dentro de un Positioned para no alterar el tamaño del Stack.

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
+import 'pressable_widget.dart';
 
 /// Panel neobrutalista: relleno SÓLIDO, borde franco del color del ring y
 /// sombra dura opcional ([glow] la activa, manteniendo el nombre histórico).
@@ -34,15 +35,14 @@ class PopPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: fill,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: ringColor.withAlpha(ringAlpha), width: 2),
+        border: Border.all(color: ringColor.withAlpha(ringAlpha), width: 1),
         boxShadow: glow ? AppFx.hardShadow() : null,
       ),
       child: child,
     );
     if (onTap != null) {
-      return GestureDetector(
+      return PressableWidget(
         onTap: onTap,
-        behavior: HitTestBehavior.opaque,
         child: panel,
       );
     }

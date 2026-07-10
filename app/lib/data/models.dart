@@ -192,6 +192,7 @@ class Review {
   final String pageId;
   final String courtId;
   final String userEmail;
+  final String userHandle;
   final double rating;
   final String comment;
   final String? createdAt;
@@ -200,6 +201,7 @@ class Review {
     this.pageId = '',
     required this.courtId,
     required this.userEmail,
+    this.userHandle = '',
     required this.rating,
     required this.comment,
     this.createdAt,
@@ -211,6 +213,7 @@ class Review {
       pageId: page['id']?.toString() ?? '',
       courtId: NotionService.readText(p, 'CourtId'),
       userEmail: NotionService.readText(p, 'UserEmail'),
+      userHandle: NotionService.readText(p, 'UserHandle'),
       rating: NotionService.readNumber(p, 'Rating'),
       comment: NotionService.readText(p, 'Comment'),
       createdAt: NotionService.readDate(p, 'CreatedAt'),
@@ -222,6 +225,7 @@ class Review {
       'Title': NotionService.title('$userEmail → $courtId'),
       'CourtId': NotionService.richText(courtId),
       'UserEmail': NotionService.richText(userEmail),
+      'UserHandle': NotionService.richText(userHandle),
       'Rating': NotionService.number(rating),
       'Comment': NotionService.richText(comment),
       'CreatedAt': NotionService.date(createdAt),

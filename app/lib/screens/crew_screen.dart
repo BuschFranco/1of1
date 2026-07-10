@@ -17,13 +17,13 @@ class CrewScreen extends StatelessWidget {
     ];
 
     return Container(
-      color: AppColors.red,
+      color: AppColors.lilac,
       child: Stack(
         children: [
           // Capa de graffiti decorativa centrada en el fondo.
-          const Positioned.fill(
+          Positioned.fill(
             child: Center(
-              child: BasketballGraffiti(size: 300, color: AppColors.ink),
+              child: BasketballGraffiti(size: 300, color: AppColors.white(0.08)),
             ),
           ),
           ListView(
@@ -36,7 +36,7 @@ class CrewScreen extends StatelessWidget {
                     style: AppText.archivo(
                       size: 34,
                       weight: FontWeight.w900,
-                      color: AppColors.blush,
+                      color: Colors.white,
                       letterSpacing: -0.01,
                     ),
                   ),
@@ -53,7 +53,7 @@ class CrewScreen extends StatelessWidget {
                 style: AppText.grotesk(
                   size: 11,
                   weight: FontWeight.w700,
-                  color: AppColors.blush,
+                  color: AppColors.white(0.6),
                   letterSpacing: 0.16,
                 ),
               ),
@@ -65,7 +65,7 @@ class CrewScreen extends StatelessWidget {
                   // Card de chat: sólida, borde franco y sombra dura.
                   decoration: BoxDecoration(
                     color: AppColors.card,
-                    border: Border.all(color: AppColors.line, width: 2),
+                    border: Border.all(color: AppColors.line, width: 1),
                     borderRadius: BorderRadius.circular(AppShape.rCard),
                     boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
                   ),
@@ -78,9 +78,11 @@ class CrewScreen extends StatelessWidget {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(AppShape.rBtn),
                           color: AppColors.accent,
-                          border: Border.all(color: AppColors.ink, width: 2),
+                          border: Border.all(color: AppColors.line, width: 1),
                         ),
-                        child: const Center(child: BBallGlyph(size: 24)),
+                        child: Center(
+                            child: BBallGlyph(
+                                size: 24, color: AppColors.accentDark)),
                       ),
                       const SizedBox(width: 12),
                       Expanded(

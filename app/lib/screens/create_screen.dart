@@ -8,6 +8,7 @@ import '../services/notion_service.dart';
 import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/basketball_graffiti.dart';
+import '../widgets/pressable_widget.dart';
 import '../widgets/under_construction.dart';
 import 'add_court_screen.dart';
 
@@ -17,7 +18,6 @@ class CreateScreen extends StatelessWidget {
   static const _options = [
     ('Crear pickup game', 'Organizá un partido en cualquier cancha', Icons.sports_basketball),
     ('Agregar cancha', '¿Conocés una cancha que no está?', Icons.add_location_alt_outlined),
-    ('Check-in', 'Avisá que estás jugando ahora', Icons.check_circle_outline),
     ('Reservar cancha', 'Reservá un horario', Icons.event_available_outlined),
   ];
 
@@ -33,8 +33,8 @@ class CreateScreen extends StatelessWidget {
     }
   }
 
-  // Las opciones 2 y 3 (Check-in, Reservar) todavía no tienen backend.
-  static const _wip = {2, 3};
+  // La opción 1 (Reservar) todavía no tiene backend.
+  static const _wip = {2};
 
   Future<void> _openPickupSheet(BuildContext context) async {
     final courts = context.read<CourtsProvider>().courts;
@@ -96,7 +96,7 @@ class CreateScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               _label('Cuándo'),
-              GestureDetector(
+              PressableWidget(
                 onTap: () async {
                   final picked = await showDatePicker(
                     context: ctx,
@@ -165,12 +165,12 @@ class CreateScreen extends StatelessWidget {
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppShape.rBtn),
                     borderSide:
-                        const BorderSide(color: AppColors.accent, width: 2),
+                        const BorderSide(color: AppColors.accent, width: 1),
                   ),
                 ),
               ),
               const SizedBox(height: 24),
-              GestureDetector(
+              PressableWidget(
                 onTap: saving
                     ? null
                     : () async {
@@ -220,7 +220,7 @@ class CreateScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(AppShape.rBtn),
                     border: saving
                         ? null
-                        : Border.all(color: AppColors.ink, width: 2),
+                        : Border.all(color: AppColors.line, width: 1),
                   ),
                   alignment: Alignment.center,
                   child: saving
@@ -254,7 +254,7 @@ class CreateScreen extends StatelessWidget {
         ),
       );
 
-  static Widget _stepBtn(IconData icon, VoidCallback onTap) => GestureDetector(
+  static Widget _stepBtn(IconData icon, VoidCallback onTap) => PressableWidget(
         onTap: onTap,
         child: Container(
           width: 36,
@@ -293,7 +293,7 @@ class CreateScreen extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               for (var i = 0; i < _options.length; i++)
-                GestureDetector(
+                PressableWidget(
                   onTap: () => _onTap(context, i),
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 10),
@@ -301,7 +301,7 @@ class CreateScreen extends StatelessWidget {
                     // Card de opción: sólida con borde claro franco.
                     decoration: BoxDecoration(
                       color: AppColors.card,
-                      border: Border.all(color: AppColors.line, width: 2),
+                      border: Border.all(color: AppColors.line, width: 1),
                       borderRadius: BorderRadius.circular(AppShape.rCard),
                     ),
                     child: Row(

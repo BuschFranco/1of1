@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
+import 'pressable_widget.dart';
 
-/// Card neobrutalista (conserva el nombre histórico para no tocar call-sites):
-/// superficie SÓLIDA, borde franco y sombra dura desplazada. Sin blur, sin
-/// highlight de vidrio.
+/// Card retro-pop modernizada: superficie sólida, borde fino y sombra suave.
 class GlassCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
@@ -29,14 +28,14 @@ class GlassCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: background ?? AppColors.card,
         borderRadius: BorderRadius.circular(radius),
-        border: border ?? Border.all(color: AppColors.line, width: 2),
+        border: border ?? Border.all(color: AppColors.line, width: 1),
         boxShadow: AppFx.hardShadow(),
       ),
       padding: padding,
       child: child,
     );
     if (onTap != null) {
-      return GestureDetector(onTap: onTap, child: content);
+      return PressableWidget(onTap: onTap, child: content);
     }
     return content;
   }

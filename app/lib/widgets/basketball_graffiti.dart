@@ -10,7 +10,7 @@ class BasketballGraffiti extends StatelessWidget {
   const BasketballGraffiti({
     super.key,
     this.size = 280,
-    this.color = const Color(0xFF000000),
+    this.color = const Color(0xFFFFFFFF),
   });
 
   @override

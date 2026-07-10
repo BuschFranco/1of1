@@ -23,7 +23,7 @@ class StatusDot extends StatelessWidget {
           decoration: BoxDecoration(
             color: color,
             shape: BoxShape.circle,
-            border: Border.all(color: AppColors.ink, width: 1.5),
+            border: Border.all(color: AppColors.line, width: 1.5),
           ),
         ),
         const SizedBox(width: 6),

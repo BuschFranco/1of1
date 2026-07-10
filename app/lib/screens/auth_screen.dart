@@ -5,6 +5,7 @@ import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/pop_background.dart';
+import '../widgets/pressable_widget.dart';
 
 enum AuthMode { login, signup }
 
@@ -252,7 +253,7 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget _tabBtn(String label, AuthMode mode) {
     final active = _mode == mode;
     return Expanded(
-      child: GestureDetector(
+      child: PressableWidget(
         onTap: () => _setMode(mode),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
@@ -309,11 +310,10 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _keepLoggedInRow() {
-    return GestureDetector(
+    return PressableWidget(
       onTap: _loading
           ? null
           : () => setState(() => _keepLoggedIn = !_keepLoggedIn),
-      behavior: HitTestBehavior.opaque,
       child: Row(
         children: [
           AnimatedContainer(
@@ -351,7 +351,7 @@ class _AuthScreenState extends State<AuthScreen> {
         color: AppColors.paper,
         borderRadius: BorderRadius.circular(AppShape.rBtn),
         // Estado de error: borde rojo pleno, franco.
-        border: Border.all(color: AppColors.accentDark, width: 2),
+        border: Border.all(color: AppColors.accentDark, width: 1),
       ),
       child: Row(
         children: [
@@ -373,7 +373,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _submitBtn() {
-    return GestureDetector(
+    return PressableWidget(
       onTap: _loading ? null : _submit,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 90),
@@ -383,7 +383,7 @@ class _AuthScreenState extends State<AuthScreen> {
         decoration: BoxDecoration(
           color: _loading ? AppColors.black(0.08) : AppColors.ink,
           borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.ink, width: 2),
+          border: Border.all(color: AppColors.line, width: 1),
           boxShadow: !_loading
               ? AppFx.hardShadow(offset: const Offset(4, 4))
               : null,
@@ -409,7 +409,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _switchModeLink() {
-    return GestureDetector(
+    return PressableWidget(
       onTap: () => _setMode(_isSignup ? AuthMode.login : AuthMode.signup),
       child: RichText(
         text: TextSpan(
@@ -510,9 +510,8 @@ class _GlowFieldState extends State<_GlowField> {
             ),
           ),
           if (widget.isPassword)
-            GestureDetector(
+            PressableWidget(
               onTap: widget.onToggleObscure,
-              behavior: HitTestBehavior.opaque,
               child: Padding(
                 padding: const EdgeInsets.only(left: 8),
                 child: Icon(

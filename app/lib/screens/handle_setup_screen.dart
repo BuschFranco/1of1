@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/session.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
+import '../widgets/pressable_widget.dart';
 
 /// Pantalla obligatoria que se muestra justo después del registro para que el
 /// usuario elija su handle (no se autogenera). Valida formato y unicidad.
@@ -81,7 +82,7 @@ class _HandleSetupScreenState extends State<HandleSetupScreen> {
                   _saveBtn(),
                   const SizedBox(height: 16),
                   Center(
-                    child: GestureDetector(
+                    child: PressableWidget(
                       onTap: _loading
                           ? null
                           : () => context.read<Session>().logout(),
@@ -123,7 +124,7 @@ class _HandleSetupScreenState extends State<HandleSetupScreen> {
       decoration: BoxDecoration(
         color: AppColors.glass,
         borderRadius: BorderRadius.circular(AppShape.rBtn),
-        border: Border.all(color: AppColors.line, width: 2),
+        border: Border.all(color: AppColors.line, width: 1),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
@@ -163,18 +164,18 @@ class _HandleSetupScreenState extends State<HandleSetupScreen> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFE5484D).withAlpha(28),
+        color: AppColors.accentDark.withAlpha(28),
         borderRadius: BorderRadius.circular(AppShape.rBtn),
         // Estado de error: borde rojo pleno, franco.
-        border: Border.all(color: const Color(0xFFE5484D), width: 2),
+        border: Border.all(color: AppColors.accentDark, width: 1),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline, size: 16, color: Color(0xFFE5484D)),
+          const Icon(Icons.error_outline, size: 16, color: AppColors.accentDark),
           const SizedBox(width: 8),
           Expanded(
             child: Text(msg,
-                style: AppText.grotesk(size: 12.5, color: const Color(0xFFFF8A8D))),
+                style: AppText.grotesk(size: 12.5, color: AppColors.accent)),
           ),
         ],
       ),
@@ -182,7 +183,7 @@ class _HandleSetupScreenState extends State<HandleSetupScreen> {
   }
 
   Widget _saveBtn() {
-    return GestureDetector(
+    return PressableWidget(
       onTap: _loading ? null : _save,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -195,7 +196,7 @@ class _HandleSetupScreenState extends State<HandleSetupScreen> {
           borderRadius: BorderRadius.circular(AppShape.rBtn),
           border: _loading
               ? null
-              : Border.all(color: AppColors.ink, width: 2),
+              : Border.all(color: AppColors.line, width: 1),
           boxShadow: _loading ? null : AppFx.hardShadow(),
         ),
         alignment: Alignment.center,
