@@ -1642,10 +1642,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  void _goPrev() =>
-      _selectIndex((_index - 1 + _filtered.length) % _filtered.length);
-  void _goNext() => _selectIndex((_index + 1) % _filtered.length);
-
   Widget _bottomSwipe() {
     return Column(
       children: [
@@ -1663,8 +1659,6 @@ class _HomeScreenState extends State<HomeScreen>
               child: _CourtSwipeCard(
                 court: _filtered[i],
                 onSelect: () => widget.onSelectCourt?.call(_filtered[i].id),
-                onPrev: _goPrev,
-                onNext: _goNext,
               ),
             ),
           ),
@@ -1719,14 +1713,10 @@ class _HomeScreenState extends State<HomeScreen>
 class _CourtSwipeCard extends StatelessWidget {
   final Court court;
   final VoidCallback onSelect;
-  final VoidCallback onPrev;
-  final VoidCallback onNext;
 
   const _CourtSwipeCard({
     required this.court,
     required this.onSelect,
-    required this.onPrev,
-    required this.onNext,
   });
 
   @override
@@ -1863,76 +1853,31 @@ class _CourtSwipeCard extends StatelessWidget {
                       ),
                     ],
                   ),
+                // Acciones: dos botones parejos, radio fijo (rBtn es pill y los
+                // deformaba). El carrusel se navega deslizando (hay puntitos).
                 Row(
                   children: [
                     Expanded(
-                      child: PressableWidget(
+                      child: _cardBtn(
+                        label: 'VER DETALLE',
+                        filled: true,
                         onTap: onSelect,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          decoration: BoxDecoration(
-                            color: AppColors.accent,
-                            borderRadius:
-                                BorderRadius.circular(AppShape.rBtn),
-                            border:
-                                Border.all(color: AppColors.line, width: 1),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            'VER DETALLE',
-                            style: AppText.archivo(
-                              size: 12,
-                              weight: FontWeight.w800,
-                              letterSpacing: 0.04,
-                            ),
-                          ),
-                        ),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    // Crear pickup con esta cancha ya seleccionada.
+                    const SizedBox(width: 8),
                     Expanded(
-                      child: PressableWidget(
+                      child: _cardBtn(
+                        label: 'PICKUP',
+                        icon: Icons.add,
+                        filled: false,
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) =>
                                 PickupCreateScreen(initialCourt: court),
                           ),
                         ),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          decoration: BoxDecoration(
-                            color: AppColors.card,
-                            borderRadius:
-                                BorderRadius.circular(AppShape.rBtn),
-                            border:
-                                Border.all(color: AppColors.accent, width: 1.5),
-                          ),
-                          alignment: Alignment.center,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.add,
-                                  size: 14, color: AppColors.accent),
-                              const SizedBox(width: 3),
-                              Text(
-                                'PICKUP',
-                                style: AppText.archivo(
-                                  size: 12,
-                                  weight: FontWeight.w800,
-                                  letterSpacing: 0.04,
-                                  color: AppColors.accent,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    _arrowBtn(Icons.chevron_left, onPrev),
-                    const SizedBox(width: 6),
-                    _arrowBtn(Icons.chevron_right, onNext),
                   ],
                 ),
               ],
@@ -1943,18 +1888,49 @@ class _CourtSwipeCard extends StatelessWidget {
     );
   }
 
-  Widget _arrowBtn(IconData icon, VoidCallback onTap) {
+  /// Botón de acción de la card (radio fijo, una sola línea). [filled] = acento
+  /// pleno con texto oscuro; si no, contorno de acento sobre card.
+  Widget _cardBtn({
+    required String label,
+    required bool filled,
+    required VoidCallback onTap,
+    IconData? icon,
+  }) {
+    final fg = filled ? AppColors.ink : AppColors.accent;
     return PressableWidget(
       onTap: onTap,
       child: Container(
-        width: 36,
-        height: 36,
+        height: 30,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: AppColors.bgElev,
-          borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.line, width: 1.5),
+          color: filled ? AppColors.accent : AppColors.card,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+              color: filled ? AppColors.ink : AppColors.accent,
+              width: filled ? 1 : 1.5),
         ),
-        child: Icon(icon, color: AppColors.ink, size: 18),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 13, color: fg),
+              const SizedBox(width: 3),
+            ],
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.archivo(
+                  size: 10.5,
+                  weight: FontWeight.w800,
+                  letterSpacing: 0.02,
+                  color: fg,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

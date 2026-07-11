@@ -7,14 +7,12 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../data/achievements.dart';
 import '../data/courts.dart';
-import '../services/court_rating_service.dart';
 import '../services/courts_provider.dart';
 import '../services/play_session_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/court_image.dart';
 import '../widgets/pressable_widget.dart';
-import '../widgets/rating_badge.dart';
 
 class MatchDetailScreen extends StatelessWidget {
   final PlaySession session;
@@ -83,25 +81,21 @@ class MatchDetailScreen extends StatelessWidget {
                     padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                     child: Column(
                       children: [
-                        const SizedBox(height: 12),
-                        // Cancha.
-                        _courtHeader(court, s),
-                        const SizedBox(height: 28),
-                        // Resultado grande.
-                        _resultBadge(color, label),
-                        const SizedBox(height: 28),
-                        // Stats principales.
-                        _mainStats(s),
-                        const SizedBox(height: 16),
-                        // Fecha y hora.
-                        _dateStats(ended),
-                        // Salud.
+                        const SizedBox(height: 4),
+                        // Hero: imagen de la cancha con el resultado y el nombre.
+                        _heroBanner(court, s, color, label),
+                        const SizedBox(height: 22),
+                        // Puntos protagonista.
+                        _pointsHero(s),
+                        const SizedBox(height: 22),
+                        // Franja de stats (duración · fecha · hora).
+                        _statStrip(s, ended),
+                        // Salud (todas las métricas disponibles).
                         if (s.hasHealth) ...[
-                          const SizedBox(height: 28),
-                          _healthSection(s),
+                          const SizedBox(height: 22),
+                          _healthStrip(s),
                         ],
-                        const SizedBox(height: 32),
-                        // Brand footer.
+                        const SizedBox(height: 24),
                         _brandFooter(),
                       ],
                     ),
@@ -128,145 +122,175 @@ class MatchDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _courtHeader(Court? court, PlaySession s) {
+  /// Hero: imagen de la cancha a ancho completo con degradado; el resultado como
+  /// chip arriba-izquierda y el nombre/zona sobre la imagen abajo.
+  Widget _heroBanner(Court? court, PlaySession s, Color color, String label) {
+    final name = court?.name ?? (s.courtName.isEmpty ? 'Cancha' : s.courtName);
+    final sub = court == null
+        ? ''
+        : (court.area.isEmpty ? court.type : '${court.area} · ${court.type}');
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppShape.rCard),
+      child: Stack(
+        children: [
+          CourtImage(
+            url: court?.img ?? '',
+            width: double.infinity,
+            height: 172,
+            borderRadius: BorderRadius.zero,
+          ),
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withAlpha(40),
+                    Colors.black.withAlpha(200),
+                  ],
+                  stops: const [0.35, 1.0],
+                ),
+              ),
+            ),
+          ),
+          // Chip de resultado.
+          Positioned(
+            top: 12,
+            left: 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: color.withAlpha(45),
+                borderRadius: BorderRadius.circular(AppShape.rChip),
+                border: Border.all(color: color, width: 1.5),
+              ),
+              child: Text(label,
+                  style: AppText.archivo(
+                      size: 12,
+                      weight: FontWeight.w900,
+                      color: color,
+                      letterSpacing: 0.04)),
+            ),
+          ),
+          // Nombre + zona.
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 14,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.archivo(
+                        size: 24, weight: FontWeight.w900, color: Colors.white)),
+                if (sub.isNotEmpty)
+                  Text(sub,
+                      style: AppText.grotesk(
+                          size: 12.5, color: Colors.white.withAlpha(200))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Puntos protagonista del partido.
+  Widget _pointsHero(PlaySession s) {
+    final has = s.points > 0;
     return Column(
       children: [
-        CourtImage(
-          url: court?.img ?? '',
-          width: 80,
-          height: 80,
-          borderRadius: BorderRadius.circular(AppShape.rCard),
-        ),
-        const SizedBox(height: 14),
-        Text(
-          court?.name ?? (s.courtName.isEmpty ? 'Cancha' : s.courtName),
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: AppText.archivo(size: 22, weight: FontWeight.w900),
-        ),
-        if (court != null && (court.area.isNotEmpty || court.type.isNotEmpty)) ...[
-          const SizedBox(height: 4),
-          Text(
-            court.area.isEmpty ? court.type : '${court.area} · ${court.type}',
-            style: AppText.grotesk(size: 13, color: AppColors.white(0.5)),
-          ),
-        ],
-        if (court != null) ...[
-          const SizedBox(height: 8),
-          Builder(builder: (context) {
-            final rs = context.read<CourtRatingService>();
-            return FutureBuilder<CourtRating>(
-              future: rs.ratingFor(court.id),
-              builder: (context, snap) {
-                final cr = snap.data;
-                return RatingBadge(value: cr?.average, size: 12);
-              },
-            );
-          }),
-        ],
+        Text(has ? '+${s.points}' : '—',
+            style: AppText.archivo(
+                size: 46,
+                weight: FontWeight.w900,
+                height: 1.0,
+                color: has ? AppColors.accent : AppColors.white(0.4))),
+        const SizedBox(height: 2),
+        Text('PUNTOS GANADOS',
+            style: AppText.grotesk(
+                size: 10.5,
+                weight: FontWeight.w700,
+                color: AppColors.white(0.4),
+                letterSpacing: 0.14)),
       ],
     );
   }
 
-  Widget _resultBadge(Color color, String label) {
+  /// Franja única con duración · fecha · hora, separadas por líneas finas.
+  Widget _statStrip(PlaySession s, DateTime ended) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: BoxDecoration(
-        color: color.withAlpha(20),
-        borderRadius: BorderRadius.circular(AppShape.rCard),
-        border: Border.all(color: color.withAlpha(100), width: 2),
-      ),
-      child: Text(
-        label,
-        textAlign: TextAlign.center,
-        style: AppText.archivo(size: 28, weight: FontWeight.w900, color: color),
-      ),
-    );
-  }
-
-  Widget _mainStats(PlaySession s) {
-    return Row(
-      children: [
-        Expanded(child: _bigStat(Icons.schedule, 'Duración', PlaySessionService.fmt(s.seconds))),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _bigStat(
-            Icons.stars_rounded,
-            'Puntos',
-            s.points > 0 ? '+${s.points}' : '—',
-            valueColor: s.points > 0 ? AppColors.accent : null,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _dateStats(DateTime ended) {
-    return Row(
-      children: [
-        Expanded(child: _bigStat(Icons.calendar_today, 'Fecha', _fmtDate(ended))),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _bigStat(
-            Icons.access_time_filled,
-            'Hora',
-            '${ended.hour.toString().padLeft(2, '0')}:${ended.minute.toString().padLeft(2, '0')}',
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _bigStat(IconData icon, String label, String value, {Color? valueColor}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(AppShape.rCard),
         border: Border.all(color: AppColors.line, width: 1),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: AppColors.white(0.4)),
-              const SizedBox(width: 6),
-              Text(label.toUpperCase(),
-                  style: AppText.grotesk(
-                      size: 10,
-                      weight: FontWeight.w700,
-                      color: AppColors.white(0.4),
-                      letterSpacing: 0.08)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(value,
-              style: AppText.archivo(
-                  size: 22,
-                  weight: FontWeight.w900,
-                  color: valueColor ?? AppColors.ink)),
+          Expanded(child: _inlineStat('DURACIÓN', PlaySessionService.fmt(s.seconds))),
+          _vDivider(),
+          Expanded(child: _inlineStat('FECHA', _fmtDate(ended))),
+          _vDivider(),
+          Expanded(
+              child: _inlineStat('HORA',
+                  '${ended.hour.toString().padLeft(2, '0')}:${ended.minute.toString().padLeft(2, '0')}')),
         ],
       ),
     );
   }
 
-  Widget _healthSection(PlaySession s) {
+  Widget _vDivider() =>
+      Container(width: 1, height: 30, color: AppColors.white(0.1));
+
+  Widget _inlineStat(String label, String value) {
+    return Column(
+      children: [
+        Text(value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppText.archivo(size: 16, weight: FontWeight.w900)),
+        const SizedBox(height: 3),
+        Text(label,
+            style: AppText.grotesk(
+                size: 9,
+                weight: FontWeight.w700,
+                color: AppColors.white(0.4),
+                letterSpacing: 0.1)),
+      ],
+    );
+  }
+
+  /// "Tu estado": todas las métricas de salud disponibles, como chips.
+  Widget _healthStrip(PlaySession s) {
+    final pills = <Widget>[
+      if (s.calories > 0)
+        _healthPill(Icons.local_fire_department, '${s.calories.round()} kcal'),
+      if (s.steps > 0) _healthPill(Icons.directions_walk, '${s.steps} pasos'),
+      if (s.avgHr != null) _healthPill(Icons.favorite_border, '${s.avgHr} bpm'),
+      if (s.distance > 0)
+        _healthPill(
+            Icons.straighten,
+            s.distance >= 1000
+                ? '${(s.distance / 1000).toStringAsFixed(2)} km'
+                : '${s.distance.round()} m'),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Icon(Icons.monitor_heart_outlined, size: 14, color: AppColors.accent),
+            Icon(Icons.monitor_heart_outlined, size: 13, color: AppColors.accent),
             const SizedBox(width: 6),
             Text('TU ESTADO',
                 style: AppText.grotesk(
-                    size: 11,
+                    size: 10.5,
                     weight: FontWeight.w700,
                     color: AppColors.white(0.5),
-                    letterSpacing: 0.1)),
+                    letterSpacing: 0.12)),
             if (s.calorieRecord) ...[
               const Spacer(),
               Container(
@@ -279,74 +303,38 @@ class MatchDetailScreen extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.bolt, size: 12, color: kGold),
+                    Icon(Icons.bolt, size: 11, color: kGold),
                     const SizedBox(width: 3),
                     Text('RÉCORD',
                         style: AppText.grotesk(
-                            size: 9, weight: FontWeight.w800, color: kGold)),
+                            size: 8.5, weight: FontWeight.w800, color: kGold)),
                   ],
                 ),
               ),
             ],
           ],
         ),
-        const SizedBox(height: 12),
-        if (s.calories > 0 || s.steps > 0)
-          Row(
-            children: [
-              if (s.calories > 0)
-                Expanded(child: _healthStat(Icons.local_fire_department, 'Calorías', '${s.calories.round()} kcal')),
-              if (s.calories > 0 && s.steps > 0) const SizedBox(width: 10),
-              if (s.steps > 0)
-                Expanded(child: _healthStat(Icons.directions_walk, 'Pasos', '${s.steps}')),
-            ],
-          ),
-        if (s.avgHr != null || s.distance > 0) ...[
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              if (s.avgHr != null)
-                Expanded(child: _healthStat(Icons.monitor_heart_outlined, 'Pulso', '${s.avgHr} bpm')),
-              if (s.avgHr != null && s.distance > 0) const SizedBox(width: 10),
-              if (s.distance > 0)
-                Expanded(
-                  child: _healthStat(
-                    Icons.straighten,
-                    'Distancia',
-                    s.distance >= 1000
-                        ? '${(s.distance / 1000).toStringAsFixed(2)} km'
-                        : '${s.distance.round()} m',
-                  ),
-                ),
-            ],
-          ),
-        ],
+        const SizedBox(height: 10),
+        Wrap(spacing: 8, runSpacing: 8, children: pills),
       ],
     );
   }
 
-  Widget _healthStat(IconData icon, String label, String value) {
+  Widget _healthPill(IconData icon, String value) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
         color: AppColors.card,
-        borderRadius: BorderRadius.circular(AppShape.rBtn),
+        borderRadius: BorderRadius.circular(AppShape.rChip),
         border: Border.all(color: AppColors.line, width: 1),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 12, color: AppColors.white(0.4)),
-              const SizedBox(width: 4),
-              Text(label.toUpperCase(),
-                  style: AppText.grotesk(
-                      size: 9, color: AppColors.white(0.4), letterSpacing: 0.06)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(value, style: AppText.archivo(size: 15, weight: FontWeight.w800)),
+          Icon(icon, size: 14, color: AppColors.accent),
+          const SizedBox(width: 6),
+          Text(value,
+              style: AppText.archivo(size: 13, weight: FontWeight.w800)),
         ],
       ),
     );
@@ -354,7 +342,7 @@ class MatchDetailScreen extends StatelessWidget {
 
   Widget _brandFooter() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20),
+      padding: const EdgeInsets.symmetric(vertical: 14),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -387,7 +375,7 @@ class MatchDetailScreen extends StatelessWidget {
       onTap: () => _captureAndShare(context),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 15),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: AppColors.accent,
           borderRadius: BorderRadius.circular(AppShape.rBtn),
@@ -395,11 +383,14 @@ class MatchDetailScreen extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.camera_alt_outlined, size: 18, color: Colors.white),
+            const Icon(Icons.camera_alt_outlined, size: 16, color: AppColors.ink),
             const SizedBox(width: 8),
             Text('COMPARTIR RESULTADO',
                 style: AppText.archivo(
-                    size: 13, weight: FontWeight.w800, letterSpacing: 0.04)),
+                    size: 12,
+                    weight: FontWeight.w800,
+                    letterSpacing: 0.04,
+                    color: AppColors.ink)),
           ],
         ),
       ),
@@ -414,7 +405,7 @@ class MatchDetailScreen extends StatelessWidget {
       },
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        padding: const EdgeInsets.symmetric(vertical: 11),
         decoration: BoxDecoration(
           color: AppColors.card,
           borderRadius: BorderRadius.circular(AppShape.rBtn),
@@ -423,7 +414,7 @@ class MatchDetailScreen extends StatelessWidget {
         child: Text('Ver cancha',
             textAlign: TextAlign.center,
             style: AppText.grotesk(
-                size: 13, weight: FontWeight.w600, color: AppColors.white(0.7))),
+                size: 12.5, weight: FontWeight.w600, color: AppColors.white(0.7))),
       ),
     );
   }
@@ -443,35 +434,41 @@ class MatchDetailScreen extends StatelessWidget {
     final (color, label) = _resultStyle(s.result);
     final ended = DateTime.fromMillisecondsSinceEpoch(s.endedAtMillis);
 
-    // Crear un overlay temporal para capturar.
+    // Overlay temporal FUERA de pantalla (left: -3000) para renderizar la
+    // tarjeta 1080×1920 sin que el usuario la vea. El RepaintBoundary con [key]
+    // es lo que se captura (antes faltaba y el cast a RenderRepaintBoundary
+    // tiraba, con lo que el compartir fallaba en silencio).
     final overlay = Overlay.of(context);
     late OverlayEntry entry;
     entry = OverlayEntry(
       builder: (_) => Positioned(
-        width: 1080,
-        height: 1920,
+        left: -3000,
+        top: 0,
         child: Material(
           color: Colors.transparent,
-          child: _ShareCard(
+          child: RepaintBoundary(
             key: key,
-            session: s,
-            court: court,
-            color: color,
-            label: label,
-            ended: ended,
+            child: _ShareCard(
+              session: s,
+              court: court,
+              color: color,
+              label: label,
+              ended: ended,
+            ),
           ),
         ),
       ),
     );
     overlay.insert(entry);
 
-    // Esperar a que se renderice.
-    await Future.delayed(const Duration(milliseconds: 100));
+    // Esperar a que se renderice (dos frames para asegurar el layout).
+    await Future.delayed(const Duration(milliseconds: 250));
 
     try {
       final boundary =
           key.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      final image = await boundary.toImage(pixelRatio: 3.0);
+      // La tarjeta ya es 1080×1920: pixelRatio 1 alcanza para una story nítida.
+      final image = await boundary.toImage(pixelRatio: 1.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final buffer = byteData!.buffer.asUint8List();
 
@@ -479,13 +476,24 @@ class MatchDetailScreen extends StatelessWidget {
       final file = File('${dir.path}/match_result.png');
       await file.writeAsBytes(buffer);
 
+      entry.remove();
+
       await Share.shareXFiles(
         [XFile(file.path)],
         text: '¡Resultado en 1of1! 🏀',
       );
-    } catch (_) {}
-
-    entry.remove();
+    } catch (e) {
+      entry.remove();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo generar la imagen para compartir.',
+                style: AppText.grotesk(size: 13)),
+            backgroundColor: AppColors.bgElev,
+          ),
+        );
+      }
+    }
   }
 
   static (Color, String) _resultStyle(PlayResult? r) {
@@ -517,7 +525,6 @@ class _ShareCard extends StatelessWidget {
   final DateTime ended;
 
   const _ShareCard({
-    super.key,
     required this.session,
     required this.court,
     required this.color,
@@ -540,66 +547,65 @@ class _ShareCard extends StatelessWidget {
         ),
       ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Brand.
-          Text('1of1',
-              style: AppText.archivo(size: 48, weight: FontWeight.w900, color: AppColors.accent)),
-          const SizedBox(height: 80),
+          const SizedBox(height: 24),
+          const AppLogo(height: 76),
+          const Spacer(),
           // Resultado.
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 44, vertical: 18),
             decoration: BoxDecoration(
-              color: color.withAlpha(25),
+              color: color.withAlpha(28),
               borderRadius: BorderRadius.circular(100),
-              border: Border.all(color: color.withAlpha(100), width: 3),
+              border: Border.all(color: color.withAlpha(120), width: 3),
             ),
             child: Text(label,
                 style: AppText.archivo(
-                    size: 52, weight: FontWeight.w900, color: color)),
+                    size: 48, weight: FontWeight.w900, color: color)),
           ),
-          const SizedBox(height: 60),
+          const SizedBox(height: 44),
           // Cancha.
           Text(
             court?.name ?? (s.courtName.isEmpty ? 'Cancha' : s.courtName),
             textAlign: TextAlign.center,
-            style: AppText.archivo(size: 36, weight: FontWeight.w800),
+            style: AppText.archivo(size: 40, weight: FontWeight.w900),
           ),
           if (court != null && court!.area.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(court!.area,
                 style: AppText.grotesk(size: 24, color: AppColors.white(0.5))),
           ],
-          const SizedBox(height: 60),
-          // Stats.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _shareStat('DURACIÓN', PlaySessionService.fmt(s.seconds)),
-              Container(
-                width: 2,
-                height: 60,
-                margin: const EdgeInsets.symmetric(horizontal: 40),
-                color: AppColors.white(0.15),
-              ),
-              _shareStat('PUNTOS', s.points > 0 ? '+${s.points}' : '—'),
-            ],
-          ),
-          const SizedBox(height: 40),
-          // Fecha.
+          const SizedBox(height: 20),
           Text(
             '${_fmtDate(ended)} · ${ended.hour.toString().padLeft(2, '0')}:${ended.minute.toString().padLeft(2, '0')}',
             style: AppText.grotesk(size: 22, color: AppColors.white(0.4)),
           ),
-          // Salud.
+          const SizedBox(height: 64),
+          // Stats principales.
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _shareStat('DURACIÓN', PlaySessionService.fmt(s.seconds)),
+              _shareDivider(),
+              _shareStat('PUNTOS', s.points > 0 ? '+${s.points}' : '—',
+                  color: s.points > 0 ? AppColors.accent : null),
+            ],
+          ),
+          // Salud: todas las métricas disponibles.
           if (s.hasHealth) ...[
-            const SizedBox(height: 50),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            const SizedBox(height: 56),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 40,
+              runSpacing: 28,
               children: [
                 if (s.calories > 0)
                   _shareMiniStat(Icons.local_fire_department, '${s.calories.round()} kcal'),
-                if (s.calories > 0 && s.distance > 0) const SizedBox(width: 40),
+                if (s.steps > 0)
+                  _shareMiniStat(Icons.directions_walk, '${s.steps} pasos'),
+                if (s.avgHr != null)
+                  _shareMiniStat(Icons.favorite_border, '${s.avgHr} bpm'),
                 if (s.distance > 0)
                   _shareMiniStat(
                     Icons.straighten,
@@ -614,21 +620,34 @@ class _ShareCard extends StatelessWidget {
           // CTA.
           Text('Jugá en 1of1',
               style: AppText.grotesk(
-                  size: 22, color: AppColors.white(0.3), letterSpacing: 0.1)),
+                  size: 24,
+                  weight: FontWeight.w600,
+                  color: AppColors.white(0.35),
+                  letterSpacing: 0.1)),
+          const SizedBox(height: 24),
         ],
       ),
     );
   }
 
-  Widget _shareStat(String label, String value) {
+  Widget _shareDivider() => Container(
+        width: 2,
+        height: 64,
+        margin: const EdgeInsets.symmetric(horizontal: 44),
+        color: AppColors.white(0.15),
+      );
+
+  Widget _shareStat(String label, String value, {Color? color}) {
     return Column(
       children: [
         Text(value,
-            style: AppText.archivo(size: 44, weight: FontWeight.w900)),
+            style: AppText.archivo(
+                size: 46, weight: FontWeight.w900, color: color ?? Colors.white)),
         const SizedBox(height: 8),
         Text(label,
             style: AppText.grotesk(
                 size: 16,
+                weight: FontWeight.w700,
                 color: AppColors.white(0.4),
                 letterSpacing: 0.1)),
       ],
@@ -639,10 +658,11 @@ class _ShareCard extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 20, color: AppColors.white(0.4)),
-        const SizedBox(width: 8),
+        Icon(icon, size: 26, color: AppColors.accent),
+        const SizedBox(width: 10),
         Text(text,
-            style: AppText.grotesk(size: 20, color: AppColors.white(0.5))),
+            style: AppText.archivo(
+                size: 24, weight: FontWeight.w800, color: Colors.white)),
       ],
     );
   }
