@@ -48,7 +48,11 @@ class AddCourtScreen extends StatefulWidget {
 class _AddCourtScreenState extends State<AddCourtScreen> {
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
-  final _hoursCtrl = TextEditingController();
+
+  // Horario estructurado: apertura, cierre y toggle 24h.
+  TimeOfDay? _openTime = const TimeOfDay(hour: 8, minute: 0);
+  TimeOfDay? _closeTime = const TimeOfDay(hour: 22, minute: 0);
+  bool _is24h = false;
 
   final ImagePicker _picker = ImagePicker();
   // Imagen elegida desde el celular. Por ahora solo vive en el front (preview);
@@ -84,7 +88,6 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _descCtrl.dispose();
-    _hoursCtrl.dispose();
     _priceCtrl.dispose();
     _mapCtrl?.dispose();
     super.dispose();
@@ -133,6 +136,10 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
     ];
   }
 
+  /// Formatea a "HH:mm" 24h (no depende del locale del TimePicker).
+  String _fmtTime(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
   Future<void> _submit() async {
     if (_nameCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -143,7 +150,23 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
       );
       return;
     }
+
+    // Horario: si no es 24h, exigimos apertura y cierre elegidos.
+    if (!_is24h && (_openTime == null || _closeTime == null)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Elegí el horario de apertura y cierre (o marcá 24h)',
+              style: AppText.grotesk(size: 13)),
+          backgroundColor: AppColors.bgElev,
+        ),
+      );
+      return;
+    }
     setState(() => _submitted = true);
+
+    // 24h se representa como apertura == cierre (00:00/00:00).
+    final openStr = _is24h ? '00:00' : _fmtTime(_openTime!);
+    final closeStr = _is24h ? '00:00' : _fmtTime(_closeTime!);
 
     final court = Court(
       id: '',
@@ -160,10 +183,13 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
       lit: _lit,
       hoops: _hoops,
       surface: _surface,
-      status: CourtStatus.open,
+      // El estado abierta/cerrada se computa del horario; el crudo nace "open".
+      rawStatus: CourtStatus.open,
       players: 0,
       vibe: _vibe,
-      hours: _hoursCtrl.text.trim(),
+      hours: '',
+      openTime: openStr,
+      closeTime: closeStr,
       badges: _buildBadges(),
       desc: _descCtrl.text.trim(),
       lat: _pinLocation.latitude,
@@ -264,10 +290,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
                     _amenitiesGrid(),
                     const SizedBox(height: 24),
                     _sectionTitle('Horarios'),
-                    _glassField(
-                      controller: _hoursCtrl,
-                      hint: 'Ej. 06:00 — 23:00 o Abierto 24h',
-                    ),
+                    _hoursSection(),
                     const SizedBox(height: 24),
                     _sectionTitle('Descripción'),
                     _glassField(
@@ -348,6 +371,80 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
           border: InputBorder.none,
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+      ),
+    );
+  }
+
+  /// Horario estructurado: toggle 24h + selectores de apertura/cierre.
+  Widget _hoursSection() {
+    return Column(
+      children: [
+        _toggle('Abierto 24h', Icons.all_inclusive, _is24h,
+            (v) => setState(() => _is24h = v)),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          child: _is24h
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _timeBox('Apertura', _openTime,
+                            (t) => setState(() => _openTime = t)),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _timeBox('Cierre', _closeTime,
+                            (t) => setState(() => _closeTime = t)),
+                      ),
+                    ],
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// Caja tocable que abre un TimePicker y muestra la hora elegida.
+  Widget _timeBox(String label, TimeOfDay? value, ValueChanged<TimeOfDay> onPicked) {
+    return PressableWidget(
+      onTap: () async {
+        final picked = await showTimePicker(
+          context: context,
+          initialTime: value ?? TimeOfDay.now(),
+        );
+        if (picked != null) onPicked(picked);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.bgElev,
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: Border.all(color: AppColors.white(0.25), width: 1.5),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.schedule, size: 18, color: AppColors.white(0.5)),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label.toUpperCase(),
+                    style: AppText.grotesk(
+                        size: 9,
+                        weight: FontWeight.w700,
+                        color: AppColors.white(0.4),
+                        letterSpacing: 0.06)),
+                Text(
+                  value == null ? '--:--' : value.format(context),
+                  style: AppText.archivo(size: 16, weight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

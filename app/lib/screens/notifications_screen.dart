@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../data/courts.dart';
+import '../data/models.dart';
+import '../services/courts_provider.dart';
+import '../services/pickups_provider.dart';
 import '../services/play_session_service.dart';
+import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/pressable_widget.dart';
 
-/// Listado del historial de notificaciones (logros, títulos y subidas de nivel).
-/// Se abre desde el botón de campana. Al entrar marca todo como leído.
+/// Listado de notificaciones: arriba las invitaciones a pickup pendientes (con
+/// Aceptar/Rechazar), abajo el historial (logros, títulos, subidas de nivel).
+/// Se abre desde el botón de campana. Al entrar marca el historial como leído.
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
 
@@ -14,6 +20,9 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
+  // pageIds de invitaciones que están actualizándose (muestran loader).
+  final Set<String> _working = {};
+
   @override
   void initState() {
     super.initState();
@@ -22,6 +31,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       if (mounted) context.read<PlaySessionService>().markNotificationsRead();
     });
   }
+
+  String get _myEmail =>
+      (context.read<Session>().email ?? '').trim().toLowerCase();
 
   /// "hace 5 min" / "hace 2 h" / "hace 3 d" / fecha corta.
   static String _ago(int millis) {
@@ -35,9 +47,54 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return '${dt.day}/${dt.month}/${dt.year}';
   }
 
+  String _courtName(String courtId) {
+    for (final Court c in context.read<CourtsProvider>().courts) {
+      if (c.id == courtId) return c.name;
+    }
+    return 'Cancha';
+  }
+
+  String _dateLabel(String? iso) {
+    if (iso == null || iso.isEmpty) return 'Sin fecha';
+    try {
+      final dt = DateTime.parse(iso);
+      final h = dt.hour.toString().padLeft(2, '0');
+      final m = dt.minute.toString().padLeft(2, '0');
+      return '${dt.day}/${dt.month} · $h:$m';
+    } catch (_) {
+      return 'Sin fecha';
+    }
+  }
+
+  Future<void> _respond(Pickup p, bool accept) async {
+    if (_working.contains(p.pageId)) return;
+    setState(() => _working.add(p.pageId));
+    try {
+      final email = context.read<Session>().email ?? '';
+      final provider = context.read<PickupsProvider>();
+      if (accept) {
+        await provider.accept(p, email);
+      } else {
+        await provider.decline(p, email);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo responder. Revisá la conexión.',
+                style: AppText.grotesk(size: 13)),
+            backgroundColor: AppColors.bgElev,
+          ),
+        );
+      }
+    }
+    if (mounted) setState(() => _working.remove(p.pageId));
+  }
+
   @override
   Widget build(BuildContext context) {
     final notifs = context.watch<PlaySessionService>().notifications;
+    final invites = context.watch<PickupsProvider>().pendingInvitesFor(_myEmail);
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -64,17 +121,143 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
             ),
             Expanded(
-              child: notifs.isEmpty
+              child: (invites.isEmpty && notifs.isEmpty)
                   ? _empty()
-                  : ListView.separated(
+                  : ListView(
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                      itemCount: notifs.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (_, i) => _row(notifs[i]),
+                      children: [
+                        if (invites.isNotEmpty) ...[
+                          _sectionLabel('INVITACIONES A PICKUP'),
+                          const SizedBox(height: 10),
+                          for (final p in invites) ...[
+                            _inviteCard(p),
+                            const SizedBox(height: 10),
+                          ],
+                          const SizedBox(height: 6),
+                        ],
+                        if (notifs.isNotEmpty) ...[
+                          if (invites.isNotEmpty) ...[
+                            _sectionLabel('HISTORIAL'),
+                            const SizedBox(height: 10),
+                          ],
+                          for (final n in notifs) ...[
+                            _row(n),
+                            const SizedBox(height: 10),
+                          ],
+                        ],
+                      ],
                     ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _sectionLabel(String text) => Text(
+        text,
+        style: AppText.grotesk(
+          size: 11,
+          weight: FontWeight.w700,
+          color: AppColors.white(0.45),
+          letterSpacing: 0.1,
+        ),
+      );
+
+  Widget _inviteCard(Pickup p) {
+    final busy = _working.contains(p.pageId);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        border: Border.all(color: AppColors.accent, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withAlpha(32),
+                  borderRadius: BorderRadius.circular(AppShape.rBtn),
+                  border: Border.all(color: AppColors.accent, width: 1.5),
+                ),
+                child: Icon(Icons.mail_outline, size: 20, color: AppColors.accent),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Te invitaron a un pickup',
+                        style: AppText.grotesk(
+                            size: 11,
+                            weight: FontWeight.w600,
+                            color: AppColors.white(0.55))),
+                    const SizedBox(height: 2),
+                    Text(p.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.archivo(
+                            size: 15,
+                            weight: FontWeight.w800,
+                            color: Colors.white)),
+                    const SizedBox(height: 2),
+                    Text('${_courtName(p.courtId)} · ${_dateLabel(p.dateTime)}',
+                        style: AppText.grotesk(
+                            size: 12, color: AppColors.white(0.5))),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _respondBtn(
+                    'RECHAZAR', AppColors.closed, busy, () => _respond(p, false)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _respondBtn(
+                    'ACEPTAR', AppColors.accent, busy, () => _respond(p, true)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _respondBtn(
+      String label, Color color, bool busy, VoidCallback onTap) {
+    return PressableWidget(
+      onTap: busy ? null : onTap,
+      child: Container(
+        height: 44,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: color.withAlpha(30),
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: Border.all(color: color, width: 1.5),
+        ),
+        child: busy
+            ? SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: color),
+              )
+            : Text(label,
+                style: AppText.archivo(
+                    size: 13,
+                    weight: FontWeight.w900,
+                    letterSpacing: 0.04,
+                    color: color)),
       ),
     );
   }
@@ -109,7 +292,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Acá vas a ver tus logros, títulos y\nsubidas de nivel.',
+            'Acá vas a ver tus invitaciones a pickup,\nlogros, títulos y subidas de nivel.',
             textAlign: TextAlign.center,
             style: AppText.grotesk(size: 12, color: AppColors.white(0.35)),
           ),

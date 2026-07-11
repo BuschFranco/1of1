@@ -6,9 +6,14 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/courts.dart';
+import '../data/models.dart';
+import '../notion/notion_config.dart';
 import '../services/app_loading_state.dart';
+import '../services/court_rating_service.dart';
 import '../services/notifications_service.dart';
+import '../services/notion_service.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
@@ -20,6 +25,7 @@ import '../widgets/permissions_modal.dart';
 import '../widgets/rating_badge.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/status_dot.dart';
+import 'pickup_create_screen.dart';
 
 const _kApiKey = String.fromEnvironment('MAPS_API_KEY');
 
@@ -131,6 +137,18 @@ class _HomeScreenState extends State<HomeScreen>
   // Canchas visibles tras aplicar los filtros activos. Alimenta tanto los
   // marcadores del mapa como la tarjeta inferior.
   List<Court> _filtered = [];
+
+  // Reseñas de la cancha seleccionada (máx. 2, rating ≥ 4). Se cargan al
+  // cambiar de cancha y se muestran como burbujas sobre el punto GPS.
+  final NotionService _notion = NotionService();
+  List<Review> _courtReviews = [];
+  bool _reviewsLoading = false;
+  int _reviewRequestId = 0;
+
+  // Toggle para mostrar/ocultar reseñas en el mapa (persistido en local).
+  bool _showMapReviews = true;
+  // Estado de expansión de las burbujas de reseñas (tap para colapsar).
+  bool _reviewsExpanded = true;
 
   // Carrusel de tarjetas: el PageView permite arrastrar con el dedo y hace
   // snap. _skipNextPageCamera evita que un cambio de página programático
@@ -269,6 +287,11 @@ class _HomeScreenState extends State<HomeScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1800),
     )..repeat();
+    // Cargar preferencia de visibilidad de reseñas en mapa.
+    SharedPreferences.getInstance().then((sp) {
+      final saved = sp.getBool('map_reviews_toggle');
+      if (saved != null && mounted) setState(() => _showMapReviews = saved);
+    });
     // Si venimos desde el detalle con una cancha en foco, seleccionarla.
     _applyFilters();
     final fid = widget.focusCourtId;
@@ -506,8 +529,11 @@ class _HomeScreenState extends State<HomeScreen>
   void _onPageChanged(int i) {
     setState(() {
       _index = i;
+      _courtReviews = [];
+      _reviewsLoading = true;
       _rebuildMarkers();
     });
+    _loadCourtReviews();
     if (_skipNextPageCamera) {
       _skipNextPageCamera = false;
       return;
@@ -515,6 +541,37 @@ class _HomeScreenState extends State<HomeScreen>
     _mapCtrl?.animateCamera(
       CameraUpdate.newLatLng(LatLng(_filtered[i].lat, _filtered[i].lng)),
     );
+  }
+
+  /// Carga las mejores reseñas de la cancha seleccionada.
+  Future<void> _loadCourtReviews() async {
+    final court = _court;
+    if (court == null || !_notion.isConfigured) {
+      setState(() { _courtReviews = []; _reviewsLoading = false; });
+      return;
+    }
+    // Guard: incrementar requestId para descartar respuestas stale.
+    final myRequestId = ++_reviewRequestId;
+    // Resetear expansión al cambiar de cancha.
+    _reviewsExpanded = true;
+    try {
+      final rows = await _notion.queryDatabase(
+        NotionConfig.dbReviews,
+        filter: NotionService.filterText('CourtId', court.id),
+      );
+      // Si cambió la cancha mientras cargaba, descartar este resultado.
+      if (myRequestId != _reviewRequestId) return;
+      final all = rows.map(Review.fromNotion).toList();
+      // Solo 4-5 estrellas, ordenadas por rating desc, máximo 2.
+      final best = all
+          .where((r) => r.rating >= 4.0)
+          .toList()
+        ..sort((a, b) => b.rating.compareTo(a.rating));
+      if (mounted) setState(() { _courtReviews = best.take(2).toList(); _reviewsLoading = false; });
+    } catch (_) {
+      if (myRequestId != _reviewRequestId) return;
+      if (mounted) setState(() { _courtReviews = []; _reviewsLoading = false; });
+    }
   }
 
   Future<void> _onSearch(String query) async {
@@ -620,7 +677,8 @@ class _HomeScreenState extends State<HomeScreen>
                 mapToolbarEnabled: false,
                 tiltGesturesEnabled: false,
               ),
-              _userLocationDot(),
+               _userLocationDot(),
+               _courtReviewBubbles(),
               Positioned(top: 54, left: 16, right: 16, child: _searchBar()),
               if (_showSearch && _predictions.isNotEmpty)
                 Positioned(
@@ -664,8 +722,12 @@ class _HomeScreenState extends State<HomeScreen>
                 bottom: 312,
                 child: Column(
                   children: [
-                    _devControls(),
+                    _reviewToggleBtn(),
                     const SizedBox(height: 10),
+                    if (context.read<Session>().isAdmin) ...[
+                      _devControls(),
+                      const SizedBox(height: 10),
+                    ],
                     _locateBtn(),
                   ],
                 ),
@@ -1281,6 +1343,207 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+  /// Burbujas con las 2 mejores reseñas de la cancha seleccionada,
+  /// posicionadas justo arriba del marcador de la cancha en el mapa.
+  Widget _courtReviewBubbles() {
+    if (!_showMapReviews) return const SizedBox.shrink();
+    final court = _court;
+    if (court == null) return const SizedBox.shrink();
+    // Mostrar loader mientras se cargan reseñas.
+    if (_reviewsLoading && _courtReviews.isEmpty) {
+      return ValueListenableBuilder<Offset?>(
+        valueListenable: _userScreen,
+        builder: (context, _, __) {
+          final pos = _projectToScreen(court.lat, court.lng);
+          if (pos == null) return const SizedBox.shrink();
+          return Positioned(
+            left: (pos.dx - 20).clamp(8.0, 9999.0),
+            top: pos.dy - 72,
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.bgElev,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.line, width: 1),
+                ),
+                child: const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.accent,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+    if (_courtReviews.isEmpty) return const SizedBox.shrink();
+    return ValueListenableBuilder<Offset?>(
+      key: ValueKey('reviews:${court.id}'),
+      valueListenable: _userScreen,
+      builder: (context, _, __) {
+        final pos = _projectToScreen(court.lat, court.lng);
+        if (pos == null) return const SizedBox.shrink();
+        return Positioned(
+          left: (pos.dx - 100).clamp(8.0, 9999.0),
+          top: pos.dy - 72 - (_reviewsExpanded ? _courtReviews.length * 64.0 : 40),
+          width: 200,
+          child: GestureDetector(
+            onTap: () => setState(() => _reviewsExpanded = !_reviewsExpanded),
+            child: IgnorePointer(
+              child: AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 0; i < _courtReviews.length; i++)
+                      if (_reviewsExpanded)
+                        _reviewBubble(_courtReviews[i], i)
+                      else
+                        _reviewBubbleMini(_courtReviews[i]),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _reviewBubble(Review r, int index) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.bgElev,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.line, width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(80),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                for (var s = 0; s < 5; s++)
+                  Icon(
+                    s < r.rating.round()
+                        ? Icons.star_rounded
+                        : Icons.star_outline_rounded,
+                    size: 12,
+                    color: AppColors.accent,
+                  ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    r.userHandle.isNotEmpty
+                        ? r.userHandle
+                        : r.userEmail.split('@').first,
+                    style: AppText.grotesk(
+                      size: 11,
+                      color: AppColors.ink.withAlpha(180),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            if (r.comment.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                r.comment,
+                style: AppText.grotesk(
+                  size: 11,
+                  color: AppColors.ink.withAlpha(200),
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _reviewBubbleMini(Review r) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.bgElev,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.line, width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var s = 0; s < 5; s++)
+              Icon(
+                s < r.rating.round()
+                    ? Icons.star_rounded
+                    : Icons.star_outline_rounded,
+                size: 10,
+                color: AppColors.accent,
+              ),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                r.userHandle.isNotEmpty
+                    ? r.userHandle
+                    : r.userEmail.split('@').first,
+                style: AppText.grotesk(
+                  size: 10,
+                  color: AppColors.ink.withAlpha(180),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Botón flotante para activar/desactivar reseñas en el mapa.
+  Widget _reviewToggleBtn() {
+    return PressableWidget(
+      onTap: () async {
+        setState(() => _showMapReviews = !_showMapReviews);
+        final sp = await SharedPreferences.getInstance();
+        await sp.setBool('map_reviews_toggle', _showMapReviews);
+      },
+      child: _glassContainer(
+        width: 48,
+        height: 48,
+        radius: AppShape.rBtn,
+        child: Icon(
+          _showMapReviews ? Icons.rate_review_rounded : Icons.rate_review_outlined,
+          color: _showMapReviews ? AppColors.accent : AppColors.ink.withAlpha(140),
+          size: 22,
+        ),
+      ),
+    );
+  }
+
   // ── DEV: prueba de ubicación ──────────────────────────────────────────────
 
   /// Tocar el mapa en modo prueba: mueve la ubicación simulada (y el punto azul)
@@ -1538,7 +1801,19 @@ class _CourtSwipeCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     StatusDot(status: court.status),
-                    RatingBadge(value: court.rating, size: 11),
+                    Builder(builder: (context) {
+                      final rs = context.read<CourtRatingService>();
+                      return FutureBuilder<CourtRating>(
+                        future: rs.ratingFor(court.id),
+                        builder: (context, snap) {
+                          final cr = snap.data;
+                          return RatingBadge(
+                            value: cr?.average,
+                            size: 11,
+                          );
+                        },
+                      );
+                    }),
                   ],
                 ),
                 Text(
@@ -1594,12 +1869,11 @@ class _CourtSwipeCard extends StatelessWidget {
                       child: PressableWidget(
                         onTap: onSelect,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           decoration: BoxDecoration(
                             color: AppColors.accent,
                             borderRadius:
                                 BorderRadius.circular(AppShape.rBtn),
-                            // Acento pleno → borde negro puro.
                             border:
                                 Border.all(color: AppColors.line, width: 1),
                           ),
@@ -1607,10 +1881,50 @@ class _CourtSwipeCard extends StatelessWidget {
                           child: Text(
                             'VER DETALLE',
                             style: AppText.archivo(
-                              size: 11,
+                              size: 12,
                               weight: FontWeight.w800,
                               letterSpacing: 0.04,
                             ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // Crear pickup con esta cancha ya seleccionada.
+                    Expanded(
+                      child: PressableWidget(
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                PickupCreateScreen(initialCourt: court),
+                          ),
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: AppColors.card,
+                            borderRadius:
+                                BorderRadius.circular(AppShape.rBtn),
+                            border:
+                                Border.all(color: AppColors.accent, width: 1.5),
+                          ),
+                          alignment: Alignment.center,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.add,
+                                  size: 14, color: AppColors.accent),
+                              const SizedBox(width: 3),
+                              Text(
+                                'PICKUP',
+                                style: AppText.archivo(
+                                  size: 12,
+                                  weight: FontWeight.w800,
+                                  letterSpacing: 0.04,
+                                  color: AppColors.accent,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -1633,14 +1947,14 @@ class _CourtSwipeCard extends StatelessWidget {
     return PressableWidget(
       onTap: onTap,
       child: Container(
-        width: 32,
-        height: 32,
+        width: 36,
+        height: 36,
         decoration: BoxDecoration(
           color: AppColors.bgElev,
           borderRadius: BorderRadius.circular(AppShape.rBtn),
           border: Border.all(color: AppColors.line, width: 1.5),
         ),
-        child: Icon(icon, color: AppColors.ink, size: 16),
+        child: Icon(icon, color: AppColors.ink, size: 18),
       ),
     );
   }

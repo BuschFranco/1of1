@@ -29,7 +29,7 @@ fun resolveMapsApiKey(): String {
 }
 
 android {
-    namespace = "com.example.triplesapp"
+    namespace = "com.buschfranco.oneofone"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -46,7 +46,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.triplesapp"
+        applicationId = "com.buschfranco.oneofone"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // native_geofence requiere minSdk 23+; Health Connect (paquete health)

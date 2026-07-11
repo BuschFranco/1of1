@@ -52,6 +52,7 @@ class Session extends ChangeNotifier {
   bool get restoring => _restoring;
   bool get isLoggedIn => _profile != null;
   bool get notionReady => _notion.isConfigured;
+  bool get isAdmin => _profile?.isAdmin ?? false;
 
   /// True si el usuario está logueado pero todavía no definió su handle
   /// (recién registrado). Fuerza la pantalla de elección de handle.
@@ -87,6 +88,30 @@ class Session extends ChangeNotifier {
     }
     _restoring = false;
     notifyListeners();
+    // Refrescar perfil desde Notion en background para capturar cambios
+    // (como el campo isAdmin) sin bloquear el arranque.
+    if (_profile != null && _notion.isConfigured) {
+      _refreshProfileFromNotion(em!);
+    }
+  }
+
+  /// Refresca el perfil desde Notion (background, sin bloquear).
+  Future<void> _refreshProfileFromNotion(String email) async {
+    try {
+      final rows = await _notion.queryDatabase(
+        NotionConfig.dbUsers,
+        filter: NotionService.filterTitle('Email', email),
+      );
+      if (rows.isEmpty) return;
+      final user = AppUser.fromNotion(rows.first);
+      final profilePage = await _notion.retrievePage(user.profileId);
+      final fresh = Profile.fromNotion(profilePage).copyWith(isAdmin: user.isAdmin);
+      if (_email == email) {
+        _profile = fresh;
+        await _persist(email, fresh);
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 
   /// Devuelve null si OK, o un mensaje de error. [persist] indica si la sesión
@@ -109,7 +134,7 @@ class Session extends ChangeNotifier {
         return 'Contraseña incorrecta.';
       }
       final profilePage = await _notion.retrievePage(user.profileId);
-      await _persist(email, Profile.fromNotion(profilePage));
+      await _persist(email, Profile.fromNotion(profilePage).copyWith(isAdmin: user.isAdmin));
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_kPersist, persist);
       return null;
@@ -165,6 +190,70 @@ class Session extends ChangeNotifier {
       });
 
       await _persist(email, Profile.fromNotion(profilePage));
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kPersist, true);
+      return null;
+    } on NotionException catch (e) {
+      return 'Error conectando con Notion (${e.statusCode}).';
+    } catch (e) {
+      return 'Error inesperado: $e';
+    }
+  }
+
+  /// Login o registro con Google. Recibe los datos del usuario de Google
+  /// (email, nombre, foto). Si el email ya existe en dbUsers, hace login.
+  /// Si no, crea User + Profile y loguea. PasswordHash se marca como
+  /// "google:" para diferenciar de contraseñas manuales.
+  Future<String?> googleSignIn({
+    required String email,
+    required String name,
+    String avatarUrl = '',
+  }) async {
+    if (!_notion.isConfigured) {
+      return 'Notion no está configurado (falta el token).';
+    }
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty) return 'No se pudo obtener el email de Google.';
+    try {
+      // 1) Buscar si ya existe el usuario en dbUsers.
+      final existing = await _notion.queryDatabase(
+        NotionConfig.dbUsers,
+        filter: NotionService.filterTitle('Email', cleanEmail),
+      );
+
+      if (existing.isNotEmpty) {
+        // Ya tiene cuenta: login directo.
+        final user = AppUser.fromNotion(existing.first);
+        final profilePage = await _notion.retrievePage(user.profileId);
+        await _persist(cleanEmail, Profile.fromNotion(profilePage).copyWith(isAdmin: user.isAdmin));
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_kPersist, true);
+        return null;
+      }
+
+      // 2) Usuario nuevo: crear Profile.
+      final newProfile = Profile(
+        name: name.trim(),
+        handle: '',
+        avatar: avatarUrl,
+        userEmail: cleanEmail,
+      );
+      final profilePage = await _notion.createPage(
+        NotionConfig.dbProfiles,
+        newProfile.toNotionProperties(),
+      );
+      final profileId = profilePage['id']?.toString() ?? '';
+
+      // 3) Crear User en dbUsers con passwordHash = "google:".
+      await _notion.createPage(NotionConfig.dbUsers, {
+        'Email': NotionService.title(cleanEmail),
+        'PasswordHash': NotionService.richText('google:'),
+        'ProfileId': NotionService.richText(profileId),
+        'CreatedAt': NotionService.date(DateTime.now().toIso8601String()),
+      });
+
+      // 4) Persistir y notificar.
+      await _persist(cleanEmail, Profile.fromNotion(profilePage));
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_kPersist, true);
       return null;

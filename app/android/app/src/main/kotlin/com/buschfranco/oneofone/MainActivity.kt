@@ -1,4 +1,4 @@
-package com.example.triplesapp
+package com.buschfranco.oneofone
 
 import android.app.AlarmManager
 import android.content.Context

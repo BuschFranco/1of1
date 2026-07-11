@@ -13,11 +13,13 @@ import 'screens/main_shell.dart';
 import 'screens/onboarding_screen.dart';
 import 'notion/notion_config.dart';
 import 'services/app_loading_state.dart';
+import 'services/court_rating_service.dart';
 import 'services/courts_provider.dart';
 import 'services/favorites_provider.dart';
 import 'services/geofence_service.dart';
 import 'services/notifications_service.dart';
 import 'services/notion_service.dart';
+import 'services/pickups_provider.dart';
 import 'services/play_session_service.dart';
 import 'services/profiles_provider.dart';
 import 'services/session.dart';
@@ -82,11 +84,17 @@ Future<void> _ensureNotionSchema() async {
         'LastPlayedCourtId': 'rich_text',
         'LastPlayedAt': 'date',
         'ShowLastPlayed': 'checkbox',
+        'Adm': 'checkbox',
       },
     );
     await notion.ensureProperties(
       NotionConfig.dbCourts,
-      const {'CreatedByClan': 'rich_text', 'CreatedByEmail': 'rich_text'},
+      const {
+        'CreatedByClan': 'rich_text',
+        'CreatedByEmail': 'rich_text',
+        'OpenTime': 'rich_text',
+        'CloseTime': 'rich_text',
+      },
     );
     await notion.ensureProperties(
       NotionConfig.dbReviews,
@@ -103,8 +111,40 @@ Future<void> _ensureNotionSchema() async {
         'TeamAMembers': 'rich_text',
         'TeamBMembers': 'rich_text',
         'TargetScore': 'number',
+        'AcceptedMembers': 'rich_text',
+        'DeclinedMembers': 'rich_text',
       },
     );
+    if (NotionConfig.dbChats.isNotEmpty) {
+      await notion.ensureProperties(
+        NotionConfig.dbChats,
+        const {
+          'Name': 'title',
+          'PickupId': 'rich_text',
+          'CreatedBy': 'rich_text',
+          'Date': 'date',
+          'TeamAName': 'rich_text',
+          'TeamBName': 'rich_text',
+          'TeamAColor': 'rich_text',
+          'TeamBColor': 'rich_text',
+          'LastMessage': 'rich_text',
+        },
+      );
+    }
+    if (NotionConfig.dbMatches.isNotEmpty) {
+      await notion.ensureProperties(
+        NotionConfig.dbMatches,
+        const {
+          'Email': 'title',
+          'Points': 'number',
+          'EndedAt': 'date',
+          'CourtId': 'rich_text',
+          'CourtName': 'rich_text',
+          'Result': 'select',
+          'Seconds': 'number',
+        },
+      );
+    }
   } catch (_) {
     // Permisos insuficientes u otro error: se puede crear a mano en Notion.
   }
@@ -122,7 +162,9 @@ class OneOfOneApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => FavoritesProvider()..load()),
         ChangeNotifierProvider(create: (_) => ProfilesProvider()..load()),
         ChangeNotifierProvider(create: (_) => PlaySessionService()),
+        ChangeNotifierProvider(create: (_) => PickupsProvider()),
         ChangeNotifierProvider(create: (_) => AppLoadingState()),
+        Provider(create: (_) => CourtRatingService()),
         // Pegamento de sincronización (presencia, batch, sembrado). Se crea de
         // forma temprana (lazy: false) para cablear los callbacks ni bien
         // arranca la app, sin depender de que se monte ninguna pantalla.
@@ -133,6 +175,7 @@ class OneOfOneApp extends StatelessWidget {
             play: ctx.read<PlaySessionService>(),
             courts: ctx.read<CourtsProvider>(),
             favorites: ctx.read<FavoritesProvider>(),
+            pickups: ctx.read<PickupsProvider>(),
           ),
           dispose: (_, c) => c.dispose(),
         ),

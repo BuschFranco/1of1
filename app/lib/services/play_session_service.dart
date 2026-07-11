@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/achievements.dart';
 import '../data/courts.dart';
+import '../notion/notion_config.dart';
 import '../theme/app_theme.dart';
 import 'health_service.dart';
 import 'session_alarms.dart';
@@ -78,6 +79,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   String get _kNotifs => _k('reward_notifications');
   String get _kCalRecord => _k('play_calorie_record');
   String get _kHealthEnabled => _k('play_health_enabled');
+  // Buffer de partidos pendientes de subir a la DB "Partidos" de Notion. Se
+  // sube en lote en el flush (mala señal en la cancha = reintento, sin perder
+  // el registro). Ver SyncCoordinator._flushPendingMatches.
+  String get _kPendingMatches => _k('pending_matches');
 
   List<Court> _courts = const [];
   Timer? _ticker;
@@ -298,6 +303,11 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     onReward?.call(e);
   }
 
+  /// Agrega una notificación de chat creado (pickup).
+  void addChatNotification(String chatName) {
+    _emit(RewardEvent.chatCreated(chatName));
+  }
+
   Future<void> _persistNotifs() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
@@ -379,13 +389,20 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         .fold(0, (sum, e) => sum + e.points);
   }
 
-  /// Puntos de la temporada (últimos 6 meses).
+  /// Inicio de la temporada actual. Las temporadas son SEMESTRES de calendario:
+  /// 1 ene–30 jun y 1 jul–31 dic (dos por año). Devuelve el 1 de enero o el 1
+  /// de julio del año en curso según [now] (por defecto, ahora). Fuente única
+  /// del corte de temporada (la usa la UI del ranking también).
+  static DateTime seasonStart([DateTime? now]) {
+    final n = now ?? DateTime.now();
+    return DateTime(n.year, n.month <= 6 ? 1 : 7, 1);
+  }
+
+  /// Puntos de la temporada actual (semestre de calendario, ver [seasonStart]).
   int get pointsSeason {
-    final cutoff = DateTime.now()
-        .subtract(const Duration(days: 180))
-        .millisecondsSinceEpoch;
+    final startMs = seasonStart().millisecondsSinceEpoch;
     return _log
-        .where((e) => e.endedAtMillis >= cutoff)
+        .where((e) => e.endedAtMillis >= startMs)
         .fold(0, (sum, e) => sum + e.points);
   }
 
@@ -1466,6 +1483,20 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     );
     if (_log.length > 100) _log = _log.sublist(0, 100);
 
+    // Encolar para el ranking por período (semana/mes/temporada) de amigos.
+    // Solo partidos que suman puntos (los "sin información" no aportan al
+    // ranking). Se sube en lote en el flush; acá solo persiste local.
+    if (gained > 0 && NotionConfig.dbMatches.isNotEmpty && _userKey.isNotEmpty) {
+      await _enqueuePendingMatch(
+        points: gained,
+        endedAtMillis: p.endedAtMillis,
+        courtId: p.courtId,
+        courtName: p.courtName,
+        result: result.name,
+        seconds: p.seconds,
+      );
+    }
+
     _pendingSession = null;
     await _persistPlays();
     await _persistTotals();
@@ -1477,6 +1508,59 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _recomputeBadges();
     _checkLevelUp(); // los puntos ganados pueden haber subido el nivel
     notifyListeners();
+  }
+
+  // ── Partidos pendientes de subir (ranking por período) ──────────────────
+
+  /// Agrega un partido al buffer local de subida. `email` = userKey (email
+  /// normalizado), la misma clave con la que se resuelven los amigos.
+  Future<void> _enqueuePendingMatch({
+    required int points,
+    required int endedAtMillis,
+    required String courtId,
+    required String courtName,
+    required String result,
+    required int seconds,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_kPendingMatches) ?? <String>[];
+    list.add(jsonEncode({
+      'email': _userKey,
+      'points': points,
+      'endedAt':
+          DateTime.fromMillisecondsSinceEpoch(endedAtMillis).toIso8601String(),
+      'courtId': courtId,
+      'courtName': courtName,
+      'result': result,
+      'seconds': seconds,
+    }));
+    await prefs.setStringList(_kPendingMatches, list);
+  }
+
+  /// Lee los partidos pendientes de subir (cada uno es un mapa JSON).
+  Future<List<Map<String, dynamic>>> readPendingMatches() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_kPendingMatches) ?? <String>[];
+    final out = <Map<String, dynamic>>[];
+    for (final s in list) {
+      try {
+        out.add(jsonDecode(s) as Map<String, dynamic>);
+      } catch (_) {
+        // Entrada corrupta: se descarta.
+      }
+    }
+    return out;
+  }
+
+  /// Reescribe el buffer con lo que quedó sin subir (los que fallaron).
+  Future<void> writePendingMatches(List<Map<String, dynamic>> pending) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (pending.isEmpty) {
+      await prefs.remove(_kPendingMatches);
+      return;
+    }
+    await prefs.setStringList(
+        _kPendingMatches, pending.map(jsonEncode).toList());
   }
 
   // ── Persistencia local ─────────────────────────────────────────────────
@@ -1932,7 +2016,7 @@ class PlaySession {
 }
 
 /// Tipo de recompensa que dispara una notificación in-app.
-enum RewardKind { achievement, title, levelUp }
+enum RewardKind { achievement, title, levelUp, chatCreated }
 
 /// Un evento de recompensa a mostrar como banner: logro o título desbloqueado,
 /// o subida de nivel. Lleva ya resuelto el texto, el ícono y el color a mostrar.
@@ -1984,6 +2068,15 @@ class RewardEvent {
         color: AppColors.accent,
       );
 
+  factory RewardEvent.chatCreated(String chatName) => RewardEvent(
+        kind: RewardKind.chatCreated,
+        refId: chatName,
+        headline: 'Chat creado',
+        name: chatName,
+        icon: Icons.chat_bubble_outline,
+        color: AppColors.accent,
+      );
+
   /// Reconstruye el evento a partir de su tipo y [refId] (al cargar el historial
   /// persistido), re-resolviendo ícono/color/textos desde el catálogo.
   factory RewardEvent.restore(RewardKind kind, String refId) {
@@ -1996,6 +2089,8 @@ class RewardEvent {
         if (t != null) return RewardEvent.title(t);
       case RewardKind.levelUp:
         return RewardEvent.levelUp(int.tryParse(refId) ?? 1);
+      case RewardKind.chatCreated:
+        return RewardEvent.chatCreated(refId);
     }
     // Catálogo cambió y ya no existe: fallback neutro.
     return RewardEvent(

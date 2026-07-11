@@ -185,6 +185,25 @@ datos sabe que existe Notion**.
 - Catálogos de logros/títulos/niveles: `lib/data/achievements.dart`,
   `lib/data/cosmetics.dart`.
 
+### Rating por período y TEMPORADAS (importante)
+
+- El ranking del perfil (StatBox "Rating" → `_showRanking` en `profile_screen.dart`)
+  se puede filtrar por **Semana / Mes / Temporada / Total**. Getters de puntos por
+  período en `play_session_service.dart`: `pointsThisWeek`, `pointsThisMonth`,
+  `pointsSeason`.
+- **Temporada = SEMESTRE de calendario**, NO una ventana móvil de 6 meses. Hay dos
+  temporadas por año: **1 ene – 30 jun** y **1 jul – 31 dic**. La fuente única del
+  corte es `PlaySessionService.seasonStart([now])` (devuelve el 1/1 o el 1/7 del año
+  en curso); la usan tanto el getter `pointsSeason` como la UI del ranking. Si cambiás
+  la definición de temporada, cambiala **solo ahí**.
+- Los puntos por período de **amigos** salen de la DB Notion **"Partidos"**
+  (`NotionConfig.dbMatches`), una fila por partido resuelto (`Email`, `Points`,
+  `EndedAt`, `CourtId`, `CourtName`, `Result`, `Seconds`). Se escribe con
+  staging+flush offline-resiliente: `resolvePending()` encola en
+  `pending_matches::$userKey` y `SyncCoordinator._flushPendingMatches()` sube en lote.
+  Mis propios puntos del período salen del historial local (frescos), los de amigos de
+  esa DB — así no hay doble conteo. "Total" sigue usando el acumulado `Profile.points`.
+
 ### Background / notificaciones (leer antes de tocar)
 
 - Samsung y otros fabricantes **matan** el proceso y el foreground-service. El

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/app_loading_state.dart';
 import '../services/courts_provider.dart';
 import '../services/play_session_service.dart';
@@ -18,6 +19,11 @@ import 'filters_screen.dart';
 import 'home_screen.dart';
 import 'list_screen.dart';
 import 'profile_screen.dart';
+
+/// ValueNotifier global para el badge de activity en el tab de crew.
+/// Se setea desde pickup_create_screen al crear un chat de equipo, y se limpia
+/// cuando el usuario abre la pestaña de crew.
+final ValueNotifier<bool> crewActivityNotifier = ValueNotifier<bool>(false);
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -39,6 +45,11 @@ class _MainShellState extends State<MainShell> {
   bool _loaderTimedOut = false;
   Timer? _loaderTimer;
 
+  // Badge de activity en el tab de crew (punto rojo).
+  // ValueNotifier estático para que pickup_create_screen pueda setearlo sin
+  // necesidad de Provider (solo escribe en SharedPreferences + dispara).
+  // Definido como variable global en main_shell.dart (crewActivityNotifier).
+
   @override
   void initState() {
     super.initState();
@@ -49,6 +60,24 @@ class _MainShellState extends State<MainShell> {
     _loaderTimer = Timer(const Duration(seconds: 6), () {
       if (mounted) setState(() => _loaderTimedOut = true);
     });
+    _loadCrewActivity();
+    crewActivityNotifier.addListener(_onCrewActivityChanged);
+  }
+
+  @override
+  void dispose() {
+    crewActivityNotifier.removeListener(_onCrewActivityChanged);
+    _loaderTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onCrewActivityChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadCrewActivity() async {
+    final prefs = await SharedPreferences.getInstance();
+    crewActivityNotifier.value = prefs.getBool('crew_activity') ?? false;
   }
 
   /// Convierte un nombre de string a AppTab, con fallback a home.
@@ -59,12 +88,6 @@ class _MainShellState extends State<MainShell> {
         'profile' => AppTab.profile,
         _ => AppTab.home,
       };
-
-  @override
-  void dispose() {
-    _loaderTimer?.cancel();
-    super.dispose();
-  }
 
 
   String? _detailCourtId;
@@ -110,6 +133,11 @@ class _MainShellState extends State<MainShell> {
       _previousTab = _tab;
       _tab = t;
     });
+    // Limpiar badge de activity al entrar a crew.
+    if (t == AppTab.chat && crewActivityNotifier.value) {
+      crewActivityNotifier.value = false;
+      SharedPreferences.getInstance().then((p) => p.setBool('crew_activity', false));
+    }
   }
 
   /// Botón "atrás" del sistema (Android): cierra overlays o vuelve a la pestaña
@@ -430,6 +458,7 @@ class _MainShellState extends State<MainShell> {
                   active: _tab,
                   previous: _previousTab,
                   onChange: _selectTab,
+                  crewHasActivity: crewActivityNotifier.value,
                 ),
               ),
             ),

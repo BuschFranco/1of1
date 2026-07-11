@@ -1,4 +1,6 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:provider/provider.dart';
 import '../services/session.dart';
 import '../theme/app_fx.dart';
@@ -28,8 +30,13 @@ class _AuthScreenState extends State<AuthScreen> {
 
   bool _loading = false;
   bool _obscurePass = true;
-  bool _keepLoggedIn = true; // "Mantener sesión abierta": marcado por defecto.
+  bool _keepLoggedIn = true;
   String? _error;
+
+  static final _google = GoogleSignIn(
+    clientId: '823840378752-4bpuv40b9iro06enve2alnblfrlqhpqn.apps.googleusercontent.com',
+    scopes: ['email', 'profile'],
+  );
 
   @override
   void dispose() {
@@ -111,6 +118,39 @@ class _AuthScreenState extends State<AuthScreen> {
       _error = err;
     });
     // En éxito, Session notifica y _Root cambia a MainShell. No hace falta navegar.
+  }
+
+  Future<void> _googleLogin() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final account = await _google.signIn();
+      if (account == null) {
+        if (mounted) setState(() { _loading = false; _error = 'Se canceló el login con Google.'; });
+        return;
+      }
+      final auth = await account.authentication;
+      if (auth.idToken == null) {
+        await _google.signOut();
+        if (mounted) setState(() { _loading = false; _error = 'No se pudo autenticar con Google.'; });
+        return;
+      }
+      // email y nombre vienen del GoogleSignInAccount.
+      final email = account.email;
+      final name = account.displayName ?? '';
+      final photo = account.photoUrl ?? '';
+
+      if (!mounted) return;
+      final session = context.read<Session>();
+      final err = await session.googleSignIn(
+        email: email,
+        name: name,
+        avatarUrl: photo,
+      );
+      if (!mounted) return;
+      setState(() { _loading = false; _error = err; });
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _error = 'Error con Google: $e'; });
+    }
   }
 
   @override
@@ -213,6 +253,10 @@ class _AuthScreenState extends State<AuthScreen> {
                       ],
                       const SizedBox(height: 28),
                       _submitBtn(),
+                      const SizedBox(height: 20),
+                      _orDivider(),
+                      const SizedBox(height: 20),
+                      _googleBtn(),
                       const SizedBox(height: 16),
                       Center(child: _switchModeLink()),
                     ],
@@ -408,6 +452,62 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  Widget _orDivider() {
+    return Row(
+      children: [
+        Expanded(child: Container(height: 1, color: AppColors.line)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Text(
+            'O',
+            style: AppText.grotesk(
+              size: 12,
+              color: AppColors.white(0.4),
+            ),
+          ),
+        ),
+        Expanded(child: Container(height: 1, color: AppColors.line)),
+      ],
+    );
+  }
+
+  Widget _googleBtn() {
+    return PressableWidget(
+      onTap: _loading ? null : _googleLogin,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: Border.all(color: AppColors.line, width: 1.5),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Ícono de Google (G multicolor simplificado).
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CustomPaint(
+                painter: _GoogleLogoPainter(),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Continuar con Google',
+              style: AppText.grotesk(
+                size: 14,
+                weight: FontWeight.w600,
+                color: AppColors.ink,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _switchModeLink() {
     return PressableWidget(
       onTap: () => _setMode(_isSignup ? AuthMode.login : AuthMode.signup),
@@ -525,4 +625,92 @@ class _GlowFieldState extends State<_GlowField> {
       ),
     );
   }
+}
+
+/// Pintor custom del logo "G" de Google (forma correcta).
+class _GoogleLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.width;
+    final center = Offset(s / 2, s / 2);
+    final r = s / 2;
+
+    // Fondo blanco circular.
+    final bgPaint = Paint()..color = Colors.white;
+    canvas.drawCircle(center, r, bgPaint);
+
+    // Grosor de los arcos.
+    final sw = s * 0.18;
+
+    // Arco rojo (top-right, de ~12h a ~3h → ángulo 0 a π/2).
+    final redPaint = Paint()
+      ..color = const Color(0xFFEA4335)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = sw
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: r * 0.58),
+      -math.pi / 2,
+      math.pi * 0.45,
+      false,
+      redPaint,
+    );
+
+    // Arco amarillo (top-left, de ~9h a ~12h → ángulo π a 3π/2).
+    final yellowPaint = Paint()
+      ..color = const Color(0xFFFBBC05)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = sw
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: r * 0.58),
+      math.pi,
+      math.pi * 0.45,
+      false,
+      yellowPaint,
+    );
+
+    // Arco verde (bottom-left, de ~6h a ~9h → ángulo π/2 a π).
+    final greenPaint = Paint()
+      ..color = const Color(0xFF34A853)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = sw
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: r * 0.58),
+      math.pi * 0.5,
+      math.pi * 0.45,
+      false,
+      greenPaint,
+    );
+
+    // Arco azul (bottom-right, de ~3h a ~6h → ángulo 0 a π/2).
+    final bluePaint = Paint()
+      ..color = const Color(0xFF4285F4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = sw
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: r * 0.58),
+      0,
+      math.pi * 0.5,
+      false,
+      bluePaint,
+    );
+
+    // Línea azul horizontal (del borde derecho al centro).
+    final blueLinePaint = Paint()
+      ..color = const Color(0xFF4285F4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = sw
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(center.dx + r * 0.58, center.dy),
+      Offset(center.dx, center.dy),
+      blueLinePaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -3,14 +3,14 @@ import '../data/courts.dart';
 import '../notion/notion_config.dart';
 import 'notion_service.dart';
 
-/// Fuente de canchas para la app. Intenta Notion; si no hay token o falla,
-/// degrada a la lista mock local `kCourts`.
+/// Fuente de canchas para la app. Carga desde Notion.
+/// Si no hay token o falla, la lista queda vacía.
 class CourtsProvider extends ChangeNotifier {
   CourtsProvider({NotionService? notion}) : _notion = notion ?? NotionService();
 
   final NotionService _notion;
 
-  List<Court> _courts = kCourts;
+  List<Court> _courts = [];
   bool _loading = false;
   bool _fromNotion = false;
 
@@ -20,7 +20,7 @@ class CourtsProvider extends ChangeNotifier {
 
   Future<void> load() async {
     if (!_notion.isConfigured) {
-      _courts = kCourts;
+      _courts = [];
       _fromNotion = false;
       notifyListeners();
       return;
@@ -32,13 +32,10 @@ class CourtsProvider extends ChangeNotifier {
         NotionConfig.dbCourts,
         filter: NotionService.filterSelect('Aprobacion', CourtApproval.approved),
       );
-      final loaded = rows.map(Court.fromNotion).toList();
-      if (loaded.isNotEmpty) {
-        _courts = loaded;
-        _fromNotion = true;
-      }
+      _courts = rows.map(Court.fromNotion).toList();
+      _fromNotion = true;
     } catch (_) {
-      // mantener fallback
+      _courts = [];
     } finally {
       _loading = false;
       notifyListeners();

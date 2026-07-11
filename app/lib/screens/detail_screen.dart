@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../data/courts.dart';
 import '../data/models.dart';
 import '../notion/notion_config.dart';
+import '../services/court_rating_service.dart';
 import '../services/favorites_provider.dart';
 import '../services/notion_service.dart';
 import '../services/play_session_service.dart';
@@ -12,10 +13,12 @@ import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
+import '../widgets/pop_button.dart';
 import '../widgets/pop_panel.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/section_title.dart';
 import '../widgets/status_dot.dart';
+import 'pickup_create_screen.dart';
 
 class DetailScreen extends StatelessWidget {
   final String courtId;
@@ -33,9 +36,34 @@ class DetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pool = courts.isNotEmpty ? courts : kCourts;
-    final court = pool.firstWhere((c) => c.id == courtId,
-        orElse: () => pool.first);
+    if (courts.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppColors.bg,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.sports_basketball_outlined,
+                  size: 48, color: AppColors.ink.withAlpha(100)),
+              const SizedBox(height: 16),
+              Text('Cancha no disponible',
+                  style: AppText.archivo(
+                      size: 18, weight: FontWeight.w700, color: AppColors.ink)),
+              const SizedBox(height: 8),
+              Text('No se pudo cargar la información',
+                  style: AppText.grotesk(size: 14, color: AppColors.ink.withAlpha(160))),
+              const SizedBox(height: 24),
+              PopButton(
+                label: 'Volver',
+                onPressed: () => onBack?.call(),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    final court = courts.firstWhere((c) => c.id == courtId,
+        orElse: () => courts.first);
 
     return GestureDetector(
       // Deslizar a la derecha cierra el detalle y vuelve a la pestaña previa
@@ -57,7 +85,32 @@ class DetailScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _ratingStrip(court),
+                    Builder(builder: (context) {
+                      final ratingService = context.read<CourtRatingService>();
+                      return FutureBuilder<CourtRating>(
+                        future: ratingService.ratingFor(court.id),
+                        builder: (context, snap) {
+                          final cr = snap.data;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _ratingStrip(court, courtRating: cr),
+                              if (cr == null || !cr.hasRating)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    'Necesita más reseñas para estimar el rating',
+                                    style: AppText.grotesk(
+                                      size: 12,
+                                      color: AppColors.ink.withAlpha(140),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      );
+                    }),
                     Builder(builder: (context) {
                       final secs = context
                           .watch<PlaySessionService>()
@@ -128,6 +181,10 @@ class DetailScreen extends StatelessWidget {
                     const SectionTitle(
                         title: 'Jugando ahora', right: 'Ver todos'),
                     _playersRow(court),
+                    if (context.read<Session>().isAdmin) ...[
+                      const SizedBox(height: 24),
+                      _adminDeleteCourt(context, court),
+                    ],
                   ],
                 ),
               ),
@@ -205,10 +262,47 @@ class DetailScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${court.area} · ${court.dist} · ${court.hours}',
+                  '${court.area} · ${court.dist} · ${court.hoursLabel}',
                   style: AppText.grotesk(
                     size: 13,
                     color: AppColors.white(0.6),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Crear un pickup con esta cancha ya seleccionada.
+                Builder(
+                  builder: (context) => PressableWidget(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => PickupCreateScreen(initialCourt: court),
+                      ),
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.accent,
+                        borderRadius: BorderRadius.circular(AppShape.rBtn),
+                        border: Border.all(color: AppColors.ink, width: 2),
+                        boxShadow: AppFx.hardShadow(offset: const Offset(2, 2)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.add, size: 16, color: AppColors.ink),
+                          const SizedBox(width: 6),
+                          Text(
+                            'CREAR PICKUP',
+                            style: AppText.archivo(
+                              size: 12,
+                              weight: FontWeight.w900,
+                              letterSpacing: 0.04,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -293,7 +387,11 @@ class DetailScreen extends StatelessWidget {
     });
   }
 
-  Widget _ratingStrip(Court court) {
+  Widget _ratingStrip(Court court, {CourtRating? courtRating}) {
+    final displayRating = courtRating?.hasRating == true
+        ? courtRating!.average!.toStringAsFixed(1)
+        : '—';
+    final reviewCount = courtRating?.count ?? court.reviews;
     return PopPanel(
       radius: AppShape.rCard,
       padding: const EdgeInsets.all(14),
@@ -301,8 +399,8 @@ class DetailScreen extends StatelessWidget {
         children: [
           _statCell(
             icon: Icons.star_rounded,
-            value: court.rating.toString(),
-            label: '${court.reviews} reseñas',
+            value: displayRating,
+            label: '$reviewCount reseñas',
           ),
           _strokeDivider(),
           _statCell(value: court.hoops.toString(), label: 'Aros disp.'),
@@ -488,6 +586,89 @@ class DetailScreen extends StatelessWidget {
     );
   }
 
+  Widget _adminDeleteCourt(BuildContext context, Court court) {
+    return PressableWidget(
+      onTap: () async {
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.card,
+            title: Text('Eliminar cancha',
+                style: AppText.archivo(size: 18, weight: FontWeight.w800)),
+            content: Text(
+              '¿Eliminar "${court.name}" y todas sus reseñas? Esta acción no se puede deshacer.',
+              style: AppText.grotesk(size: 14, color: AppColors.white(0.7)),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text('Cancelar',
+                    style: AppText.grotesk(
+                        size: 13, color: AppColors.white(0.5))),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text('Eliminar',
+                    style: AppText.grotesk(
+                        size: 13,
+                        color: const Color(0xFFEF4444),
+                        weight: FontWeight.w700)),
+              ),
+            ],
+          ),
+        );
+        if (confirm != true) return;
+        try {
+          await NotionService().deleteCourt(
+            court.id,
+            reviewsDbId: NotionConfig.dbReviews,
+          );
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Cancha eliminada',
+                  style: AppText.grotesk(size: 13)),
+              backgroundColor: AppColors.accent,
+            ),
+          );
+          onBack?.call();
+        } catch (_) {
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('No se pudo eliminar',
+                  style: AppText.grotesk(size: 13)),
+              backgroundColor: AppColors.bg,
+            ),
+          );
+        }
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEF4444).withAlpha(20),
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: Border.all(
+              color: const Color(0xFFEF4444).withAlpha(60), width: 1),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.delete_outline,
+                size: 18, color: Color(0xFFEF4444)),
+            const SizedBox(width: 8),
+            Text('ELIMINAR CANCHA',
+                style: AppText.archivo(
+                    size: 13,
+                    weight: FontWeight.w800,
+                    color: const Color(0xFFEF4444))),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _bottomCta(Court court) {
     return Row(
       // Anclados a la esquina inferior derecha: favoritos a la izquierda del
@@ -618,6 +799,7 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
   }
 
   Widget _reviewCard(Review r) {
+    final isAdmin = context.read<Session>().isAdmin;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
@@ -638,6 +820,12 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
                   color: AppColors.accent,
                 ),
               const Spacer(),
+              if (isAdmin)
+                GestureDetector(
+                  onTap: () => _deleteReview(r),
+                  child: Icon(Icons.close, size: 16, color: AppColors.white(0.4)),
+                ),
+              if (isAdmin) const SizedBox(width: 8),
               Text(
                 r.userHandle.isNotEmpty ? r.userHandle : r.userEmail.split('@').first,
                 style: AppText.grotesk(size: 11, color: AppColors.white(0.45)),
@@ -651,6 +839,46 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
         ],
       ),
     );
+  }
+
+  Future<void> _deleteReview(Review r) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: Text('Eliminar reseña',
+            style: AppText.archivo(size: 18, weight: FontWeight.w800)),
+        content: Text(
+          '¿Eliminar la reseña de ${r.userHandle.isNotEmpty ? r.userHandle : r.userEmail.split('@').first}?',
+          style: AppText.grotesk(size: 14, color: AppColors.white(0.7)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancelar',
+                style: AppText.grotesk(size: 13, color: AppColors.white(0.5))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Eliminar',
+                style: AppText.grotesk(size: 13, color: const Color(0xFFEF4444), weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    try {
+      await NotionService().archivePage(r.pageId);
+      if (mounted) {
+        _refresh();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reseña eliminada', style: AppText.grotesk(size: 13)),
+            backgroundColor: AppColors.accent,
+          ),
+        );
+      }
+    } catch (_) {}
   }
 
   Future<void> _openReviewDialog(BuildContext context) async {

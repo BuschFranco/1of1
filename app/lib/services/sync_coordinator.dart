@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'package:native_geofence/native_geofence.dart';
+import '../notion/notion_config.dart';
 import 'courts_provider.dart';
 import 'favorites_provider.dart';
 import 'geofence_service.dart';
 import 'notifications_service.dart';
+import 'notion_service.dart';
+import 'pickups_provider.dart';
 import 'play_session_service.dart';
 import 'session.dart';
 
@@ -24,10 +28,12 @@ class SyncCoordinator {
     required PlaySessionService play,
     required CourtsProvider courts,
     required FavoritesProvider favorites,
+    required PickupsProvider pickups,
   })  : _session = session,
         _play = play,
         _courts = courts,
-        _favorites = favorites {
+        _favorites = favorites,
+        _pickups = pickups {
     _wire();
   }
 
@@ -35,6 +41,7 @@ class SyncCoordinator {
   final PlaySessionService _play;
   final CourtsProvider _courts;
   final FavoritesProvider _favorites;
+  final PickupsProvider _pickups;
 
   // Evita arrancar el tracking más de una vez por sesión (Session notifica en
   // cada cambio de perfil, no solo al loguear).
@@ -105,7 +112,9 @@ class SyncCoordinator {
     _play.onBackgroundChanged = (_) => _syncGeofences();
 
     // Cada recompensa (logro/título/nivel) también dispara un push del sistema.
+    // chatCreated se salta: solo se muestra el banner in-app.
     _play.onReward = (r) {
+      if (r.kind == RewardKind.chatCreated) return;
       NotificationsService.instance.show(r.headline, r.name);
     };
 
@@ -140,6 +149,7 @@ class SyncCoordinator {
         playTimeByCourt: _play.totalsJson,
       );
       await _session.flush();
+      await _flushPendingMatches();
     };
 
     // El catálogo de canchas alimenta la detección de cercanía.
@@ -149,6 +159,34 @@ class SyncCoordinator {
     // Arranca/detiene el tracking según haya o no sesión activa.
     _session.addListener(_onSessionChanged);
     _onSessionChanged();
+  }
+
+  /// Sube en lote los partidos pendientes a la DB "Partidos" de Notion (para el
+  /// ranking por período). Best-effort: los que fallan (sin señal en la cancha)
+  /// quedan en el buffer y se reintentan en el próximo flush. No se sube nada si
+  /// no hay DB configurada o no hay token.
+  Future<void> _flushPendingMatches() async {
+    if (NotionConfig.dbMatches.isEmpty || !NotionConfig.isConfigured) return;
+    final pending = await _play.readPendingMatches();
+    if (pending.isEmpty) return;
+    final notion = NotionService();
+    final failed = <Map<String, dynamic>>[];
+    for (final m in pending) {
+      try {
+        await notion.createPage(NotionConfig.dbMatches, {
+          'Email': NotionService.title((m['email'] ?? '') as String),
+          'Points': NotionService.number(m['points'] as num?),
+          'EndedAt': NotionService.date(m['endedAt'] as String?),
+          'CourtId': NotionService.richText((m['courtId'] ?? '') as String),
+          'CourtName': NotionService.richText((m['courtName'] ?? '') as String),
+          'Result': NotionService.select(m['result'] as String?),
+          'Seconds': NotionService.number(m['seconds'] as num?),
+        });
+      } catch (_) {
+        failed.add(m); // reintento en el próximo flush
+      }
+    }
+    await _play.writePendingMatches(failed);
   }
 
   /// Nombre de una cancha por id (para el texto de la notificación). null si no
@@ -192,6 +230,7 @@ class SyncCoordinator {
       if (_trackingStarted) {
         _play.resetForLogout();
         _favorites.clearForLogout();
+        _pickups.clearForLogout();
         _trackingStarted = false;
         _geofencedCount = -1;
         GeofenceService.instance.clear();
@@ -203,6 +242,9 @@ class SyncCoordinator {
     // Clave por usuario: aísla los datos locales de cada cuenta en el dispositivo.
     final userKey = (_session.email ?? p.userEmail).trim().toLowerCase();
     _favorites.setUser(userKey);
+    // Cargar los pickups/invitaciones del usuario (para el badge de la campana y
+    // las notificaciones del perfil, sin depender de abrir la pestaña Crew).
+    unawaited(_pickups.loadForUser(userKey));
     // Sembrar desde Notion para no perder progreso tras reinstalar.
     _play.startTracking(
       userKey: userKey,

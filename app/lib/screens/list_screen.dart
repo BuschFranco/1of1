@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../data/courts.dart';
+import '../services/court_rating_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
 import '../theme/app_fx.dart';
@@ -298,7 +299,19 @@ class _CourtListItem extends StatelessWidget {
                           ],
                         ),
                       ),
-                      RatingBadge(value: court.rating, size: 13),
+                      Builder(builder: (context) {
+                        final rs = context.read<CourtRatingService>();
+                        return FutureBuilder<CourtRating>(
+                          future: rs.ratingFor(court.id),
+                          builder: (context, snap) {
+                            final cr = snap.data;
+                            return RatingBadge(
+                              value: cr?.average,
+                              size: 13,
+                            );
+                          },
+                        );
+                      }),
                     ],
                   ),
                   const SizedBox(height: 12),

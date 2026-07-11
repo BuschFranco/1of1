@@ -42,6 +42,39 @@ class NotionService {
     return (data['results'] as List).cast<Map<String, dynamic>>();
   }
 
+  /// Igual que [queryDatabase] pero sigue la paginación (`next_cursor`) hasta
+  /// traer TODAS las páginas. Necesario para el historial de partidos, que puede
+  /// superar las 100 filas por rango (varios amigos × 6 meses). `maxPages` es un
+  /// tope de seguridad para no loopear sin fin ante un rango enorme.
+  Future<List<Map<String, dynamic>>> queryDatabaseAll(
+    String databaseId, {
+    Map<String, dynamic>? filter,
+    List<Map<String, dynamic>>? sorts,
+    int maxPages = 20,
+  }) async {
+    final out = <Map<String, dynamic>>[];
+    String? cursor;
+    for (var page = 0; page < maxPages; page++) {
+      final body = <String, dynamic>{'page_size': 100};
+      if (filter != null) body['filter'] = filter;
+      if (sorts != null) body['sorts'] = sorts;
+      if (cursor != null) body['start_cursor'] = cursor;
+
+      final res = await http.post(
+        Uri.parse('$_base/databases/$databaseId/query'),
+        headers: _headers,
+        body: jsonEncode(body),
+      );
+      _ensureOk(res, 'queryDatabaseAll');
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      out.addAll((data['results'] as List).cast<Map<String, dynamic>>());
+      if (data['has_more'] != true) break;
+      cursor = data['next_cursor'] as String?;
+      if (cursor == null) break;
+    }
+    return out;
+  }
+
   /// Crea una página dentro de una database. Devuelve la página creada.
   Future<Map<String, dynamic>> createPage(
     String databaseId,
@@ -243,6 +276,48 @@ class NotionService {
         'property': property,
         'select': {'equals': value}
       };
+
+  /// Filtro "contiene" para una propiedad rich_text (ej. buscar un email dentro
+  /// de una lista CSV como TeamAMembers).
+  static Map<String, dynamic> filterTextContains(String property, String value) => {
+        'property': property,
+        'rich_text': {'contains': value}
+      };
+
+  /// Filtro por fecha: registros con `property` en o después de [isoStart].
+  static Map<String, dynamic> filterDateOnOrAfter(
+          String property, String isoStart) =>
+      {
+        'property': property,
+        'date': {'on_or_after': isoStart}
+      };
+
+  /// Combinador OR (cualquiera de los sub-filtros).
+  static Map<String, dynamic> filterOr(List<Map<String, dynamic>> filters) =>
+      {'or': filters};
+
+  /// Combinador AND (todos los sub-filtros).
+  static Map<String, dynamic> filterAnd(List<Map<String, dynamic>> filters) =>
+      {'and': filters};
+
+  /// Elimina una cancha y todas sus reseñas relacionadas de Notion.
+  Future<void> deleteCourt(String courtId, {String? reviewsDbId}) async {
+    // 1. Archivar reseñas de esta cancha.
+    if (reviewsDbId != null && reviewsDbId.isNotEmpty) {
+      try {
+        final reviews = await queryDatabase(
+          reviewsDbId,
+          filter: filterText('CourtId', courtId),
+        );
+        for (final r in reviews) {
+          final rid = r['id']?.toString();
+          if (rid != null) await archivePage(rid);
+        }
+      } catch (_) {}
+    }
+    // 2. Archivar la cancha.
+    await archivePage(courtId);
+  }
 }
 
 class NotionException implements Exception {

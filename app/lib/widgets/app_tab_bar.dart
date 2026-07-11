@@ -11,12 +11,14 @@ class AppTabBar extends StatefulWidget {
   final AppTab active;
   final AppTab previous;
   final ValueChanged<AppTab> onChange;
+  final bool crewHasActivity;
 
   const AppTabBar({
     super.key,
     required this.active,
     required this.previous,
     required this.onChange,
+    this.crewHasActivity = false,
   });
 
   @override
@@ -211,20 +213,42 @@ class _AppTabBarState extends State<AppTabBar>
                               SizedBox(
                                 width: _item,
                                 height: _item,
-                                child: Icon(
-                                  _iconFor(
-                                      _slots[i],
-                                      _slots[i] == AppTab.plus ||
-                                          (indX - _slotCenter(innerW, i))
-                                                  .abs() <
-                                              _item / 2),
-                                  size: _slots[i] == AppTab.plus ? 24 : 21,
-                                  color: _slots[i] == AppTab.plus ||
-                                          (indX - _slotCenter(innerW, i))
-                                                  .abs() <
-                                              _item / 2
-                                      ? Colors.white
-                                      : AppColors.white(0.6),
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Center(
+                                      child: Icon(
+                                        _iconFor(
+                                            _slots[i],
+                                            _slots[i] == AppTab.plus ||
+                                                (indX - _slotCenter(innerW, i))
+                                                        .abs() <
+                                                    _item / 2),
+                                        size: _slots[i] == AppTab.plus ? 24 : 21,
+                                        color: _slots[i] == AppTab.plus ||
+                                                (indX - _slotCenter(innerW, i))
+                                                        .abs() <
+                                                    _item / 2
+                                            ? Colors.white
+                                            : AppColors.white(0.6),
+                                      ),
+                                    ),
+                                    if (_slots[i] == AppTab.chat && widget.crewHasActivity)
+                                      Positioned(
+                                        top: 6,
+                                        right: 6,
+                                        child: Container(
+                                          width: 8,
+                                          height: 8,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFEF4444),
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                                color: AppColors.bg, width: 1.5),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
                           ],

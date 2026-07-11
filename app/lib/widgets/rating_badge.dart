@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
 class RatingBadge extends StatelessWidget {
-  final double value;
+  final double? value;
   final double size;
   final Color? color;
 
@@ -19,11 +19,10 @@ class RatingBadge extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Estrella plana (neobrutalismo): sin glow.
         Icon(Icons.star_rounded, size: size + 2, color: c),
         const SizedBox(width: 3),
         Text(
-          value.toString(),
+          value != null ? value!.toStringAsFixed(1) : '—',
           style: AppText.grotesk(
             size: size + 1,
             weight: FontWeight.w700,

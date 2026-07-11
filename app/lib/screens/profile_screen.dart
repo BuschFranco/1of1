@@ -1,21 +1,25 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../data/achievements.dart';
 import '../data/cosmetics.dart';
 import '../data/courts.dart';
 import '../data/models.dart';
+import '../notion/notion_config.dart';
+import '../services/court_rating_service.dart';
 import '../services/courts_provider.dart';
 import '../services/favorites_provider.dart';
 import '../services/friends_service.dart';
+import '../services/notion_service.dart';
+import '../services/pickups_provider.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import 'notifications_screen.dart';
+import 'match_detail_screen.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
 import '../widgets/permissions_modal.dart';
@@ -181,9 +185,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// Botón de campana con badge de notificaciones sin leer. Abre el listado.
+  /// Botón de campana con badge de notificaciones sin leer + invitaciones
+  /// pendientes a pickup. Abre el listado.
   Widget _notifButton(BuildContext context) {
-    final unread = context.watch<PlaySessionService>().unreadCount;
+    final myEmail = (context.read<Session>().email ?? '').trim().toLowerCase();
+    final invites =
+        context.watch<PickupsProvider>().pendingInvitesFor(myEmail).length;
+    final unread = context.watch<PlaySessionService>().unreadCount + invites;
     return PressableWidget(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const NotificationsScreen()),
@@ -1389,268 +1397,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   /// fecha, hora, duración y puntos. Usa solo datos ya disponibles (el
   /// [PlaySession] guardado + el catálogo de canchas en memoria), sin queries.
   Future<void> _showMatchDetail(PlaySession s) async {
-    final courts = context.read<CourtsProvider>().courts;
-    Court? court;
-    for (final c in courts) {
-      if (c.id == s.courtId) {
-        court = c;
-        break;
-      }
-    }
-    final (color, label) = _resultStyle(s.result);
-    final ended = DateTime.fromMillisecondsSinceEpoch(s.endedAtMillis);
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) => Container(
-        decoration: BoxDecoration(
-          color: AppColors.bgElev,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(AppShape.rCard)),
-          border: Border.all(color: AppColors.line, width: 1),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MatchDetailScreen(
+          session: s,
+          onSelectCourt: widget.onSelectCourt,
         ),
-        // Sumamos el inset de la barra de navegación del sistema para que el
-        // botón inferior no quede tapado por ella.
-        padding: EdgeInsets.fromLTRB(
-            20, 12, 20, 28 + MediaQuery.of(ctx).viewPadding.bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 18),
-                decoration: BoxDecoration(
-                  color: AppColors.white(0.2),
-                  borderRadius: BorderRadius.circular(100),
-                ),
-              ),
-            ),
-            Row(
-              children: [
-                CourtImage(
-                  url: court?.img ?? '',
-                  width: 64,
-                  height: 64,
-                  borderRadius: BorderRadius.circular(AppShape.rBtn),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        court?.name ??
-                            (s.courtName.isEmpty ? 'Cancha' : s.courtName),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style:
-                            AppText.archivo(size: 18, weight: FontWeight.w900),
-                      ),
-                      if (court != null && (court.area.isNotEmpty ||
-                          court.type.isNotEmpty)) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          court.area.isEmpty
-                              ? court.type
-                              : '${court.area} · ${court.type}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppText.grotesk(
-                              size: 12, color: AppColors.white(0.5)),
-                        ),
-                      ],
-                      if (court != null) ...[
-                        const SizedBox(height: 6),
-                        RatingBadge(value: court.rating, size: 11),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Container(
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: color.withAlpha(38),
-                borderRadius: BorderRadius.circular(AppShape.rChip),
-                border: Border.all(color: color, width: 1.5),
-              ),
-              child: Text(label,
-                  style: AppText.grotesk(
-                      size: 12, weight: FontWeight.w800, color: color)),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: _detailStat(
-                      Icons.schedule, 'Duración', PlaySessionService.fmt(s.seconds)),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _detailStat(Icons.stars_rounded, 'Puntos',
-                      s.points > 0 ? '+${s.points}' : '—'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _detailStat(Icons.calendar_today,
-                      'Fecha', _fmtDate(s.endedAtMillis)),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _detailStat(Icons.access_time_filled, 'Hora',
-                      '${ended.hour.toString().padLeft(2, '0')}:${ended.minute.toString().padLeft(2, '0')}'),
-                ),
-              ],
-            ),
-            if (s.hasHealth) ...[
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Icon(Icons.monitor_heart_outlined,
-                      size: 14, color: AppColors.accent),
-                  const SizedBox(width: 6),
-                  Text('TU ESTADO',
-                      style: AppText.grotesk(
-                          size: 11,
-                          color: AppColors.white(0.5),
-                          letterSpacing: 0.1)),
-                  if (s.calorieRecord) ...[
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: kGold.withAlpha(38),
-                        borderRadius: BorderRadius.circular(AppShape.rChip),
-                        border: Border.all(color: kGold),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.bolt, size: 12, color: kGold),
-                          const SizedBox(width: 3),
-                          Text('RÉCORD DE CALORÍAS',
-                              style: AppText.grotesk(
-                                  size: 9,
-                                  weight: FontWeight.w800,
-                                  color: kGold)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 10),
-              ..._healthStatRows(s),
-            ],
-            if (court != null) ...[
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    widget.onSelectCourt?.call(court!.id);
-                  },
-                  style: TextButton.styleFrom(
-                    backgroundColor: AppColors.accent.withAlpha(30),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppShape.rBtn),
-                      side: const BorderSide(
-                          color: AppColors.accent, width: 1),
-                    ),
-                  ),
-                  child: Text('Ver cancha',
-                      style: AppText.grotesk(
-                          size: 13,
-                          weight: FontWeight.w700,
-                          color: AppColors.accent)),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Celdas de salud (calorías, pulso, pasos) dispuestas en filas de a dos.
-  /// Solo se arma con los datos que existan (sin wearable no aparece nada).
-  List<Widget> _healthStatRows(PlaySession s) {
-    final cells = <Widget>[];
-    if (s.calories > 0) {
-      cells.add(_detailStat(Icons.local_fire_department, 'Calorías',
-          '${s.calories.round()} kcal'));
-    }
-    if (s.avgHr != null) {
-      final v = s.maxHr != null ? '${s.avgHr} · ${s.maxHr} máx' : '${s.avgHr}';
-      cells.add(_detailStat(Icons.monitor_heart_outlined, 'Pulso (bpm)', v));
-    }
-    if (s.steps > 0) {
-      cells.add(_detailStat(Icons.directions_walk, 'Pasos', '${s.steps}'));
-    }
-    if (s.distance > 0) {
-      final d = s.distance >= 1000
-          ? '${(s.distance / 1000).toStringAsFixed(2)} km'
-          : '${s.distance.round()} m';
-      cells.add(_detailStat(Icons.straighten, 'Distancia', d));
-    }
-    final rows = <Widget>[];
-    for (var i = 0; i < cells.length; i += 2) {
-      final right = i + 1 < cells.length ? cells[i + 1] : null;
-      rows.add(Padding(
-        padding: EdgeInsets.only(top: i == 0 ? 0 : 10),
-        child: Row(
-          children: [
-            Expanded(child: cells[i]),
-            const SizedBox(width: 10),
-            Expanded(child: right ?? const SizedBox.shrink()),
-          ],
-        ),
-      ));
-    }
-    return rows;
-  }
-
-  /// Celda de dato (ícono + etiqueta + valor) para el modal de detalle.
-  Widget _detailStat(IconData icon, String label, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.bgElev,
-        borderRadius: BorderRadius.circular(AppShape.rBtn),
-        border: Border.all(color: AppColors.white(0.25), width: 1.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 13, color: AppColors.white(0.45)),
-              const SizedBox(width: 6),
-              Text(label,
-                  style:
-                      AppText.grotesk(size: 11, color: AppColors.white(0.5))),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(value,
-              style: AppText.archivo(size: 16, weight: FontWeight.w800)),
-        ],
       ),
     );
   }
@@ -1730,7 +1483,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            RatingBadge(value: c.rating, size: 11),
+            Builder(builder: (context) {
+              final rs = context.read<CourtRatingService>();
+              return FutureBuilder<CourtRating>(
+                future: rs.ratingFor(c.id),
+                builder: (context, snap) {
+                  final cr = snap.data;
+                  return RatingBadge(value: cr?.average, size: 11);
+                },
+              );
+            }),
             const SizedBox(width: 10),
             PressableWidget(
               onTap: () => context.read<FavoritesProvider>().toggle(c.id),
@@ -1882,34 +1644,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       } catch (_) {}
     }
 
-    // Construir la lista de ranking: usuario + amigos.
-    final entries = <({
-      String name,
-      String handle,
-      int points,
-      bool isMe,
-    })>[
-      (
-        name: session.profile?.name.isNotEmpty == true
-            ? session.profile!.name
-            : 'Invitado',
-        handle: session.profile?.handle ?? '',
-        points: ps.points,
-        isMe: true,
-      ),
+    // Datos de amigos (nombre/handle/email + total de perfil para el modo Total).
+    final friendData = <_RankFriend>[
+      for (final f in friends)
+        _RankFriend(
+          name: f.friendName.isNotEmpty ? f.friendName : f.friendHandle,
+          handle: f.friendHandle,
+          email: f.friendEmail.trim().toLowerCase(),
+          totalPoints: profiles.byEmail(f.friendEmail)?.points ?? 0,
+        ),
     ];
-
-    for (final f in friends) {
-      final fp = profiles.byEmail(f.friendEmail);
-      entries.add((
-        name: f.friendName.isNotEmpty ? f.friendName : f.friendHandle,
-        handle: f.friendHandle,
-        points: fp?.points ?? 0,
-        isMe: false,
-      ));
-    }
-
-    entries.sort((a, b) => b.points.compareTo(a.points));
 
     if (!context.mounted) return;
 
@@ -1917,125 +1661,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (ctx) => Container(
-        height: MediaQuery.of(ctx).size.height * 0.7,
-        decoration: const BoxDecoration(
-          color: AppColors.bgElev,
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(AppShape.rCard)),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Handle.
-              Container(
-                margin: const EdgeInsets.only(top: 10),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.white(0.2),
-                  borderRadius: BorderRadius.circular(100),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text('Ranking',
-                  style: AppText.archivo(size: 20, weight: FontWeight.w900)),
-              const SizedBox(height: 6),
-              Text('Puntos totales',
-                  style: AppText.grotesk(size: 12, color: AppColors.white(0.4))),
-              const SizedBox(height: 14),
-              // Lista de ranking.
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  itemCount: entries.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) {
-                    final e = entries[i];
-                    final medal = i == 0
-                        ? '\u{1F947}'
-                        : i == 1
-                            ? '\u{1F948}'
-                            : i == 2
-                                ? '\u{1F949}'
-                                : '';
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: e.isMe
-                            ? AppColors.accent.withAlpha(20)
-                            : AppColors.card,
-                        borderRadius: BorderRadius.circular(AppShape.rCard),
-                        border: Border.all(
-                          color: e.isMe
-                              ? AppColors.accent.withAlpha(80)
-                              : AppColors.line,
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 28,
-                            child: Text(
-                              medal.isNotEmpty ? medal : '${i + 1}',
-                              style: AppText.grotesk(
-                                size: 13,
-                                weight: FontWeight.w800,
-                                color: AppColors.white(0.5),
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  e.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppText.grotesk(
-                                    size: 13,
-                                    weight: FontWeight.w700,
-                                    color: e.isMe
-                                        ? AppColors.accent
-                                        : AppColors.ink,
-                                  ),
-                                ),
-                                if (e.handle.isNotEmpty)
-                                  Text(
-                                    e.handle,
-                                    style: AppText.grotesk(
-                                      size: 10,
-                                      color: AppColors.white(0.4),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          Text('${e.points}',
-                              style: AppText.archivo(
-                                  size: 15,
-                                  weight: FontWeight.w800,
-                                  color: e.isMe
-                                      ? AppColors.accent
-                                      : AppColors.ink)),
-                          const SizedBox(width: 4),
-                          Text('pts',
-                              style: AppText.grotesk(
-                                  size: 10, color: AppColors.white(0.35))),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
+      builder: (ctx) => _RankingSheet(
+        myName: session.profile?.name.isNotEmpty == true
+            ? session.profile!.name
+            : 'Invitado',
+        myHandle: session.profile?.handle ?? '',
+        myTotalPoints: ps.points,
+        play: ps,
+        friends: friendData,
       ),
     );
   }
@@ -2322,6 +1955,324 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (ok == true && context.mounted) {
       await context.read<Session>().logout();
     }
+  }
+}
+
+/// Un amigo para el ranking: identidad + su total acumulado (para el modo Total).
+class _RankFriend {
+  final String name;
+  final String handle;
+  final String email; // normalizado (minúsculas), clave en la DB de partidos
+  final int totalPoints;
+  const _RankFriend({
+    required this.name,
+    required this.handle,
+    required this.email,
+    required this.totalPoints,
+  });
+}
+
+/// Períodos del ranking. `total` usa el acumulado del perfil; el resto suma los
+/// puntos de los partidos con fecha en el rango.
+enum _RankPeriod { week, month, season, total }
+
+/// Fila ya resuelta del ranking (identidad + puntos del período elegido).
+class _RankEntry {
+  final String name;
+  final String handle;
+  final int points;
+  final bool isMe;
+  const _RankEntry(this.name, this.handle, this.points, this.isMe);
+}
+
+/// Hoja del ranking con selector de período (semana/mes/temporada/total).
+///
+/// - Mis puntos del período salen de los getters locales del [PlaySessionService]
+///   (frescos, incluyen partidos aún no subidos → evita doble conteo con Notion).
+/// - Los de amigos se consultan a la DB "Partidos" de Notion filtrando por fecha
+///   y por la lista de emails.
+/// - Si Notion no está configurado, solo se ofrece "Total".
+class _RankingSheet extends StatefulWidget {
+  final String myName;
+  final String myHandle;
+  final int myTotalPoints;
+  final PlaySessionService play;
+  final List<_RankFriend> friends;
+
+  const _RankingSheet({
+    required this.myName,
+    required this.myHandle,
+    required this.myTotalPoints,
+    required this.play,
+    required this.friends,
+  });
+
+  @override
+  State<_RankingSheet> createState() => _RankingSheetState();
+}
+
+class _RankingSheetState extends State<_RankingSheet> {
+  _RankPeriod _period = _RankPeriod.total;
+  bool _loading = false;
+  List<_RankEntry> _entries = const [];
+
+  // El ranking por período necesita el historial con fecha en Notion.
+  bool get _periodsAvailable =>
+      NotionConfig.isConfigured && NotionConfig.dbMatches.isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    _rebuild();
+  }
+
+  /// Inicio del rango para el período elegido (espejo de los getters locales del
+  /// servicio: semana = lunes 00:00, mes = día 1 00:00, temporada = −180 días).
+  DateTime _cutoff(_RankPeriod p) {
+    final now = DateTime.now();
+    switch (p) {
+      case _RankPeriod.week:
+        final monday = now.subtract(Duration(days: now.weekday - 1));
+        return DateTime(monday.year, monday.month, monday.day);
+      case _RankPeriod.month:
+        return DateTime(now.year, now.month, 1);
+      case _RankPeriod.season:
+        // Temporada = semestre de calendario (1 ene–30 jun / 1 jul–31 dic).
+        return PlaySessionService.seasonStart(now);
+      case _RankPeriod.total:
+        return DateTime.fromMillisecondsSinceEpoch(0);
+    }
+  }
+
+  int _myPeriodPoints(_RankPeriod p) => switch (p) {
+        _RankPeriod.week => widget.play.pointsThisWeek,
+        _RankPeriod.month => widget.play.pointsThisMonth,
+        _RankPeriod.season => widget.play.pointsSeason,
+        _RankPeriod.total => widget.myTotalPoints,
+      };
+
+  Future<void> _rebuild() async {
+    final p = _period;
+
+    // Modo Total: todo sale de los acumulados, sin red.
+    if (p == _RankPeriod.total) {
+      final list = <_RankEntry>[
+        _RankEntry(widget.myName, widget.myHandle, widget.myTotalPoints, true),
+        for (final f in widget.friends)
+          _RankEntry(f.name, f.handle, f.totalPoints, false),
+      ];
+      list.sort((a, b) => b.points.compareTo(a.points));
+      setState(() {
+        _entries = list;
+        _loading = false;
+      });
+      return;
+    }
+
+    // Modo período: mis puntos de local, los de amigos de Notion.
+    setState(() => _loading = true);
+    final byEmail = <String, int>{};
+    final emails = widget.friends
+        .map((f) => f.email)
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (emails.isNotEmpty) {
+      try {
+        final cutoffIso = _cutoff(p).toIso8601String();
+        final rows = await NotionService().queryDatabaseAll(
+          NotionConfig.dbMatches,
+          filter: NotionService.filterAnd([
+            NotionService.filterDateOnOrAfter('EndedAt', cutoffIso),
+            NotionService.filterOr(
+              [for (final e in emails) NotionService.filterTitle('Email', e)],
+            ),
+          ]),
+        );
+        for (final row in rows) {
+          final props = row['properties'] as Map<String, dynamic>?;
+          if (props == null) continue;
+          final email = NotionService.readTitle(props, 'Email').toLowerCase();
+          final pts = NotionService.readNumber(props, 'Points').round();
+          byEmail[email] = (byEmail[email] ?? 0) + pts;
+        }
+      } catch (_) {
+        // Sin conexión / error: los amigos quedan en 0 para el período.
+      }
+    }
+
+    if (!mounted) return;
+    final list = <_RankEntry>[
+      _RankEntry(widget.myName, widget.myHandle, _myPeriodPoints(p), true),
+      for (final f in widget.friends)
+        _RankEntry(f.name, f.handle, byEmail[f.email] ?? 0, false),
+    ];
+    list.sort((a, b) => b.points.compareTo(a.points));
+    setState(() {
+      _entries = list;
+      _loading = false;
+    });
+  }
+
+  void _select(_RankPeriod p) {
+    if (p == _period) return;
+    setState(() => _period = p);
+    _rebuild();
+  }
+
+  String _subtitle(_RankPeriod p) => switch (p) {
+        _RankPeriod.week => 'Puntos de esta semana',
+        _RankPeriod.month => 'Puntos de este mes',
+        _RankPeriod.season => 'Puntos de la temporada (semestre)',
+        _RankPeriod.total => 'Puntos totales',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.7,
+      decoration: const BoxDecoration(
+        color: AppColors.bgElev,
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppShape.rCard)),
+      ),
+      child: SafeArea(
+        child: Column(
+          children: [
+            // Handle.
+            Container(
+              margin: const EdgeInsets.only(top: 10),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.white(0.2),
+                borderRadius: BorderRadius.circular(100),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('Ranking',
+                style: AppText.archivo(size: 20, weight: FontWeight.w900)),
+            const SizedBox(height: 6),
+            Text(_subtitle(_period),
+                style: AppText.grotesk(size: 12, color: AppColors.white(0.4))),
+            const SizedBox(height: 14),
+            // Selector de período (solo si hay historial en Notion).
+            if (_periodsAvailable)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _periodChip('Semana', _RankPeriod.week),
+                    const SizedBox(width: 8),
+                    _periodChip('Mes', _RankPeriod.month),
+                    const SizedBox(width: 8),
+                    _periodChip('Temporada', _RankPeriod.season),
+                    const SizedBox(width: 8),
+                    _periodChip('Total', _RankPeriod.total),
+                  ],
+                ),
+              ),
+            if (_periodsAvailable) const SizedBox(height: 14),
+            // Lista de ranking.
+            Expanded(
+              child: _loading
+                  ? Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.accent),
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                      itemCount: _entries.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (_, i) => _rankRow(i, _entries[i]),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _periodChip(String label, _RankPeriod p) => AppChip(
+        label: label,
+        active: _period == p,
+        onTap: () => _select(p),
+      );
+
+  Widget _rankRow(int i, _RankEntry e) {
+    final medal = i == 0
+        ? '\u{1F947}'
+        : i == 1
+            ? '\u{1F948}'
+            : i == 2
+                ? '\u{1F949}'
+                : '';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: e.isMe ? AppColors.accent.withAlpha(20) : AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        border: Border.all(
+          color: e.isMe ? AppColors.accent.withAlpha(80) : AppColors.line,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 28,
+            child: Text(
+              medal.isNotEmpty ? medal : '${i + 1}',
+              style: AppText.grotesk(
+                size: 13,
+                weight: FontWeight.w800,
+                color: AppColors.white(0.5),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  e.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.grotesk(
+                    size: 13,
+                    weight: FontWeight.w700,
+                    color: e.isMe ? AppColors.accent : AppColors.ink,
+                  ),
+                ),
+                if (e.handle.isNotEmpty)
+                  Text(
+                    e.handle,
+                    style: AppText.grotesk(
+                      size: 10,
+                      color: AppColors.white(0.4),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Text('${e.points}',
+              style: AppText.archivo(
+                  size: 15,
+                  weight: FontWeight.w800,
+                  color: e.isMe ? AppColors.accent : AppColors.ink)),
+          const SizedBox(width: 4),
+          Text('pts',
+              style:
+                  AppText.grotesk(size: 10, color: AppColors.white(0.35))),
+        ],
+      ),
+    );
   }
 }
 
@@ -2878,64 +2829,6 @@ class _EditHandleDialogState extends State<_EditHandleDialog> {
 
 /// Construye el TextStyle del clan para una familia de Google Fonts. Si el
 /// nombre no existe, cae a Archivo.
-TextStyle clanFontStyle(
-  String family, {
-  required double size,
-  Color color = Colors.white,
-  FontWeight weight = FontWeight.w900,
-}) {
-  final fam = family.trim().isEmpty ? 'Archivo' : family.trim();
-  try {
-    return GoogleFonts.getFont(fam, fontSize: size, fontWeight: weight, color: color);
-  } catch (_) {
-    return GoogleFonts.archivo(fontSize: size, fontWeight: weight, color: color);
-  }
-}
-
-/// Convierte un hex de 6 dígitos (sin '#') en Color. Vacío o inválido =>
-/// color de acento por defecto (usado para el fondo del avatar).
-Color clanColor(String hex) {
-  final h = hex.replaceAll('#', '').trim();
-  if (h.isEmpty) return AppColors.accent;
-  final v = int.tryParse(h, radix: 16);
-  if (v == null) return AppColors.accent;
-  return Color(0xFF000000 | v);
-}
-
-/// Igual que [clanColor] pero el default (vacío/inválido) es blanco; se usa
-/// para el color de las letras del clan.
-Color clanTextColor(String hex) {
-  final h = hex.replaceAll('#', '').trim();
-  if (h.isEmpty) return Colors.white;
-  final v = int.tryParse(h, radix: 16);
-  if (v == null) return Colors.white;
-  return Color(0xFF000000 | v);
-}
-
-/// Envuelve el avatar [child] con el marco equipado: un anillo con degradado y
-/// un resplandor exterior. Si el marco es 'none' devuelve el avatar tal cual.
-Widget framedAvatar(AvatarFrame frame, double radius, Widget child) {
-  if (frame.isNone) return child;
-  return Padding(
-    padding: const EdgeInsets.all(4),
-    child: Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(radius + 5),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: frame.ring,
-        ),
-        boxShadow: [
-          BoxShadow(color: frame.glow.withAlpha(140), blurRadius: 16, spreadRadius: 0),
-        ],
-      ),
-      child: child,
-    ),
-  );
-}
-
 /// Fuerza el texto a mayúsculas mientras se escribe (insignia de clan).
 class _UpperCaseFormatter extends TextInputFormatter {
   @override

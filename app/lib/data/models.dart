@@ -10,12 +10,14 @@ class AppUser {
   final String email;
   final String passwordHash;
   final String profileId;
+  final bool isAdmin;
 
   const AppUser({
     required this.pageId,
     required this.email,
     required this.passwordHash,
     required this.profileId,
+    this.isAdmin = false,
   });
 
   factory AppUser.fromNotion(Map<String, dynamic> page) {
@@ -25,6 +27,7 @@ class AppUser {
       email: NotionService.readTitle(p, 'Email'),
       passwordHash: NotionService.readText(p, 'PasswordHash'),
       profileId: NotionService.readText(p, 'ProfileId'),
+      isAdmin: NotionService.readCheckbox(p, 'Adm'),
     );
   }
 }
@@ -90,6 +93,7 @@ abstract class Profile with _$Profile {
     @Default('') String lastPlayedCourtId,
     @Default('') String lastPlayedAt, // ISO8601, '' si nunca jugó
     @Default(false) bool showLastPlayed, // privacidad: mostrarlo a los amigos
+    @Default(false) bool isAdmin,
   }) = _Profile;
 
   /// Para cachear la sesión en SharedPreferences (restauración offline).
@@ -142,6 +146,7 @@ abstract class Profile with _$Profile {
       lastPlayedCourtId: NotionService.readText(p, 'LastPlayedCourtId'),
       lastPlayedAt: NotionService.readDate(p, 'LastPlayedAt') ?? '',
       showLastPlayed: NotionService.readCheckbox(p, 'ShowLastPlayed'),
+      isAdmin: NotionService.readCheckbox(p, 'Adm'),
     );
   }
 
@@ -183,6 +188,7 @@ abstract class Profile with _$Profile {
       'LastPlayedAt':
           NotionService.date(lastPlayedAt.isEmpty ? null : lastPlayedAt),
       'ShowLastPlayed': NotionService.checkbox(showLastPlayed),
+      'Adm': NotionService.checkbox(isAdmin),
     };
   }
 }
@@ -292,6 +298,12 @@ class Pickup {
   final List<String> teamBMembers;
   final int targetScore;
 
+  /// Emails que ACEPTARON la invitación (subconjunto de los miembros asignados).
+  final List<String> acceptedMembers;
+
+  /// Emails que RECHAZARON la invitación.
+  final List<String> declinedMembers;
+
   const Pickup({
     this.pageId = '',
     required this.title,
@@ -309,12 +321,68 @@ class Pickup {
     this.teamAMembers = const [],
     this.teamBMembers = const [],
     this.targetScore = 21,
+    this.acceptedMembers = const [],
+    this.declinedMembers = const [],
   });
+
+  /// Todos los invitados (miembros asignados a cualquier equipo).
+  List<String> get invitedMembers => [...teamAMembers, ...teamBMembers];
+
+  /// Equipo asignado a un email: 'A', 'B' o null si no está invitado.
+  String? teamOf(String email) {
+    final e = email.trim().toLowerCase();
+    if (teamAMembers.any((m) => m.trim().toLowerCase() == e)) return 'A';
+    if (teamBMembers.any((m) => m.trim().toLowerCase() == e)) return 'B';
+    return null;
+  }
+
+  bool hasAccepted(String email) {
+    final e = email.trim().toLowerCase();
+    return acceptedMembers.any((m) => m.trim().toLowerCase() == e);
+  }
+
+  bool hasDeclined(String email) {
+    final e = email.trim().toLowerCase();
+    return declinedMembers.any((m) => m.trim().toLowerCase() == e);
+  }
+
+  bool isCreator(String email) =>
+      createdBy.trim().toLowerCase() == email.trim().toLowerCase();
+
+  Pickup copyWith({
+    List<String>? teamAMembers,
+    List<String>? teamBMembers,
+    List<String>? acceptedMembers,
+    List<String>? declinedMembers,
+  }) {
+    return Pickup(
+      pageId: pageId,
+      title: title,
+      courtId: courtId,
+      createdBy: createdBy,
+      dateTime: dateTime,
+      maxPlayers: maxPlayers,
+      vibe: vibe,
+      notes: notes,
+      teamSize: teamSize,
+      teamAName: teamAName,
+      teamBName: teamBName,
+      teamAColor: teamAColor,
+      teamBColor: teamBColor,
+      teamAMembers: teamAMembers ?? this.teamAMembers,
+      teamBMembers: teamBMembers ?? this.teamBMembers,
+      targetScore: targetScore,
+      acceptedMembers: acceptedMembers ?? this.acceptedMembers,
+      declinedMembers: declinedMembers ?? this.declinedMembers,
+    );
+  }
 
   factory Pickup.fromNotion(Map<String, dynamic> page) {
     final p = page['properties'] as Map<String, dynamic>;
     final rawA = NotionService.readText(p, 'TeamAMembers');
     final rawB = NotionService.readText(p, 'TeamBMembers');
+    final rawAcc = NotionService.readText(p, 'AcceptedMembers');
+    final rawDec = NotionService.readText(p, 'DeclinedMembers');
     return Pickup(
       pageId: page['id']?.toString() ?? '',
       title: NotionService.readTitle(p, 'Title'),
@@ -332,6 +400,8 @@ class Pickup {
       teamAMembers: rawA.isEmpty ? [] : rawA.split(',').where((e) => e.isNotEmpty).toList(),
       teamBMembers: rawB.isEmpty ? [] : rawB.split(',').where((e) => e.isNotEmpty).toList(),
       targetScore: NotionService.readInt(p, 'TargetScore', fallback: 21),
+      acceptedMembers: rawAcc.isEmpty ? [] : rawAcc.split(',').where((e) => e.isNotEmpty).toList(),
+      declinedMembers: rawDec.isEmpty ? [] : rawDec.split(',').where((e) => e.isNotEmpty).toList(),
     );
   }
 
@@ -352,6 +422,107 @@ class Pickup {
       'TeamAMembers': NotionService.richText(teamAMembers.join(',')),
       'TeamBMembers': NotionService.richText(teamBMembers.join(',')),
       'TargetScore': NotionService.number(targetScore),
+      'AcceptedMembers': NotionService.richText(acceptedMembers.join(',')),
+      'DeclinedMembers': NotionService.richText(declinedMembers.join(',')),
+    };
+  }
+}
+
+/// Chat de crew generado al crear un pickup game.
+class CrewChat {
+  final String pageId;
+  final String name;
+  final String pickupId;
+  final String createdBy;
+  final String date;
+  final String teamAName;
+  final String teamBName;
+  final String teamAColor;
+  final String teamBColor;
+  final String lastMessage;
+  final int createdAtMillis;
+
+  const CrewChat({
+    this.pageId = '',
+    required this.name,
+    this.pickupId = '',
+    required this.createdBy,
+    this.date = '',
+    this.teamAName = 'Equipo A',
+    this.teamBName = 'Equipo B',
+    this.teamAColor = '#FF6B1A',
+    this.teamBColor = '#3B82F6',
+    this.lastMessage = '',
+    this.createdAtMillis = 0,
+  });
+
+  factory CrewChat.fromNotion(Map<String, dynamic> page) {
+    final p = page['properties'] as Map<String, dynamic>;
+    return CrewChat(
+      pageId: page['id']?.toString() ?? '',
+      name: NotionService.readTitle(p, 'Name'),
+      pickupId: NotionService.readText(p, 'PickupId'),
+      createdBy: NotionService.readText(p, 'CreatedBy'),
+      date: NotionService.readDate(p, 'Date') ?? '',
+      teamAName: NotionService.readText(p, 'TeamAName').isEmpty
+          ? 'Equipo A'
+          : NotionService.readText(p, 'TeamAName'),
+      teamBName: NotionService.readText(p, 'TeamBName').isEmpty
+          ? 'Equipo B'
+          : NotionService.readText(p, 'TeamBName'),
+      teamAColor: NotionService.readText(p, 'TeamAColor').isEmpty
+          ? '#FF6B1A'
+          : NotionService.readText(p, 'TeamAColor'),
+      teamBColor: NotionService.readText(p, 'TeamBColor').isEmpty
+          ? '#3B82F6'
+          : NotionService.readText(p, 'TeamBColor'),
+      lastMessage: NotionService.readText(p, 'LastMessage'),
+    );
+  }
+
+  Map<String, dynamic> toNotionProperties() {
+    return {
+      'Name': NotionService.title(name),
+      'PickupId': NotionService.richText(pickupId),
+      'CreatedBy': NotionService.richText(createdBy),
+      'Date': NotionService.date(date.isEmpty ? null : date),
+      'TeamAName': NotionService.richText(teamAName),
+      'TeamBName': NotionService.richText(teamBName),
+      'TeamAColor': NotionService.richText(teamAColor),
+      'TeamBColor': NotionService.richText(teamBColor),
+      'LastMessage': NotionService.richText(lastMessage),
+    };
+  }
+
+  factory CrewChat.fromJson(Map<String, dynamic> json) {
+    return CrewChat(
+      pageId: json['pageId'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      pickupId: json['pickupId'] as String? ?? '',
+      createdBy: json['createdBy'] as String? ?? '',
+      date: json['date'] as String? ?? '',
+      teamAName: json['teamAName'] as String? ?? 'Equipo A',
+      teamBName: json['teamBName'] as String? ?? 'Equipo B',
+      teamAColor: json['teamAColor'] as String? ?? '#FF6B1A',
+      teamBColor: json['teamBColor'] as String? ?? '#3B82F6',
+      lastMessage: json['lastMessage'] as String? ?? '',
+      createdAtMillis: json['createdAtMillis'] as int? ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'pageId': pageId,
+      'name': name,
+      'pickupId': pickupId,
+      'createdBy': createdBy,
+      'date': date,
+      'teamAName': teamAName,
+      'teamBName': teamBName,
+      'teamAColor': teamAColor,
+      'teamBColor': teamBColor,
+      'lastMessage': lastMessage,
+      'createdAtMillis': createdAtMillis,
     };
   }
 }

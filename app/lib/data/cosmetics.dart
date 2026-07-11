@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_theme.dart';
 
 /// Catálogo de cosméticos del avatar que se desbloquean al subir de nivel:
 /// marcos (anillos decorativos), colores de fondo, colores de letra y
@@ -104,6 +106,66 @@ AvatarFrame frameById(String id) {
     if (f.id == id) return f;
   }
   return kFrames.first;
+}
+
+/// Estilo tipográfico de la insignia de clan (fuente de Google Fonts). Familia
+/// vacía o inválida => Archivo.
+TextStyle clanFontStyle(
+  String family, {
+  required double size,
+  Color color = Colors.white,
+  FontWeight weight = FontWeight.w900,
+}) {
+  final fam = family.trim().isEmpty ? 'Archivo' : family.trim();
+  try {
+    return GoogleFonts.getFont(fam, fontSize: size, fontWeight: weight, color: color);
+  } catch (_) {
+    return GoogleFonts.archivo(fontSize: size, fontWeight: weight, color: color);
+  }
+}
+
+/// Convierte un hex de 6 dígitos (sin '#') en Color. Vacío o inválido =>
+/// color de acento por defecto (usado para el fondo del avatar).
+Color clanColor(String hex) {
+  final h = hex.replaceAll('#', '').trim();
+  if (h.isEmpty) return AppColors.accent;
+  final v = int.tryParse(h, radix: 16);
+  if (v == null) return AppColors.accent;
+  return Color(0xFF000000 | v);
+}
+
+/// Igual que [clanColor] pero el default (vacío/inválido) es blanco; se usa
+/// para el color de las letras del clan.
+Color clanTextColor(String hex) {
+  final h = hex.replaceAll('#', '').trim();
+  if (h.isEmpty) return Colors.white;
+  final v = int.tryParse(h, radix: 16);
+  if (v == null) return Colors.white;
+  return Color(0xFF000000 | v);
+}
+
+/// Envuelve el avatar [child] con el marco equipado: un anillo con degradado y
+/// un resplandor exterior. Si el marco es 'none' devuelve el avatar tal cual.
+Widget framedAvatar(AvatarFrame frame, double radius, Widget child) {
+  if (frame.isNone) return child;
+  return Padding(
+    padding: const EdgeInsets.all(4),
+    child: Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius + 5),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: frame.ring,
+        ),
+        boxShadow: [
+          BoxShadow(color: frame.glow.withAlpha(140), blurRadius: 16, spreadRadius: 0),
+        ],
+      ),
+      child: child,
+    ),
+  );
 }
 
 /// Color cosmético: hex de 6 dígitos (sin '#') + nivel de desbloqueo.

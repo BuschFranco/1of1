@@ -31,11 +31,23 @@ class NotionConfig {
     'NOTION_DB_FRIENDS',
     defaultValue: 'a83f5d37fae54973ae106698c83545fa',
   );
+  static const String dbChats = String.fromEnvironment(
+    'NOTION_DB_CHATS',
+    defaultValue: '',
+  );
+
+  /// Historial de partidos (una fila por partido resuelto): habilita el ranking
+  /// de amigos filtrado por semana/mes/temporada. Si queda vacío, la app degrada
+  /// a mostrar solo el total acumulado del perfil.
+  static const String dbMatches = String.fromEnvironment(
+    'NOTION_DB_MATCHES',
+    defaultValue: '39952fcd7ece81408da4f331c0979c77',
+  );
 
   /// Versión de la API REST de Notion (estable, query por database_id).
   static const String apiVersion = '2022-06-28';
 
-  /// La app puede hablar con Notion solo si hay token. Si no, degrada a
-  /// los datos mock locales (kCourts).
+  /// La app puede hablar con Notion solo si hay token.
+  /// Sin token, la lista de canchas queda vacía.
   static bool get isConfigured => token.isNotEmpty;
 }
