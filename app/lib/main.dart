@@ -13,6 +13,7 @@ import 'screens/main_shell.dart';
 import 'screens/onboarding_screen.dart';
 import 'notion/notion_config.dart';
 import 'services/app_loading_state.dart';
+import 'services/blocked_provider.dart';
 import 'services/court_rating_service.dart';
 import 'services/courts_provider.dart';
 import 'services/favorites_provider.dart';
@@ -84,6 +85,7 @@ Future<void> _ensureNotionSchema() async {
         'LastPlayedCourtId': 'rich_text',
         'LastPlayedAt': 'date',
         'ShowLastPlayed': 'checkbox',
+        'Birthdate': 'date',
         'Adm': 'checkbox',
       },
     );
@@ -163,6 +165,7 @@ class OneOfOneApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ProfilesProvider()..load()),
         ChangeNotifierProvider(create: (_) => PlaySessionService()),
         ChangeNotifierProvider(create: (_) => PickupsProvider()),
+        ChangeNotifierProvider(create: (_) => BlockedProvider()),
         ChangeNotifierProvider(create: (_) => AppLoadingState()),
         Provider(create: (_) => CourtRatingService()),
         // Pegamento de sincronización (presencia, batch, sembrado). Se crea de
@@ -176,6 +179,7 @@ class OneOfOneApp extends StatelessWidget {
             courts: ctx.read<CourtsProvider>(),
             favorites: ctx.read<FavoritesProvider>(),
             pickups: ctx.read<PickupsProvider>(),
+            blocked: ctx.read<BlockedProvider>(),
           ),
           dispose: (_, c) => c.dispose(),
         ),

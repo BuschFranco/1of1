@@ -11,6 +11,7 @@ import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_loader.dart';
 import '../widgets/app_tab_bar.dart';
+import '../widgets/match_status_pill.dart';
 import '../widgets/reward_banner.dart';
 import 'crew_screen.dart';
 import 'create_screen.dart';
@@ -335,8 +336,15 @@ class _MainShellState extends State<MainShell> {
         loading.mapReady && loading.gpsReady && !courtsProvider.loading;
     final loaderVisible = !loaderReady && !_loaderTimedOut;
 
+    // Estado del partido (para el aura del ícono del mapa y la píldora que
+    // sigue al usuario fuera del Home). Mismos colores que el banner del mapa.
+    final ps = context.watch<PlaySessionService>();
+    final Color? matchGlow = ps.isPlaying
+        ? (ps.isPaused ? AppColors.white(0.7) : AppColors.open)
+        : (ps.isDwelling ? AppColors.accent : null);
+
     // Si hay un partido terminado sin resultado, preguntamos cómo le fue.
-    final pending = context.watch<PlaySessionService>().pending;
+    final pending = ps.pending;
     if (pending != null && !_resultPromptOpen) {
       _resultPromptOpen = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -459,7 +467,19 @@ class _MainShellState extends State<MainShell> {
                   previous: _previousTab,
                   onChange: _selectTab,
                   crewHasActivity: crewActivityNotifier.value,
+                  homeGlow: matchGlow,
                 ),
+              ),
+            ),
+          // Píldora de estado del partido: sigue al usuario fuera del mapa
+          // (en Home ya está el banner completo). Se auto-oculta sin actividad.
+          if (_tab != AppTab.home && !hideTabs)
+            Positioned(
+              top: MediaQuery.of(context).viewPadding.top + 10,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: MatchStatusPill(onTap: () => _selectTab(AppTab.home)),
               ),
             ),
           // Banner de recompensas (logro/título/nivel) por encima de todo.

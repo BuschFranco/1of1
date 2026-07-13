@@ -165,6 +165,9 @@ class NotificationsService {
           ongoing: true,
           autoCancel: false,
           onlyAlertOnce: true,
+          // Ocultamos el contenido (nombre de cancha = ubicación del usuario) en
+          // la pantalla bloqueada; visible al desbloquear.
+          visibility: NotificationVisibility.private,
           actions: const <AndroidNotificationAction>[
             // showsUserInterface: true → abre la app y ejecuta la acción en el
             // isolate principal (el handler de background es no-op y no puede
@@ -199,6 +202,9 @@ class NotificationsService {
           ongoing: true,
           autoCancel: false,
           onlyAlertOnce: true,
+          // Ocultamos el contenido (nombre de cancha = ubicación del usuario) en
+          // la pantalla bloqueada; visible al desbloquear.
+          visibility: NotificationVisibility.private,
           actions: const <AndroidNotificationAction>[
             // Todas abren la app: la acción en background es un no-op (corre en
             // un isolate aparte, sin acceso al partido vivo).
@@ -234,6 +240,9 @@ class NotificationsService {
           ongoing: true,
           autoCancel: false,
           onlyAlertOnce: true,
+          // Ocultamos el contenido (nombre de cancha = ubicación del usuario) en
+          // la pantalla bloqueada; visible al desbloquear.
+          visibility: NotificationVisibility.private,
           actions: const <AndroidNotificationAction>[
             // Todas abren la app (ver nota en showPlaying).
             AndroidNotificationAction(kPauseAction, 'REANUDAR',
@@ -268,6 +277,9 @@ class NotificationsService {
           ongoing: true,
           autoCancel: false,
           onlyAlertOnce: true,
+          // Ocultamos el contenido (nombre de cancha = ubicación del usuario) en
+          // la pantalla bloqueada; visible al desbloquear.
+          visibility: NotificationVisibility.private,
           actions: const <AndroidNotificationAction>[
             AndroidNotificationAction(
               kStopAction,

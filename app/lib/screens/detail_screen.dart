@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../data/courts.dart';
+import '../data/legal_content.dart';
 import '../data/models.dart';
 import '../notion/notion_config.dart';
+import '../services/blocked_provider.dart';
 import '../services/court_rating_service.dart';
 import '../services/favorites_provider.dart';
 import '../services/notion_service.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
+import '../services/report_service.dart';
 import '../services/session.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
@@ -772,7 +775,11 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
                 ),
               );
             }
-            final reviews = snap.data ?? [];
+            // Ocultamos reseñas de usuarios bloqueados en este dispositivo.
+            final blocked = context.watch<BlockedProvider>();
+            final reviews = (snap.data ?? [])
+                .where((r) => !blocked.isBlocked(r.userEmail))
+                .toList();
             if (reviews.isEmpty) {
               return Container(
                 width: double.infinity,
@@ -799,7 +806,10 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
   }
 
   Widget _reviewCard(Review r) {
-    final isAdmin = context.read<Session>().isAdmin;
+    final session = context.read<Session>();
+    final isAdmin = session.isAdmin;
+    final myEmail = (session.email ?? '').trim().toLowerCase();
+    final isMine = r.userEmail.trim().toLowerCase() == myEmail;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
@@ -820,6 +830,36 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
                   color: AppColors.accent,
                 ),
               const Spacer(),
+              // Reportar/bloquear la reseña de otro usuario (UGC).
+              if (!isMine && r.userEmail.isNotEmpty) ...[
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_horiz, size: 16, color: AppColors.white(0.4)),
+                  color: AppColors.bgElev,
+                  onSelected: (v) {
+                    if (v == 'report') _reportReview(r);
+                    if (v == 'block') _blockReviewer(r);
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'report',
+                      child: Row(children: [
+                        Icon(Icons.flag_outlined, size: 16, color: AppColors.white(0.7)),
+                        const SizedBox(width: 10),
+                        Text('Reportar', style: AppText.grotesk(size: 13)),
+                      ]),
+                    ),
+                    PopupMenuItem(
+                      value: 'block',
+                      child: Row(children: [
+                        Icon(Icons.block, size: 16, color: AppColors.white(0.7)),
+                        const SizedBox(width: 10),
+                        Text('Bloquear usuario', style: AppText.grotesk(size: 13)),
+                      ]),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 4),
+              ],
               if (isAdmin)
                 GestureDetector(
                   onTap: () => _deleteReview(r),
@@ -837,6 +877,39 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
             Text(r.comment, style: AppText.grotesk(size: 13, color: AppColors.white(0.8), height: 1.4)),
           ],
         ],
+      ),
+    );
+  }
+
+  Future<void> _reportReview(Review r) async {
+    final me = (context.read<Session>().email ?? '').trim().toLowerCase();
+    final ok = await ReportService.report(
+      tipo: 'reseña',
+      referencia: 'Autor: ${r.userHandle.isNotEmpty ? r.userHandle : r.userEmail} · "${r.comment}"',
+      reportadoPor: me,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'Gracias, revisaremos el reporte.'
+              : 'No se pudo abrir el mail. Escribinos a $kSupportEmail.',
+          style: AppText.grotesk(size: 13),
+        ),
+        backgroundColor: AppColors.bgElev,
+      ),
+    );
+  }
+
+  Future<void> _blockReviewer(Review r) async {
+    await context.read<BlockedProvider>().block(r.userEmail);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Bloqueaste a ${r.userHandle.isNotEmpty ? r.userHandle : r.userEmail}. No verás más su contenido.',
+            style: AppText.grotesk(size: 13)),
+        backgroundColor: AppColors.bgElev,
       ),
     );
   }

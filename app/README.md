@@ -274,6 +274,79 @@ Antes de publicar/distribuir, **estos cambios son obligatorios**:
 
 ---
 
+## Cumplimiento legal / lanzamiento en tiendas
+
+Tras una auditoría legal (Play Store + App Store, foco Argentina y EE.UU.) se
+aplicó el plan de remediación **excepto el punto 1 (backend), diferido**. Estado:
+
+### ✅ Ya implementado en el código
+
+- **Política de Privacidad y Términos** in-app ([`data/legal_content.dart`](lib/data/legal_content.dart)
+  + [`screens/legal_screen.dart`](lib/screens/legal_screen.dart)), linkeados en el
+  **registro** (checkbox obligatorio de aceptación) y en **Ajustes → Legal**.
+- **Age gate**: fecha de nacimiento en el registro, bloqueo de menores de 13
+  (`_minAge` en [`auth_screen.dart`](lib/screens/auth_screen.dart)); se guarda
+  `Birthdate` en el perfil.
+- **Eliminación de cuenta** (`Session.deleteAccount`): Ajustes → Eliminar cuenta
+  archiva en Notion el perfil, usuario, partidos, reseñas, amistades y pickups.
+- **Prominent disclosure** de ubicación en segundo plano: diálogo previo con el
+  texto exigido por Google Play antes de pedir el permiso "Siempre"
+  (`_toggleBackground` en `profile_screen.dart`).
+- **Moderación de UGC**: reportar (por mail, [`services/report_service.dart`](lib/services/report_service.dart))
+  y **bloquear** usuarios ([`services/blocked_provider.dart`](lib/services/blocked_provider.dart),
+  lista local por usuario) desde la fila de amigos y desde cada reseña. El
+  contenido de bloqueados se oculta.
+- **Notificaciones**: `visibility: private` para no revelar el nombre de la
+  cancha (ubicación) en la pantalla bloqueada.
+- **iOS**: usage descriptions de HealthKit + `NSLocationAlwaysUsageDescription`
+  en `Info.plist`.
+- Contacto/soporte y todos los textos legales salen de un **único lugar**
+  (`kSupportEmail`, `kPrivacyPolicy`, `kTermsAndConditions` en `legal_content.dart`).
+
+### ⏳ Diferido — PUNTO 1: backend propio (bloqueante para publicar)
+
+**Sigue siendo obligatorio antes de cualquier release.** Mientras el token de
+Notion viaje en el binario (ver "⚠️ El token de Notion queda embebido…" y
+"Cambios necesarios para producción" arriba), la app **no debe publicarse**: es
+una brecha de datos latente de todos los usuarios y hace fallar la revisión de
+ambas tiendas. El backend además resuelve la exposición de PII entre usuarios
+(hoy la búsqueda por handle / `ProfilesProvider` devuelven el perfil completo),
+habilita auth seria (bcrypt/argon2 + reset por email) y verificación del idToken
+de Google.
+
+### 📋 Pendiente fuera del código (consola / manual / trámites)
+
+- **Publicar** la Política de Privacidad y los Términos en una **URL pública** y
+  cargarla en la ficha de Play Store y App Store (completar `kPrivacyPolicyUrl` /
+  `kTermsUrl` cuando exista el sitio).
+- **Eliminación de cuenta vía web**: Google Play exige, además del borrado in-app,
+  una URL pública de solicitud de borrado.
+- **Play Console**: formulario de **Data Safety**, declaración + **video** de uso
+  de `ACCESS_BACKGROUND_LOCATION`, justificación de `USE_EXACT_ALARM` y evaluar
+  quitar `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (Google lo restringe).
+- **Declarar público objetivo 13+** en ambas consolas (App Store Age Rating /
+  Play Target Audience).
+- **Firma de release**: hoy el `build.gradle.kts` firma con la **debug key** →
+  crear keystore de release + Play App Signing (Play no acepta el AAB así).
+- **Registrar la base de datos** ante la **AAIP** (Argentina) y documentar a
+  Notion como encargado de tratamiento (transferencia internacional a EE.UU.).
+- **App Store**: agregar **"Sign in with Apple"** (Guideline 4.8, obligatorio si
+  hay login con Google) y configurar Google Sign-In en iOS (`CFBundleURLTypes` /
+  `GIDClientID`).
+
+### ⚠️ Limitaciones conocidas (deuda, no bloqueantes de código)
+
+- **Age gate con Google Sign-In**: el registro con Google no pide fecha de
+  nacimiento (Google no la expone). Falta sumar el paso de edad al alta por
+  Google (hoy solo el alta manual tiene age gate).
+- **Bloqueo local**: la lista de bloqueados vive en el dispositivo (sin backend
+  no hay dónde compartirla). Al migrar al backend, moverla allí.
+- **Fuente de clan por Google Fonts**: `cosmetics.dart` descarga la tipografía de
+  la insignia en runtime desde `fonts.gstatic.com` (transmite IP). Limitar a
+  familias empaquetadas o bundlear las usadas.
+
+---
+
 ## En construcción
 
 Secciones maquetadas pero todavía sin backend: **Check-in**, **Reservar cancha**,

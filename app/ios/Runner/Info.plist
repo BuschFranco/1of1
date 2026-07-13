@@ -8,6 +8,12 @@
 	<string>Usamos tu ubicación para mostrarte canchas cerca y detectar cuándo estás jugando.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Con permiso "Siempre" detectamos si estás jugando en una cancha aunque la app esté en segundo plano.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Con permiso "Siempre" detectamos si estás jugando en una cancha aunque la app esté en segundo plano.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Leemos calorías, pulso, pasos y distancia de tus partidos para medir tu desempeño. Estos datos quedan solo en tu dispositivo.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>1of1 no escribe datos en Salud; solo los lee para mostrar tu desempeño durante los partidos.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

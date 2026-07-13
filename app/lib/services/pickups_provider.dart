@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../data/models.dart';
 import '../notion/notion_config.dart';
@@ -42,9 +43,16 @@ class PickupsProvider extends ChangeNotifier {
       );
       final list = rows.map(Pickup.fromNotion).toList();
       final seen = <String>{};
-      _pickups = [for (final p in list) if (seen.add(p.pageId)) p];
+      final deduped = [for (final p in list) if (seen.add(p.pageId)) p];
+      // Regla de retención: 24h después del pickup deja de mostrarse y se
+      // limpia de la BDD (pickup + chat) para ahorrar espacio.
+      final expired = deduped.where((p) => p.isExpired).toList();
+      _pickups = deduped.where((p) => !p.isExpired).toList();
       // Más recientes primero (los sin fecha, al final).
       _pickups.sort((a, b) => (b.dateTime ?? '').compareTo(a.dateTime ?? ''));
+      // Fire-and-forget: no bloquear la pantalla por la limpieza. Si falla,
+      // igual quedan ocultos y se reintenta en la próxima carga.
+      if (expired.isNotEmpty) unawaited(_cleanupExpired(expired));
     } catch (_) {
       // Silencioso: no romper la pantalla.
     }
@@ -147,8 +155,9 @@ class PickupsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Elimina (archiva) el pickup y, best-effort, su chat en Notion.
-  Future<void> deletePickup(Pickup p) async {
+  /// Archiva en Notion la página del pickup y, best-effort, las filas de su
+  /// chat. Compartido entre la eliminación manual y la limpieza por expiración.
+  Future<void> _archiveInNotion(Pickup p) async {
     await _notion.archivePage(p.pageId);
     // Chat asociado en Notion (si dbChats está configurado).
     if (NotionConfig.dbChats.isNotEmpty) {
@@ -163,6 +172,24 @@ class PickupsProvider extends ChangeNotifier {
         }
       } catch (_) {}
     }
+  }
+
+  /// Limpia de la BDD los pickups vencidos (24h después del partido). Cualquier
+  /// cliente que los vea los archiva: los datos ya están muertos y archivar es
+  /// idempotente, así que no importa si dos usuarios lo intentan a la vez.
+  Future<void> _cleanupExpired(List<Pickup> expired) async {
+    for (final p in expired) {
+      try {
+        await _archiveInNotion(p);
+      } catch (_) {
+        // Best-effort: se reintenta en la próxima carga.
+      }
+    }
+  }
+
+  /// Elimina (archiva) el pickup y, best-effort, su chat en Notion.
+  Future<void> deletePickup(Pickup p) async {
+    await _archiveInNotion(p);
     _pickups.removeWhere((x) => x.pageId == p.pageId);
     notifyListeners();
   }

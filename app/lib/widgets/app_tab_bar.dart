@@ -13,12 +13,17 @@ class AppTabBar extends StatefulWidget {
   final ValueChanged<AppTab> onChange;
   final bool crewHasActivity;
 
+  /// Aura pulsante detrás del ícono del mapa, del color del estado del partido
+  /// (verde jugando / naranja countdown / gris pausado). `null` = sin aura.
+  final Color? homeGlow;
+
   const AppTabBar({
     super.key,
     required this.active,
     required this.previous,
     required this.onChange,
     this.crewHasActivity = false,
+    this.homeGlow,
   });
 
   @override
@@ -26,7 +31,7 @@ class AppTabBar extends StatefulWidget {
 }
 
 class _AppTabBarState extends State<AppTabBar>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const List<AppTab> _slots = [
     AppTab.home,
     AppTab.list,
@@ -52,11 +57,28 @@ class _AppTabBarState extends State<AppTabBar>
       }
     });
 
+  // Pulso del aura del partido en el ícono del mapa. Solo corre mientras hay
+  // partido/countdown activo (homeGlow != null) para no tener un repeat
+  // permanente animando de gusto.
+  late final AnimationController _glowCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  );
+
+  void _syncGlow() {
+    if (widget.homeGlow != null && !_glowCtrl.isAnimating) {
+      _glowCtrl.repeat(reverse: true);
+    } else if (widget.homeGlow == null && _glowCtrl.isAnimating) {
+      _glowCtrl.stop();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _from = widget.previous;
     _to = widget.active;
+    _syncGlow();
     if (_from != _to) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -72,6 +94,7 @@ class _AppTabBarState extends State<AppTabBar>
   @override
   void didUpdateWidget(covariant AppTabBar old) {
     super.didUpdateWidget(old);
+    _syncGlow();
     if (old.active != widget.active) {
       _from = widget.previous;
       _to = widget.active;
@@ -85,6 +108,7 @@ class _AppTabBarState extends State<AppTabBar>
   @override
   void dispose() {
     _ctrl.dispose();
+    _glowCtrl.dispose();
     super.dispose();
   }
 
@@ -216,6 +240,35 @@ class _AppTabBarState extends State<AppTabBar>
                                 child: Stack(
                                   clipBehavior: Clip.none,
                                   children: [
+                                    // Aura pulsante del partido detrás del
+                                    // ícono del mapa, del color del estado.
+                                    if (_slots[i] == AppTab.home &&
+                                        widget.homeGlow != null)
+                                      Center(
+                                        child: AnimatedBuilder(
+                                          animation: _glowCtrl,
+                                          builder: (context, _) {
+                                            final t = Curves.easeInOut
+                                                .transform(_glowCtrl.value);
+                                            final glow = widget.homeGlow!;
+                                            return Container(
+                                              width: 30,
+                                              height: 30,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: glow.withValues(
+                                                        alpha: 0.25 + 0.30 * t),
+                                                    blurRadius: 14,
+                                                    spreadRadius: 2,
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
                                     Center(
                                       child: Icon(
                                         _iconFor(

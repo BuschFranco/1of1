@@ -154,23 +154,22 @@ class MatchDetailScreen extends StatelessWidget {
               ),
             ),
           ),
-          // Chip de resultado.
+          // Resultado: plano y editorial (misma directiva que la story),
+          // barrita de acento a la izquierda; el scrim ya da contraste.
           Positioned(
-            top: 12,
-            left: 12,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: color.withAlpha(45),
-                borderRadius: BorderRadius.circular(AppShape.rChip),
-                border: Border.all(color: color, width: 1.5),
-              ),
-              child: Text(label,
-                  style: AppText.archivo(
-                      size: 12,
-                      weight: FontWeight.w900,
-                      color: color,
-                      letterSpacing: 0.04)),
+            top: 14,
+            left: 16,
+            child: Row(
+              children: [
+                Container(width: 4, height: 14, color: color),
+                const SizedBox(width: 8),
+                Text(label,
+                    style: AppText.archivo(
+                        size: 12,
+                        weight: FontWeight.w900,
+                        color: color,
+                        letterSpacing: 0.2)),
+              ],
             ),
           ),
           // Nombre + zona.
@@ -343,28 +342,39 @@ class MatchDetailScreen extends StatelessWidget {
   Widget _brandFooter() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Column(
         children: [
-          Container(
-            width: 24,
-            height: 2,
-            decoration: BoxDecoration(
-              color: AppColors.white(0.15),
-              borderRadius: BorderRadius.circular(100),
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 24,
+                height: 2,
+                decoration: BoxDecoration(
+                  color: AppColors.white(0.15),
+                  borderRadius: BorderRadius.circular(100),
+                ),
+              ),
+              const SizedBox(width: 10),
+              const AppLogo(height: 22),
+              const SizedBox(width: 10),
+              Container(
+                width: 24,
+                height: 2,
+                decoration: BoxDecoration(
+                  color: AppColors.white(0.15),
+                  borderRadius: BorderRadius.circular(100),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 10),
-          const AppLogo(height: 22),
-          const SizedBox(width: 10),
-          Container(
-            width: 24,
-            height: 2,
-            decoration: BoxDecoration(
-              color: AppColors.white(0.15),
-              borderRadius: BorderRadius.circular(100),
-            ),
-          ),
+          const SizedBox(height: 8),
+          Text('Estadísticas provistas por 1of1',
+              style: AppText.grotesk(
+                  size: 9.5,
+                  weight: FontWeight.w500,
+                  color: AppColors.white(0.3),
+                  letterSpacing: 0.06)),
         ],
       ),
     );
@@ -550,38 +560,36 @@ class _ShareCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const SizedBox(height: 24),
-          const AppLogo(height: 76),
+          const AppLogo(height: 150),
           const Spacer(),
-          // Resultado.
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 44, vertical: 18),
-            decoration: BoxDecoration(
-              color: color.withAlpha(28),
-              borderRadius: BorderRadius.circular(100),
-              border: Border.all(color: color.withAlpha(120), width: 3),
-            ),
-            child: Text(label,
-                style: AppText.archivo(
-                    size: 48, weight: FontWeight.w900, color: color)),
-          ),
-          const SizedBox(height: 44),
+          // Resultado: plano y editorial (sin globo), barrita de acento arriba.
+          Container(width: 56, height: 5, color: color),
+          const SizedBox(height: 22),
+          Text(label,
+              style: AppText.archivo(
+                  size: 36,
+                  weight: FontWeight.w900,
+                  color: color,
+                  letterSpacing: 0.25)),
+          const SizedBox(height: 40),
           // Cancha.
           Text(
             court?.name ?? (s.courtName.isEmpty ? 'Cancha' : s.courtName),
             textAlign: TextAlign.center,
-            style: AppText.archivo(size: 40, weight: FontWeight.w900),
+            style: AppText.archivo(
+                size: 64, weight: FontWeight.w900, height: 1.05),
           ),
           if (court != null && court!.area.isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 10),
             Text(court!.area,
-                style: AppText.grotesk(size: 24, color: AppColors.white(0.5))),
+                style: AppText.grotesk(size: 28, color: AppColors.white(0.5))),
           ],
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           Text(
             '${_fmtDate(ended)} · ${ended.hour.toString().padLeft(2, '0')}:${ended.minute.toString().padLeft(2, '0')}',
-            style: AppText.grotesk(size: 22, color: AppColors.white(0.4)),
+            style: AppText.grotesk(size: 26, color: AppColors.white(0.4)),
           ),
-          const SizedBox(height: 64),
+          const SizedBox(height: 80),
           // Stats principales.
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -594,11 +602,11 @@ class _ShareCard extends StatelessWidget {
           ),
           // Salud: todas las métricas disponibles.
           if (s.hasHealth) ...[
-            const SizedBox(height: 56),
+            const SizedBox(height: 72),
             Wrap(
               alignment: WrapAlignment.center,
-              spacing: 40,
-              runSpacing: 28,
+              spacing: 52,
+              runSpacing: 36,
               children: [
                 if (s.calories > 0)
                   _shareMiniStat(Icons.local_fire_department, '${s.calories.round()} kcal'),
@@ -617,13 +625,14 @@ class _ShareCard extends StatelessWidget {
             ),
           ],
           const Spacer(),
-          // CTA.
-          Text('Jugá en 1of1',
+          // Disclaimer de origen de datos.
+          Text('Estadísticas del partido provistas por 1of1',
+              textAlign: TextAlign.center,
               style: AppText.grotesk(
-                  size: 24,
-                  weight: FontWeight.w600,
-                  color: AppColors.white(0.35),
-                  letterSpacing: 0.1)),
+                  size: 20,
+                  weight: FontWeight.w500,
+                  color: AppColors.white(0.3),
+                  letterSpacing: 0.06)),
           const SizedBox(height: 24),
         ],
       ),
@@ -632,8 +641,8 @@ class _ShareCard extends StatelessWidget {
 
   Widget _shareDivider() => Container(
         width: 2,
-        height: 64,
-        margin: const EdgeInsets.symmetric(horizontal: 44),
+        height: 90,
+        margin: const EdgeInsets.symmetric(horizontal: 52),
         color: AppColors.white(0.15),
       );
 
@@ -642,11 +651,11 @@ class _ShareCard extends StatelessWidget {
       children: [
         Text(value,
             style: AppText.archivo(
-                size: 46, weight: FontWeight.w900, color: color ?? Colors.white)),
-        const SizedBox(height: 8),
+                size: 78, weight: FontWeight.w900, color: color ?? Colors.white)),
+        const SizedBox(height: 10),
         Text(label,
             style: AppText.grotesk(
-                size: 16,
+                size: 22,
                 weight: FontWeight.w700,
                 color: AppColors.white(0.4),
                 letterSpacing: 0.1)),
@@ -658,11 +667,11 @@ class _ShareCard extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 26, color: AppColors.accent),
-        const SizedBox(width: 10),
+        Icon(icon, size: 36, color: AppColors.accent),
+        const SizedBox(width: 14),
         Text(text,
             style: AppText.archivo(
-                size: 24, weight: FontWeight.w800, color: Colors.white)),
+                size: 34, weight: FontWeight.w800, color: Colors.white)),
       ],
     );
   }

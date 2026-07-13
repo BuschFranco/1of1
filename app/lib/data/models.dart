@@ -60,6 +60,9 @@ abstract class Profile with _$Profile {
     @Default(0) int points,
     @Default(0.0) double rating,
     @Default('') String userEmail,
+    // Fecha de nacimiento (ISO 'yyyy-MM-dd'). Se pide en el registro para
+    // verificar la edad (age gate). Vacío en cuentas viejas o de Google.
+    @Default('') String birthdate,
     // Insignia de clan (hasta 4 caracteres) y colores del avatar (hex de 6
     // dígitos, sin '#'). avatarColor = fondo, clanTextColor = letras.
     // Vacíos = avatar por defecto (inicial, fondo naranja, texto blanco).
@@ -127,6 +130,7 @@ abstract class Profile with _$Profile {
       points: NotionService.readInt(p, 'Points'),
       rating: NotionService.readNumber(p, 'Rating'),
       userEmail: NotionService.readText(p, 'UserEmail'),
+      birthdate: NotionService.readDate(p, 'Birthdate') ?? '',
       clan: NotionService.readText(p, 'Clan'),
       avatarColor: NotionService.readText(p, 'AvatarColor'),
       clanTextColor: NotionService.readText(p, 'ClanTextColor'),
@@ -167,6 +171,7 @@ abstract class Profile with _$Profile {
       'Points': NotionService.number(points),
       'Rating': NotionService.number(rating),
       'UserEmail': NotionService.richText(userEmail),
+      'Birthdate': NotionService.date(birthdate.isEmpty ? null : birthdate),
       'Clan': NotionService.richText(clan),
       'AvatarColor': NotionService.richText(avatarColor),
       'ClanTextColor': NotionService.richText(clanTextColor),
@@ -348,6 +353,15 @@ class Pickup {
 
   bool isCreator(String email) =>
       createdBy.trim().toLowerCase() == email.trim().toLowerCase();
+
+  /// True si ya pasaron 24h desde la fecha/hora del pickup (regla de retención:
+  /// el pickup y su chat se eliminan de la BDD un día después del partido).
+  /// Sin fecha parseable no expira (mejor mostrar de más que borrar de más).
+  bool get isExpired {
+    final d = DateTime.tryParse(dateTime ?? '');
+    if (d == null) return false;
+    return DateTime.now().isAfter(d.add(const Duration(hours: 24)));
+  }
 
   Pickup copyWith({
     List<String>? teamAMembers,

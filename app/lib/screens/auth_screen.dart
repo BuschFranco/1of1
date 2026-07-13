@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/pop_background.dart';
 import '../widgets/pressable_widget.dart';
+import 'legal_screen.dart';
 
 enum AuthMode { login, signup }
 
@@ -31,7 +33,24 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _loading = false;
   bool _obscurePass = true;
   bool _keepLoggedIn = true;
+  // Age gate: fecha de nacimiento elegida en el registro.
+  DateTime? _birthdate;
+  // Aceptación de Términos + Política de Privacidad (obligatoria para registrar).
+  bool _acceptedTerms = false;
   String? _error;
+
+  /// Edad mínima para crear cuenta (COPPA en EE.UU.; menores requieren
+  /// representación en AR). Bloqueamos por debajo de 13.
+  static const int _minAge = 13;
+
+  int _ageFrom(DateTime dob, DateTime now) {
+    var age = now.year - dob.year;
+    if (now.month < dob.month ||
+        (now.month == dob.month && now.day < dob.day)) {
+      age--;
+    }
+    return age;
+  }
 
   static final _google = GoogleSignIn(
     clientId: '823840378752-4bpuv40b9iro06enve2alnblfrlqhpqn.apps.googleusercontent.com',
@@ -93,6 +112,22 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() => _error = 'Las contraseñas no coinciden.');
       return;
     }
+    if (_isSignup) {
+      if (_birthdate == null) {
+        setState(() => _error = 'Ingresá tu fecha de nacimiento.');
+        return;
+      }
+      if (_ageFrom(_birthdate!, DateTime.now()) < _minAge) {
+        setState(() => _error =
+            'Necesitás tener al menos $_minAge años para crear una cuenta.');
+        return;
+      }
+      if (!_acceptedTerms) {
+        setState(() => _error =
+            'Aceptá los Términos y la Política de Privacidad para continuar.');
+        return;
+      }
+    }
 
     setState(() {
       _loading = true;
@@ -106,6 +141,8 @@ class _AuthScreenState extends State<AuthScreen> {
             name: _nameCtrl.text,
             city: _cityCtrl.text,
             phone: _phoneCtrl.text,
+            birthdate:
+                '${_birthdate!.year.toString().padLeft(4, '0')}-${_birthdate!.month.toString().padLeft(2, '0')}-${_birthdate!.day.toString().padLeft(2, '0')}',
           )
         : await session.login(
             _emailCtrl.text,
@@ -233,6 +270,9 @@ class _AuthScreenState extends State<AuthScreen> {
                           isPassword: true,
                         ),
                         const SizedBox(height: 16),
+                        _label('Fecha de nacimiento'),
+                        _birthdateField(),
+                        const SizedBox(height: 16),
                         _label('Ciudad (opcional)'),
                         _field(_cityCtrl, 'Ej. Buenos Aires'),
                         const SizedBox(height: 16),
@@ -242,6 +282,8 @@ class _AuthScreenState extends State<AuthScreen> {
                           '+54 11 ...',
                           keyboard: TextInputType.phone,
                         ),
+                        const SizedBox(height: 16),
+                        _termsRow(),
                       ],
                       if (!_isSignup) ...[
                         const SizedBox(height: 14),
@@ -386,6 +428,110 @@ class _AuthScreenState extends State<AuthScreen> {
       ),
     );
   }
+
+  Widget _birthdateField() {
+    final has = _birthdate != null;
+    final label = has
+        ? '${_birthdate!.day.toString().padLeft(2, '0')}/${_birthdate!.month.toString().padLeft(2, '0')}/${_birthdate!.year}'
+        : 'Tocá para elegir';
+    return PressableWidget(
+      onTap: _loading ? null : _pickBirthdate,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.bgElev,
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: Border.all(color: AppColors.line, width: 1.5),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: Row(
+          children: [
+            Icon(Icons.cake_outlined, size: 18, color: AppColors.white(0.5)),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: AppText.grotesk(
+                size: 14,
+                color: has ? AppColors.ink : AppColors.white(0.35),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickBirthdate() async {
+    final now = DateTime.now();
+    // Arrancamos el picker en una edad razonable (18) y permitimos desde hace
+    // 100 años hasta hoy.
+    final initial = _birthdate ?? DateTime(now.year - 18, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(now.year - 100),
+      lastDate: now,
+      helpText: 'Tu fecha de nacimiento',
+    );
+    if (picked != null && mounted) setState(() => _birthdate = picked);
+  }
+
+  Widget _termsRow() {
+    return PressableWidget(
+      onTap: _loading
+          ? null
+          : () => setState(() => _acceptedTerms = !_acceptedTerms),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 20,
+            height: 20,
+            margin: const EdgeInsets.only(top: 1),
+            decoration: BoxDecoration(
+              color: _acceptedTerms ? AppColors.accent : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: _acceptedTerms ? AppColors.accent : AppColors.white(0.3),
+                width: 1.5,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: _acceptedTerms
+                ? const Icon(Icons.check, size: 14, color: Colors.white)
+                : null,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                style: AppText.grotesk(size: 12.5, color: AppColors.white(0.7)),
+                children: [
+                  const TextSpan(text: 'Acepto los '),
+                  _linkSpan('Términos',
+                      () => LegalScreen.open(context, LegalScreen.terms())),
+                  const TextSpan(text: ' y la '),
+                  _linkSpan('Política de Privacidad',
+                      () => LegalScreen.open(context, LegalScreen.privacy())),
+                  const TextSpan(text: '.'),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  TextSpan _linkSpan(String text, VoidCallback onTap) => TextSpan(
+        text: text,
+        style: AppText.grotesk(
+          size: 12.5,
+          weight: FontWeight.w700,
+          color: AppColors.accent,
+        ),
+        recognizer: (TapGestureRecognizer()..onTap = onTap),
+      );
 
   Widget _errorBox(String msg) {
     return Container(

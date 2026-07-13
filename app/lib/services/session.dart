@@ -151,6 +151,7 @@ class Session extends ChangeNotifier {
     required String name,
     String city = '',
     String phone = '',
+    String birthdate = '',
   }) async {
     if (!_notion.isConfigured) {
       return 'Notion no está configurado (falta el token).';
@@ -175,6 +176,7 @@ class Session extends ChangeNotifier {
         city: city.trim(),
         phone: phone.trim(),
         userEmail: email,
+        birthdate: birthdate,
       );
       final profilePage = await _notion.createPage(
         NotionConfig.dbProfiles,
@@ -533,6 +535,71 @@ class Session extends ChangeNotifier {
     } finally {
       _flushing = false;
     }
+  }
+
+  /// Elimina la cuenta y todos los datos personales del usuario en Notion
+  /// (derecho de supresión — Ley 25.326 art. 16 / CCPA; requisito de tiendas).
+  /// Archiva: la fila de Usuarios, el Perfil, y sus filas en Partidos, Reseñas,
+  /// Amistades (como owner) y Pickups creados. Luego limpia la sesión local.
+  /// Best-effort por colección: si una falla, sigue con las demás y devuelve el
+  /// error para informarlo, pero igual cierra la sesión local.
+  Future<String?> deleteAccount() async {
+    final prof = _profile;
+    final email = _email;
+    if (prof == null || email == null) return 'No hay sesión activa.';
+    if (!_notion.isConfigured) return 'No se puede eliminar sin conexión.';
+
+    String? firstError;
+    Future<void> archiveWhere(String db, Map<String, dynamic> filter) async {
+      if (db.isEmpty) return;
+      try {
+        final rows = await _notion.queryDatabaseAll(db, filter: filter);
+        for (final r in rows) {
+          final id = r['id']?.toString();
+          if (id != null) await _notion.archivePage(id);
+        }
+      } catch (e) {
+        firstError ??= e.toString();
+      }
+    }
+
+    // Cortamos el batch para que no re-suba el perfil que vamos a borrar.
+    _dirty = false;
+
+    // Historial de partidos (title = Email), reseñas y amistades (rich_text),
+    // pickups creados por el usuario.
+    await archiveWhere(NotionConfig.dbMatches,
+        NotionService.filterTitle('Email', email));
+    await archiveWhere(NotionConfig.dbReviews,
+        NotionService.filterText('UserEmail', email));
+    await archiveWhere(NotionConfig.dbFriends,
+        NotionService.filterText('OwnerEmail', email));
+    await archiveWhere(NotionConfig.dbPickups,
+        NotionService.filterText('CreatedBy', email));
+
+    // Perfil y credenciales.
+    try {
+      if (prof.pageId.isNotEmpty) await _notion.archivePage(prof.pageId);
+    } catch (e) {
+      firstError ??= e.toString();
+    }
+    await archiveWhere(NotionConfig.dbUsers,
+        NotionService.filterTitle('Email', email));
+
+    // Limpiar la sesión local (sin flush: la cuenta ya no existe).
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kEmail);
+    await prefs.remove(_kProfile);
+    await prefs.remove(_kLocalPosition);
+    await prefs.remove(_kProfileBg);
+    await prefs.remove(_kDefaultTab);
+    _profile = null;
+    _email = null;
+    _localPosition = '';
+    _profileBg = '';
+    _defaultTab = 'home';
+    notifyListeners();
+    return firstError;
   }
 
   Future<void> logout() async {

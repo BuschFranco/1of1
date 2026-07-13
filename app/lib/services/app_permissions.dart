@@ -92,6 +92,24 @@ Future<void> requestLocation() async {
   } catch (_) {}
 }
 
+/// Pide el permiso de ubicación en SEGUNDO PLANO ("Siempre"). En Android 11+ el
+/// sistema no lo concede desde un prompt in-app: hay que enviar al usuario a los
+/// ajustes de la app. IMPORTANTE: llamar SOLO después de mostrar la divulgación
+/// destacada (prominent disclosure) que exige Google Play.
+Future<void> requestBackgroundLocation() async {
+  try {
+    var perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.denied) {
+      perm = await Geolocator.requestPermission();
+    }
+    // Si todavía no es "Siempre", guiamos al usuario a los ajustes del sistema
+    // (donde puede elegir "Permitir todo el tiempo").
+    if (perm != LocationPermission.always) {
+      await Geolocator.openAppSettings();
+    }
+  } catch (_) {}
+}
+
 /// Pide las notificaciones; si ya estaban denegadas, abre los ajustes de la app.
 Future<void> requestNotifications() async {
   await NotificationsService.instance.requestPermission();

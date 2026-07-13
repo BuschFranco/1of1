@@ -2,11 +2,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../data/achievements.dart';
 import '../data/cosmetics.dart';
 import '../data/courts.dart';
+import '../data/legal_content.dart';
 import '../data/models.dart';
 import '../notion/notion_config.dart';
+import '../services/app_permissions.dart';
+import '../services/blocked_provider.dart';
 import '../services/court_rating_service.dart';
 import '../services/courts_provider.dart';
 import '../services/favorites_provider.dart';
@@ -15,9 +19,11 @@ import '../services/notion_service.dart';
 import '../services/pickups_provider.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
+import '../services/report_service.dart';
 import '../services/session.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
+import 'legal_screen.dart';
 import 'notifications_screen.dart';
 import 'match_detail_screen.dart';
 import '../widgets/app_chip.dart';
@@ -429,11 +435,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onTap: () => _editClanBadge(context, profile),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      // Fila plana estilo settings: solo fill sutil, sin borde
+                      // ni sombra dura (menos "caja").
                       decoration: BoxDecoration(
-                        color: AppColors.paper,
+                        color: AppColors.card,
                         borderRadius: BorderRadius.circular(AppShape.rCard),
-                        border: Border.all(color: AppColors.line, width: 1),
-                        boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
                       ),
                       child: Row(
                         children: [
@@ -468,39 +474,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         RevealOnScroll(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 2.5,
-              children: [
-                _StatBox(
-                  label: 'Partidos',
-                  value: '${context.watch<PlaySessionService>().totalPlays}',
-                  icon: Icons.sports_basketball,
-                ),
-                _StatBox(
-                  label: 'Canchas',
-                  value: '${context.watch<PlaySessionService>().uniqueCourtsCount}',
-                  icon: Icons.place_outlined,
-                ),
-                _StatBox(
-                  label: 'Racha',
-                  value: '${context.watch<PlaySessionService>().streak}',
-                  icon: Icons.local_fire_department,
-                  accent: true,
-                  onTap: () => _showStreaks(context),
-                ),
-                _StatBox(
-                  label: 'Rating',
-                  value: '${context.watch<PlaySessionService>().points}',
-                  icon: Icons.star_rounded,
-                  onTap: () => _showRanking(context),
-                ),
-              ],
-            ),
+            child: _statsGrid(),
           ),
         ),
         const SizedBox(height: 24),
@@ -760,43 +734,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Color _resultBorder(PlayResult? r) {
-    // Bordes de estado PLENOS (borde franco negro por defecto).
-    switch (r) {
-      case PlayResult.win:
-        return AppColors.open;
-      case PlayResult.loss:
-        return AppColors.accentDark;
-      case PlayResult.tie:
-        return AppColors.ink;
-      default:
-        return AppColors.ink;
-    }
-  }
-
   Widget _recentPointsRow(PlaySession s, double height) {
     final (color, label) = _resultStyle(s.result);
+    // Carta plana del mazo: tinte de resultado + hairline sutil para definir el
+    // solape; el resultado es un dot+etiqueta, sin chip con borde.
     return Container(
       height: height,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
         color: _resultBg(s.result),
-        border: Border.all(color: _resultBorder(s.result), width: 1),
+        border: Border.all(color: AppColors.white(0.08), width: 1),
         borderRadius: BorderRadius.circular(AppShape.rCard),
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-            decoration: BoxDecoration(
-              color: color.withAlpha(38),
-              borderRadius: BorderRadius.circular(AppShape.rChip),
-              border: Border.all(color: color),
-            ),
-            child: Text(label,
-                style: AppText.grotesk(
-                    size: 9, weight: FontWeight.w800, color: color)),
-          ),
+          _flatChip(color, label),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -831,10 +783,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     return Column(
       children: [
-        for (var i = 0; i < top.length; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
-          _topCourtRow(i + 1, top[i]),
-        ],
+        _sectionCard([
+          for (var i = 0; i < top.length; i++) _topCourtRow(i + 1, top[i]),
+        ]),
         const SizedBox(height: 12),
         _totalTimeInline(ps.totalSeconds),
       ],
@@ -855,33 +806,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _topCourtRow(int rank, ({String courtId, String name, int seconds}) e) {
     final color = _rankColor(rank);
+    // Fila plana: el puesto es tipografía en color de podio, sin medalla-box.
     return GestureDetector(
       onTap: () => widget.onSelectCourt?.call(e.courtId),
       behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          border: Border.all(color: AppColors.white(0.25), width: 1.5),
-          borderRadius: BorderRadius.circular(AppShape.rCard),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         child: Row(
           children: [
-            // Medalla / puesto.
-            Container(
-              width: 26,
-              height: 26,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: color.withAlpha(38),
-                shape: BoxShape.circle,
-                border: Border.all(color: color),
-              ),
+            SizedBox(
+              width: 18,
               child: Text('$rank',
                   style: AppText.archivo(
-                      size: 13, weight: FontWeight.w900, color: color)),
+                      size: 14, weight: FontWeight.w900, color: color)),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: Text(
                 e.name.isEmpty ? 'Cancha' : e.name,
@@ -919,6 +858,96 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Stats 2×2 en UNA sola card con hairlines internas (antes eran 4 boxes
+  /// bordeados con tile de ícono cada uno). Lo destacado es el VALOR, no el box.
+  Widget _statsGrid() {
+    final ps = context.watch<PlaySessionService>();
+
+    Widget cell(String label, String value, IconData icon,
+        {bool accent = false, VoidCallback? onTap}) {
+      final content = Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(icon,
+                    size: 13,
+                    color: accent ? AppColors.accent : AppColors.white(0.4)),
+                const SizedBox(width: 6),
+                Text(label.toUpperCase(),
+                    style: AppText.grotesk(
+                        size: 9.5,
+                        weight: FontWeight.w700,
+                        color: AppColors.white(0.45),
+                        letterSpacing: 0.1)),
+                if (onTap != null) ...[
+                  const Spacer(),
+                  Icon(Icons.chevron_right,
+                      size: 14, color: AppColors.white(0.3)),
+                ],
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(value,
+                style: AppText.archivo(
+                    size: 22,
+                    weight: FontWeight.w900,
+                    height: 1.0,
+                    color: accent ? AppColors.accent : AppColors.ink)),
+          ],
+        ),
+      );
+      if (onTap == null) return content;
+      return GestureDetector(
+          onTap: onTap, behavior: HitTestBehavior.opaque, child: content);
+    }
+
+    Widget vDiv() => Container(width: 1, color: AppColors.white(0.06));
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                Expanded(
+                    child: cell('Partidos', '${ps.totalPlays}',
+                        Icons.sports_basketball)),
+                vDiv(),
+                Expanded(
+                    child: cell('Canchas', '${ps.uniqueCourtsCount}',
+                        Icons.place_outlined)),
+              ],
+            ),
+          ),
+          _hairline(),
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                Expanded(
+                    child: cell(
+                        'Racha', '${ps.streak}', Icons.local_fire_department,
+                        accent: true, onTap: () => _showStreaks(context))),
+                vDiv(),
+                Expanded(
+                    child: cell('Rating', '${ps.points}', Icons.star_rounded,
+                        onTap: () => _showRanking(context))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   PlayStats _statsOf(PlaySessionService ps) => PlayStats(
         partidos: ps.totalPlays,
         canchas: ps.uniqueCourtsCount,
@@ -932,22 +961,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   PlayStats _stats() => _statsOf(context.watch<PlaySessionService>());
 
-  /// Botón "Ver más" que abre un modal con la lista completa.
+  /// "Ver más" plano: texto de acción sin box (abre el modal con la lista).
   Widget _seeMore(String label, VoidCallback onTap) {
     return PressableWidget(
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.bgElev,
-          borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.white(0.25), width: 1.5),
+        color: Colors.transparent,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label,
+                style: AppText.grotesk(
+                    size: 12.5,
+                    weight: FontWeight.w700,
+                    color: AppColors.accent)),
+            const SizedBox(width: 4),
+            Icon(Icons.expand_more, size: 16, color: AppColors.accent),
+          ],
         ),
-        child: Text(label,
-            style: AppText.grotesk(
-                size: 13, weight: FontWeight.w700, color: AppColors.accent)),
       ),
     );
   }
@@ -1037,10 +1071,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ];
       }
       return [
-        for (var i = 0; i < unlockedTitles.length; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
-          _titleRow(unlockedTitles[i], profile),
-        ],
+        _sectionCard([for (final t in unlockedTitles) _titleRow(t, profile)]),
       ];
     });
   }
@@ -1053,12 +1084,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final extra = kAchievements.length - preview;
     return Column(
       children: [
-        for (var i = 0; i < kAchievements.length && i < preview; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
-          _achievementRow(kAchievements[i], s),
-        ],
+        _sectionCard([
+          for (var i = 0; i < kAchievements.length && i < preview; i++)
+            _achievementRow(kAchievements[i], s),
+        ]),
         if (extra > 0) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           _seeMore('Ver los $extra logros restantes', _showAllAchievements),
         ],
       ],
@@ -1069,10 +1100,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _showSheet('Logros', (ctx) {
       final s = _statsOf(ctx.read<PlaySessionService>());
       return [
-        for (var i = 0; i < kAchievements.length; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
-          _achievementRow(kAchievements[i], s),
-        ],
+        _sectionCard([for (final a in kAchievements) _achievementRow(a, s)]),
       ];
     });
   }
@@ -1083,32 +1111,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final badges = context.watch<PlaySessionService>().unlockedBadges;
     final unlocked = badges.contains(a.id) || a.unlocked(s);
     final color = unlocked ? kGold : AppColors.white(0.35);
-    // Card retro-pop (mismo lenguaje que los títulos): papel + borde negro;
-    // el dorado vive en el tile circular del ícono, no en el borde.
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.paper,
-        border: Border.all(
-            color: unlocked ? AppColors.ink : AppColors.white(0.3), width: 1),
-        borderRadius: BorderRadius.circular(AppShape.rCard),
-      ),
+    // Fila plana: el dorado vive en el ícono y el check, sin tile ni borde.
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: color.withAlpha(unlocked ? 33 : 15),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: unlocked ? color : AppColors.white(0.25),
-                width: 1.5,
-              ),
-            ),
-            child: Icon(a.icon, size: 18, color: color),
-          ),
+          Icon(a.icon, size: 18, color: color),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -1147,12 +1155,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final extra = kTitles.length - preview;
     return Column(
       children: [
-        for (var i = 0; i < kTitles.length && i < preview; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
-          _titleRow(kTitles[i], profile),
-        ],
+        _sectionCard([
+          for (var i = 0; i < kTitles.length && i < preview; i++)
+            _titleRow(kTitles[i], profile),
+        ]),
         if (extra > 0) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           _seeMore('Ver los $extra títulos restantes', _showAllTitles),
         ],
       ],
@@ -1164,10 +1172,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final profile =
           ctx.watch<Session>().profile ?? const Profile(name: '');
       return [
-        for (var i = 0; i < kTitles.length; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
-          _titleRow(kTitles[i], profile),
-        ],
+        _sectionCard([for (final t in kTitles) _titleRow(t, profile)]),
       ];
     });
   }
@@ -1186,44 +1191,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // y en su etiqueta, no en el borde. Equipado se destaca con tinte + sombra.
     final rarity = t.color;
     final iconColor = unlocked ? rarity : AppColors.white(0.35);
+    // Fila plana: la rareza vive en el ícono y la etiqueta; equipado se marca
+    // con una barrita de acento a la izquierda (nada de card tintada + sombra).
     return GestureDetector(
       onTap: (unlocked && loggedIn) ? () => _toggleTitle(t.name, equipped) : null,
       behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: equipped
-              ? Color.alphaBlend(rarity.withAlpha(26), AppColors.paper)
-              : AppColors.paper,
-          border: Border.all(
-            color: unlocked ? AppColors.ink : AppColors.white(0.3),
-            width: 2,
-          ),
-          borderRadius: BorderRadius.circular(AppShape.rCard),
-          boxShadow: equipped
-              ? AppFx.hardShadow(offset: const Offset(2, 2))
-              : null,
-        ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 12, 14, 12),
         child: Row(
           children: [
-            // Tile circular con el color de rareza (lenguaje de la referencia).
             Container(
-              width: 36,
-              height: 36,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: iconColor.withAlpha(unlocked ? 33 : 15),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: unlocked ? iconColor : AppColors.white(0.25),
-                  width: 1.5,
-                ),
-              ),
-              child: Icon(
-                  unlocked ? Icons.workspace_premium : Icons.lock_outline,
-                  size: 18,
-                  color: iconColor),
+              width: 3,
+              height: 32,
+              color: equipped ? rarity : Colors.transparent,
             ),
+            const SizedBox(width: 13),
+            Icon(unlocked ? Icons.workspace_premium : Icons.lock_outline,
+                size: 18, color: iconColor),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -1303,42 +1287,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (log.isEmpty) {
       return _emptyCard('Todavía no jugaste partidos.');
     }
-    return Column(
-      children: [
-        for (var i = 0; i < log.length && i < 20; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
-          _historyRow(log[i]),
-        ],
-      ],
-    );
+    return _sectionCard([
+      for (var i = 0; i < log.length && i < 20; i++) _historyRow(log[i]),
+    ]);
   }
 
   Widget _historyRow(PlaySession s) {
     final (color, label) = _resultStyle(s.result);
+    // Fila plana: el resultado es un dot+etiqueta de color, sin card tintada
+    // ni chip con borde.
     return GestureDetector(
       onTap: () => _showMatchDetail(s),
       behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: _resultBg(s.result),
-          border: Border.all(color: _resultBorder(s.result), width: 1),
-          borderRadius: BorderRadius.circular(AppShape.rCard),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: color.withAlpha(38),
-                borderRadius: BorderRadius.circular(AppShape.rChip),
-                border: Border.all(color: color),
-              ),
-              child: Text(label,
-                  style: AppText.grotesk(
-                      size: 10, weight: FontWeight.w800, color: color)),
-            ),
-            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1350,21 +1314,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: AppText.grotesk(size: 13, weight: FontWeight.w600),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   Row(
                     children: [
-                      Icon(Icons.schedule,
-                          size: 12, color: AppColors.white(0.45)),
-                      const SizedBox(width: 4),
+                      _flatChip(color, label),
                       Text(
-                        PlaySessionService.fmt(s.seconds),
-                        style: AppText.grotesk(
-                            size: 11,
-                            weight: FontWeight.w600,
-                            color: AppColors.white(0.6)),
-                      ),
-                      Text(
-                        '  ·  ${_fmtDate(s.endedAtMillis)}',
+                        '  ·  ${PlaySessionService.fmt(s.seconds)}  ·  ${_fmtDate(s.endedAtMillis)}',
                         style: AppText.grotesk(
                             size: 11, color: AppColors.white(0.45)),
                       ),
@@ -1432,26 +1387,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return _emptyCard(
           'Todavía no agregaste canchas a favoritos. Tocá el corazón en una cancha.');
     }
-    return Column(
-      children: [
-        for (var i = 0; i < favs.length; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
-          _favoriteCard(favs[i]),
-        ],
-      ],
-    );
+    return _sectionCard([for (final c in favs) _favoriteCard(c)]);
   }
 
   Widget _favoriteCard(Court c) {
+    // Fila plana dentro de la card de sección (la imagen conserva su clip).
     return PressableWidget(
       onTap: () => widget.onSelectCourt?.call(c.id),
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          border: Border.all(color: AppColors.white(0.25), width: 1.5),
-          borderRadius: BorderRadius.circular(AppShape.rCard),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           children: [
             CourtImage(
@@ -1504,20 +1448,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Estado vacío plano: solo texto atenuado, sin box (regla anti-cajas).
   Widget _emptyCard(String text) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(top: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        border: Border.all(color: AppColors.white(0.25), width: 1.5),
-        borderRadius: BorderRadius.circular(AppShape.rCard),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
       child: Text(
         text,
-        style: AppText.grotesk(size: 13, color: AppColors.white(0.5)),
+        style: AppText.grotesk(size: 12.5, color: AppColors.white(0.35)),
       ),
+    );
+  }
+
+  /// Divider fino entre filas de una sección (reemplaza el borde por item).
+  Widget _hairline() => Container(height: 1, color: AppColors.white(0.06));
+
+  /// Contenedor único por sección: fill sutil, sin borde ni sombra dura. Las
+  /// filas van adentro separadas por hairlines — un solo nivel de "caja" por
+  /// sección en vez de N cards bordeadas.
+  Widget _sectionCard(List<Widget> children) {
+    final kids = <Widget>[];
+    for (var i = 0; i < children.length; i++) {
+      if (i > 0) kids.add(_hairline());
+      kids.add(children[i]);
+    }
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: kids),
+    );
+  }
+
+  /// Estado plano: puntito de color + etiqueta en color, sin fondo ni borde
+  /// (mismo lenguaje que el detalle de partido).
+  Widget _flatChip(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(label,
+            style: AppText.grotesk(
+                size: 10,
+                weight: FontWeight.w800,
+                color: color,
+                letterSpacing: 0.06)),
+      ],
     );
   }
 
@@ -1685,6 +1669,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _showSheet('Ajustes', (ctx) {
       final health = ctx.watch<PlaySessionService>().healthEnabled;
       return [
+        _sectionCard([
         _settingsRow(
           ctx,
           Icons.visibility_outlined,
@@ -1695,7 +1680,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _editPrivacy(context, profile);
           },
         ),
-        const SizedBox(height: 8),
         _settingsRow(
           ctx,
           Icons.tune,
@@ -1709,7 +1693,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
           trailingOn: health,
         ),
-        const SizedBox(height: 8),
         _settingsRow(
           ctx,
           Icons.format_paint_outlined,
@@ -1720,57 +1703,150 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _openPersonalization(context);
           },
         ),
+        ]),
+        const SizedBox(height: 16),
+        Text('LEGAL',
+            style: AppText.grotesk(
+                size: 11,
+                weight: FontWeight.w700,
+                color: AppColors.white(0.4),
+                letterSpacing: 0.1)),
+        const SizedBox(height: 8),
+        _sectionCard([
+          _settingsRow(
+            ctx,
+            Icons.privacy_tip_outlined,
+            'Política de Privacidad',
+            'Qué datos usamos y por qué',
+            () {
+              Navigator.pop(ctx);
+              LegalScreen.open(context, LegalScreen.privacy());
+            },
+          ),
+          _settingsRow(
+            ctx,
+            Icons.description_outlined,
+            'Términos y Condiciones',
+            'Reglas de uso de la app',
+            () {
+              Navigator.pop(ctx);
+              LegalScreen.open(context, LegalScreen.terms());
+            },
+          ),
+          _settingsRow(
+            ctx,
+            Icons.mail_outline,
+            'Contacto y soporte',
+            kSupportEmail,
+            () => launchUrl(
+              Uri(scheme: 'mailto', path: kSupportEmail),
+              mode: LaunchMode.externalApplication,
+            ),
+          ),
+        ]),
+        const SizedBox(height: 16),
+        // Eliminar cuenta: fila destructiva, aislada del resto.
+        PressableWidget(
+          onTap: () {
+            Navigator.pop(ctx);
+            _confirmDeleteAccount(context);
+          },
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(AppShape.rCard),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.delete_forever_outlined,
+                    size: 18, color: AppColors.accentDark),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text('Eliminar cuenta',
+                      style: AppText.grotesk(
+                          size: 14,
+                          weight: FontWeight.w600,
+                          color: AppColors.accentDark)),
+                ),
+                Icon(Icons.chevron_right, size: 18, color: AppColors.white(0.4)),
+              ],
+            ),
+          ),
+        ),
       ];
     });
   }
 
-  /// Selector del color de fondo del perfil (local, se guarda en el equipo).
-  void _editProfileBg(BuildContext context) {
-    _showSheet('Fondo del perfil', (ctx) {
-      final current = ctx.watch<Session>().profileBg;
-      return [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              for (final e in AppColors.profileBgs.entries)
-                PressableWidget(
-                  onTap: () {
-                    ctx.read<Session>().setProfileBg(e.key);
-                    Navigator.pop(ctx);
-                  },
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: e.value,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.ink,
-                        // Marcado: el elegido (o el default oliva si no eligió).
-                        width: (current.isEmpty ? 'cream' : current) == e.key
-                            ? 3
-                            : 1.5,
-                      ),
-                    ),
-                    child: (current.isEmpty ? 'cream' : current) == e.key
-                        ? Icon(Icons.check,
-                            size: 18,
-                            color: e.value.computeLuminance() > 0.6
-                                ? AppColors.ink
-                                : Colors.white)
-                        : null,
-                  ),
-                ),
-            ],
+  /// Confirmación fuerte + borrado real de la cuenta y sus datos en Notion.
+  Future<void> _confirmDeleteAccount(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bgElev,
+        title: Text('Eliminar cuenta',
+            style: AppText.archivo(size: 18, weight: FontWeight.w800)),
+        content: Text(
+          'Esto borra tu perfil, tu historial de partidos, tus reseñas y tus '
+          'amigos de forma permanente. No se puede deshacer.',
+          style: AppText.grotesk(size: 13, color: AppColors.white(0.7)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancelar',
+                style: AppText.grotesk(size: 13, color: AppColors.white(0.6))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Eliminar',
+                style: AppText.grotesk(
+                    size: 13,
+                    weight: FontWeight.w800,
+                    color: AppColors.accentDark)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+
+    // Capturamos navigator y messenger ANTES del await: al borrar la cuenta la
+    // sesión pasa a null y _Root reemplaza este árbol por la pantalla de auth,
+    // dejando `context` desmontado. Estas referencias sí siguen vivas.
+    final nav = Navigator.of(context, rootNavigator: true);
+    final messenger = ScaffoldMessenger.of(context);
+    final session = context.read<Session>();
+
+    // Loader modal mientras se archivan las páginas en Notion.
+    nav.push(
+      DialogRoute<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: AppColors.accent),
           ),
         ),
-        const SizedBox(height: 12),
-      ];
-    });
+      ),
+    );
+    final err = await session.deleteAccount();
+    nav.pop(); // cierra el loader (aunque el árbol de abajo haya cambiado)
+    if (err != null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Se cerró tu sesión, pero algunos datos podrían no haberse '
+            'borrado. Escribinos a $kSupportEmail.',
+            style: AppText.grotesk(size: 13),
+          ),
+        ),
+      );
+    }
+    // Al quedar sin sesión, _Root vuelve solo a la pantalla de auth.
   }
 
   /// Pantalla de personalización: fondo del perfil + pantalla de inicio.
@@ -1839,26 +1915,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Text('Qué pestaña se abre al iniciar la app',
             style: AppText.grotesk(size: 11, color: AppColors.white(0.4))),
         const SizedBox(height: 10),
-        for (final opt in tabOptions)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: GestureDetector(
+        // Opciones planas dentro de una sola card con hairlines; la elegida se
+        // marca con tinte + acento (sin borde por opción).
+        _sectionCard([
+          for (final opt in tabOptions)
+            GestureDetector(
               onTap: () => ctx.read<Session>().setDefaultTab(opt.$1),
               behavior: HitTestBehavior.opaque,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  color: currentTab == opt.$1
-                      ? AppColors.accent.withAlpha(20)
-                      : AppColors.card,
-                  borderRadius: BorderRadius.circular(AppShape.rCard),
-                  border: Border.all(
-                    color: currentTab == opt.$1
-                        ? AppColors.accent
-                        : AppColors.line,
-                    width: currentTab == opt.$1 ? 1.5 : 1,
-                  ),
-                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                color: currentTab == opt.$1
+                    ? AppColors.accent.withAlpha(18)
+                    : Colors.transparent,
                 child: Row(
                   children: [
                     Icon(opt.$3,
@@ -1882,7 +1951,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
-          ),
+        ]),
         const SizedBox(height: 8),
       ];
     });
@@ -1891,16 +1960,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _settingsRow(BuildContext ctx, IconData icon, String title,
       String subtitle, VoidCallback onTap,
       {bool trailingOn = false}) {
+    // Fila plana (va dentro de una _sectionCard con hairlines).
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          border: Border.all(color: AppColors.white(0.25), width: 1.5),
-          borderRadius: BorderRadius.circular(AppShape.rBtn),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         child: Row(
           children: [
             Icon(icon, size: 18, color: AppColors.accent),
@@ -2184,11 +2249,28 @@ class _RankingSheetState extends State<_RankingSheet> {
                             strokeWidth: 2, color: AppColors.accent),
                       ),
                     )
-                  : ListView.separated(
+                  // Una sola card con filas planas separadas por hairlines
+                  // (antes cada puesto era un box bordeado).
+                  : Padding(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                      itemCount: _entries.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (_, i) => _rankRow(i, _entries[i]),
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.card,
+                            borderRadius: BorderRadius.circular(AppShape.rCard),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            padding: EdgeInsets.zero,
+                            itemCount: _entries.length,
+                            separatorBuilder: (_, _) => Container(
+                                height: 1, color: AppColors.white(0.06)),
+                            itemBuilder: (_, i) => _rankRow(i, _entries[i]),
+                          ),
+                        ),
+                      ),
                     ),
             ),
           ],
@@ -2211,16 +2293,10 @@ class _RankingSheetState extends State<_RankingSheet> {
             : i == 2
                 ? '\u{1F949}'
                 : '';
+    // Fila plana: "vos" se marca solo con tinte de acento, sin borde.
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: e.isMe ? AppColors.accent.withAlpha(20) : AppColors.card,
-        borderRadius: BorderRadius.circular(AppShape.rCard),
-        border: Border.all(
-          color: e.isMe ? AppColors.accent.withAlpha(80) : AppColors.line,
-          width: 1,
-        ),
-      ),
+      color: e.isMe ? AppColors.accent.withAlpha(18) : Colors.transparent,
       child: Row(
         children: [
           SizedBox(
@@ -2448,34 +2524,47 @@ class _FriendsTabState extends State<_FriendsTab> {
                   ),
                 );
               }
-              final friends = snap.data ?? [];
+              // Ocultamos a los usuarios bloqueados de este dispositivo.
+              final blocked = context.watch<BlockedProvider>();
+              final friends = (snap.data ?? [])
+                  .where((f) => !blocked.isBlocked(f.friendEmail))
+                  .toList();
               if (friends.isEmpty) {
+                // Estado vacío plano: solo texto, sin box.
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                   child: Align(
                     alignment: Alignment.topCenter,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                      decoration: BoxDecoration(
-                        color: AppColors.card,
-                        border: Border.all(
-                            color: AppColors.white(0.25), width: 1.5),
-                        borderRadius: BorderRadius.circular(AppShape.rCard),
-                      ),
-                      child: Text(
-                        'Todavía no agregaste amigos. Buscá su handle arriba y agregalos',
-                        style: AppText.grotesk(size: 13, color: AppColors.white(0.5)),
-                      ),
+                    child: Text(
+                      'Todavía no agregaste amigos. Buscá su handle arriba y agregalos',
+                      style: AppText.grotesk(
+                          size: 12.5, color: AppColors.white(0.35)),
                     ),
                   ),
                 );
               }
-              return ListView.separated(
+              // Una sola card con filas planas separadas por hairlines.
+              return ListView(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 180),
-                itemCount: friends.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 8),
-                itemBuilder: (context, i) => _friendCard(friends[i]),
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(AppShape.rCard),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < friends.length; i++) ...[
+                          if (i > 0)
+                            Container(
+                                height: 1, color: AppColors.white(0.06)),
+                          _friendCard(friends[i]),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
               );
             },
           ),
@@ -2627,13 +2716,9 @@ class _FriendsTabState extends State<_FriendsTab> {
     final friendTitle = fp?.title ?? '';
     final friendClan = fp?.clan ?? '';
     final friendLevel = (fp?.level ?? '').isEmpty ? '1' : fp!.level;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        border: Border.all(color: AppColors.white(0.25), width: 1.5),
-        borderRadius: BorderRadius.circular(AppShape.rCard),
-      ),
+    // Fila plana (va dentro de la card única con hairlines).
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
         children: [
           _friendAvatar(initial, fp),
@@ -2661,20 +2746,13 @@ class _FriendsTabState extends State<_FriendsTab> {
                               color: AppColors.accent)),
                     ],
                     const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.accent.withAlpha(30),
-                        borderRadius: BorderRadius.circular(AppShape.rChip),
-                        border: Border.all(color: AppColors.accent),
-                      ),
-                      child: Text('Nivel $friendLevel',
-                          style: AppText.grotesk(
-                              size: 9,
-                              weight: FontWeight.w700,
-                              color: AppColors.accent)),
-                    ),
+                    // Nivel plano pegado al nombre (sin chip bordeado).
+                    Text('NV $friendLevel',
+                        style: AppText.grotesk(
+                            size: 10,
+                            weight: FontWeight.w800,
+                            color: AppColors.accent,
+                            letterSpacing: 0.06)),
                   ],
                 ),
                 Text(
@@ -2699,16 +2777,63 @@ class _FriendsTabState extends State<_FriendsTab> {
               ],
             ),
           ),
-          PressableWidget(
-            onTap: () => _remove(f),
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: Icon(Icons.person_remove_outlined, size: 20, color: AppColors.white(0.4)),
-            ),
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, size: 20, color: AppColors.white(0.4)),
+            color: AppColors.bgElev,
+            onSelected: (v) {
+              switch (v) {
+                case 'remove':
+                  _remove(f);
+                  break;
+                case 'block':
+                  _blockFriend(f);
+                  break;
+                case 'report':
+                  _reportFriend(f);
+                  break;
+              }
+            },
+            itemBuilder: (_) => [
+              _menuItem('remove', Icons.person_remove_outlined, 'Quitar amigo'),
+              _menuItem('block', Icons.block, 'Bloquear'),
+              _menuItem('report', Icons.flag_outlined, 'Reportar'),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  PopupMenuItem<String> _menuItem(String value, IconData icon, String label) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 17, color: AppColors.white(0.7)),
+          const SizedBox(width: 10),
+          Text(label, style: AppText.grotesk(size: 13)),
+        ],
+      ),
+    );
+  }
+
+  /// Bloquea a un usuario (local): oculta su contenido y lo quita de amigos.
+  Future<void> _blockFriend(Friend f) async {
+    await context.read<BlockedProvider>().block(f.friendEmail);
+    await _service.removeFriend(f.pageId).catchError((_) {});
+    if (!mounted) return;
+    _refresh();
+    _snack('Bloqueaste a ${f.friendName.isEmpty ? f.friendHandle : f.friendName}');
+  }
+
+  Future<void> _reportFriend(Friend f) async {
+    final ok = await ReportService.report(
+      tipo: 'usuario',
+      referencia: '${f.friendHandle} (${f.friendEmail})',
+      reportadoPor: _ownerEmail,
+    );
+    if (!mounted) return;
+    if (!ok) _snack('No se pudo abrir el mail. Escribinos a $kSupportEmail.');
   }
 }
 
@@ -3286,6 +3411,51 @@ class _PrivacyDialogState extends State<_PrivacyDialog> {
     }
   }
 
+  /// Al ACTIVAR la detección en segundo plano mostramos primero la divulgación
+  /// destacada que exige Google Play (qué se recolecta, para qué y que ocurre
+  /// con la app cerrada) ANTES de disparar el permiso del sistema. Al desactivar
+  /// no hay disclosure. El permiso "Siempre" se pide solo tras aceptar.
+  Future<void> _toggleBackground(bool v) async {
+    if (!v) {
+      setState(() => _background = false);
+      return;
+    }
+    final accept = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bgElev,
+        title: Text('Ubicación en segundo plano',
+            style: AppText.archivo(size: 17, weight: FontWeight.w800)),
+        content: Text(
+          '1of1 recolecta tu ubicación para detectar y registrar tus partidos, '
+          'incluso cuando la app está cerrada o no la estás usando. '
+          'Solo guardamos en qué cancha jugaste, no tus coordenadas. '
+          'Podés desactivarlo cuando quieras desde acá o desde los ajustes del '
+          'sistema.',
+          style: AppText.grotesk(size: 13, color: AppColors.white(0.75)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Ahora no',
+                style: AppText.grotesk(size: 13, color: AppColors.white(0.6))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Permitir',
+                style: AppText.grotesk(
+                    size: 13,
+                    weight: FontWeight.w800,
+                    color: AppColors.accent)),
+          ),
+        ],
+      ),
+    );
+    if (accept != true) return;
+    await requestBackgroundLocation();
+    if (mounted) setState(() => _background = true);
+  }
+
   Widget _switchRow(String title, String subtitle, bool value,
       ValueChanged<bool> onChanged) {
     return Padding(
@@ -3364,7 +3534,7 @@ class _PrivacyDialogState extends State<_PrivacyDialog> {
             'Detectar en segundo plano',
             'Detecta y guarda tus partidos aunque no tengas la app abierta. Requiere permiso de ubicación "Siempre".',
             _background,
-            (v) => setState(() => _background = v),
+            _toggleBackground,
           ),
         ],
       ),
@@ -3430,120 +3600,5 @@ class _LiveElapsedState extends State<_LiveElapsed> {
       style: AppText.grotesk(
           size: 11, weight: FontWeight.w600, color: AppColors.open),
     );
-  }
-}
-
-class _StatBox extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool accent;
-  final IconData? icon;
-  final VoidCallback? onTap;
-  /// Aclaración chica opcional debajo del label (ej. "en construcción").
-  final String? note;
-
-  const _StatBox({
-    required this.label,
-    required this.value,
-    this.accent = false,
-    this.icon,
-    this.onTap,
-    this.note,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // OJO: sobre la caja de acento el texto va BLANCO real (AppColors.white(op)
-    // devuelve negro tras el rebrand claro).
-    final labelColor = accent ? Colors.white : AppColors.white(0.55);
-    final box = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        // Caja destacada: acento plano + borde negro; el resto sólido con
-        // borde claro. Sombra dura solo en la destacada.
-        color: accent ? AppColors.accent : AppColors.card,
-        border: accent
-            ? Border.all(color: AppColors.line, width: 1)
-            : Border.all(color: AppColors.white(0.25), width: 1.5),
-        borderRadius: BorderRadius.circular(AppShape.rCard),
-        boxShadow:
-            accent ? AppFx.hardShadow(offset: const Offset(3, 3)) : null,
-      ),
-      child: Row(
-        children: [
-          if (icon != null) ...[
-            Container(
-              width: 38,
-              height: 38,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: accent ? Colors.white24 : AppColors.accent.withAlpha(28),
-                borderRadius: BorderRadius.circular(AppShape.rBtn),
-              ),
-              child: Icon(
-                icon,
-                size: 20,
-                color: accent ? Colors.white : AppColors.accent,
-              ),
-            ),
-            const SizedBox(width: 12),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppText.archivo(
-                    size: 24,
-                    weight: FontWeight.w900,
-                    color: accent ? Colors.white : AppColors.ink,
-                    letterSpacing: -0.02,
-                    height: 1.0,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        label.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppText.grotesk(
-                          size: 10,
-                          weight: FontWeight.w700,
-                          color: labelColor,
-                          letterSpacing: 0.12,
-                        ),
-                      ),
-                    ),
-                    if (note != null) ...[
-                      const SizedBox(width: 5),
-                      Icon(Icons.construction,
-                          size: 11,
-                          color: accent
-                              ? Colors.white70
-                              : AppColors.white(0.35)),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-          if (onTap != null)
-            Icon(Icons.chevron_right,
-                size: 16,
-                color: accent ? Colors.white : AppColors.white(0.3)),
-        ],
-      ),
-    );
-    if (onTap == null) return box;
-    return PressableWidget(
-        onTap: onTap, child: box);
   }
 }

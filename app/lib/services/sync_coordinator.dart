@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:native_geofence/native_geofence.dart';
 import '../notion/notion_config.dart';
 import 'courts_provider.dart';
+import 'blocked_provider.dart';
 import 'favorites_provider.dart';
 import 'geofence_service.dart';
 import 'notifications_service.dart';
@@ -29,11 +30,13 @@ class SyncCoordinator {
     required CourtsProvider courts,
     required FavoritesProvider favorites,
     required PickupsProvider pickups,
+    required BlockedProvider blocked,
   })  : _session = session,
         _play = play,
         _courts = courts,
         _favorites = favorites,
-        _pickups = pickups {
+        _pickups = pickups,
+        _blocked = blocked {
     _wire();
   }
 
@@ -42,6 +45,7 @@ class SyncCoordinator {
   final CourtsProvider _courts;
   final FavoritesProvider _favorites;
   final PickupsProvider _pickups;
+  final BlockedProvider _blocked;
 
   // Evita arrancar el tracking más de una vez por sesión (Session notifica en
   // cada cambio de perfil, no solo al loguear).
@@ -231,6 +235,7 @@ class SyncCoordinator {
         _play.resetForLogout();
         _favorites.clearForLogout();
         _pickups.clearForLogout();
+        _blocked.clearForLogout();
         _trackingStarted = false;
         _geofencedCount = -1;
         GeofenceService.instance.clear();
@@ -245,6 +250,8 @@ class SyncCoordinator {
     // Cargar los pickups/invitaciones del usuario (para el badge de la campana y
     // las notificaciones del perfil, sin depender de abrir la pestaña Crew).
     unawaited(_pickups.loadForUser(userKey));
+    // Lista local de usuarios bloqueados de esta cuenta.
+    unawaited(_blocked.loadForUser(userKey));
     // Sembrar desde Notion para no perder progreso tras reinstalar.
     _play.startTracking(
       userKey: userKey,
