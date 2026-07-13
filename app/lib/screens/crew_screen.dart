@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../data/models.dart';
 import '../services/pickups_provider.dart';
 import '../services/session.dart';
-import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/basketball_graffiti.dart';
 import '../widgets/pressable_widget.dart';
@@ -101,7 +100,25 @@ class _CrewScreenState extends State<CrewScreen> {
                 else if (pickups.isEmpty)
                   _emptyState()
                 else
-                  for (final p in pickups) _pickupCard(p, myEmail),
+                  // Una sola card con los pickups como filas planas separadas
+                  // por hairlines (mismo lenguaje editorial que el perfil).
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(AppShape.rCard),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < pickups.length; i++) ...[
+                          if (i > 0)
+                            Container(
+                                height: 1, color: AppColors.white(0.06)),
+                          _pickupCard(pickups[i], myEmail),
+                        ],
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
@@ -147,22 +164,15 @@ class _CrewScreenState extends State<CrewScreen> {
     final total = p.invitedMembers.length;
     final accepted = p.acceptedMembers.length;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: PressableWidget(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => PickupChatScreen(pickupId: p.pageId),
-          ),
+    // Fila plana (va dentro de la card única con hairlines).
+    return PressableWidget(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PickupChatScreen(pickupId: p.pageId),
         ),
-        child: Container(
+      ),
+      child: Padding(
           padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            border: Border.all(color: AppColors.line, width: 1),
-            borderRadius: BorderRadius.circular(AppShape.rCard),
-            boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
-          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -267,7 +277,6 @@ class _CrewScreenState extends State<CrewScreen> {
               ),
             ],
           ),
-        ),
       ),
     );
   }
@@ -291,20 +300,25 @@ class _CrewScreenState extends State<CrewScreen> {
     );
   }
 
+  /// Estado plano: dot de color + etiqueta, sin globo (mismo lenguaje que el
+  /// historial del perfil).
   Widget _badge(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withAlpha(35),
-        borderRadius: BorderRadius.circular(AppShape.rChip),
-        border: Border.all(color: color, width: 1),
-      ),
-      child: Text(text,
-          style: AppText.grotesk(
-              size: 8,
-              weight: FontWeight.w800,
-              color: color,
-              letterSpacing: 0.06)),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(text,
+            style: AppText.grotesk(
+                size: 9,
+                weight: FontWeight.w800,
+                color: color,
+                letterSpacing: 0.06)),
+      ],
     );
   }
 }

@@ -830,11 +830,18 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
                   color: AppColors.accent,
                 ),
               const Spacer(),
-              // Reportar/bloquear la reseña de otro usuario (UGC).
+              // Reportar/bloquear la reseña de otro usuario (UGC). Con `child`
+              // (no `icon`) el botón mide lo que mide el ícono: el IconButton
+              // interno de `icon:` impone 48px y deformaba la card.
               if (!isMine && r.userEmail.isNotEmpty) ...[
                 PopupMenuButton<String>(
-                  icon: Icon(Icons.more_horiz, size: 16, color: AppColors.white(0.4)),
+                  padding: EdgeInsets.zero,
                   color: AppColors.bgElev,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.more_horiz,
+                        size: 16, color: AppColors.white(0.4)),
+                  ),
                   onSelected: (v) {
                     if (v == 'report') _reportReview(r);
                     if (v == 'block') _blockReviewer(r);

@@ -56,53 +56,69 @@ class CreateScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
-              for (var i = 0; i < _options.length; i++)
-                PressableWidget(
-                  onTap: () => _onTap(context, i),
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(18),
-                    // Card de opción: sólida con borde claro franco.
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      border: Border.all(color: AppColors.line, width: 1),
-                      borderRadius: BorderRadius.circular(AppShape.rCard),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(_options[i].$3, size: 28, color: AppColors.accent),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+              // Una sola card con las opciones como filas planas separadas por
+              // hairlines (mismo lenguaje editorial que el perfil).
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(AppShape.rCard),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    for (var i = 0; i < _options.length; i++) ...[
+                      if (i > 0)
+                        Container(height: 1, color: AppColors.white(0.06)),
+                      PressableWidget(
+                        onTap: () => _onTap(context, i),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 18, vertical: 16),
+                          child: Row(
                             children: [
-                              Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      _options[i].$1,
-                                      style: AppText.archivo(size: 16, weight: FontWeight.w800),
+                              Icon(_options[i].$3,
+                                  size: 24, color: AppColors.accent),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            _options[i].$1,
+                                            style: AppText.archivo(
+                                                size: 16,
+                                                weight: FontWeight.w800),
+                                          ),
+                                        ),
+                                        if (_wip.contains(i)) ...[
+                                          const SizedBox(width: 8),
+                                          const UnderConstructionBadge(),
+                                        ],
+                                      ],
                                     ),
-                                  ),
-                                  if (_wip.contains(i)) ...[
-                                    const SizedBox(width: 8),
-                                    const UnderConstructionBadge(),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _options[i].$2,
+                                      style: AppText.grotesk(
+                                          size: 12,
+                                          color: AppColors.white(0.55)),
+                                    ),
                                   ],
-                                ],
+                                ),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _options[i].$2,
-                                style: AppText.grotesk(size: 12, color: AppColors.white(0.55)),
-                              ),
+                              Icon(Icons.chevron_right,
+                                  color: AppColors.white(0.35), size: 20),
                             ],
                           ),
                         ),
-                        const Icon(Icons.chevron_right, color: Colors.white, size: 20),
-                      ],
-                    ),
-                  ),
+                      ),
+                    ],
+                  ],
                 ),
+              ),
             ],
           ),
         ],

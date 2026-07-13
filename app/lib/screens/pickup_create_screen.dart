@@ -12,7 +12,6 @@ import '../services/notion_service.dart';
 import '../services/pickups_provider.dart';
 import '../services/play_session_service.dart';
 import '../services/session.dart';
-import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/pressable_widget.dart';
 import 'main_shell.dart';
@@ -290,7 +289,11 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _label('Invitar amigos'),
-                      for (final f in _friends) _friendRow(f),
+                      for (var i = 0; i < _friends.length; i++) ...[
+                        if (i > 0)
+                          Container(height: 1, color: AppColors.white(0.06)),
+                        _friendRow(_friends[i]),
+                      ],
                     ],
                   ),
                 ),
@@ -308,15 +311,18 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                       maxLines: 2,
                       style: AppText.grotesk(size: 14, color: Colors.white),
                       cursorColor: AppColors.accent,
+                      // Input plano: filled sin borde; el foco se marca con acento.
                       decoration: InputDecoration(
                         hintText: 'Ej. nivel intermedio, traer pelota',
                         hintStyle: AppText.grotesk(size: 13, color: AppColors.white(0.35)),
+                        filled: true,
+                        fillColor: AppColors.white(0.05),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppShape.rBtn),
-                          borderSide: BorderSide(color: AppColors.white(0.15), width: 1),
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppShape.rBtn),
+                          borderRadius: BorderRadius.circular(12),
                           borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
                         ),
                       ),
@@ -331,12 +337,12 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                 onTap: _saving ? null : _create,
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  // CTA plano: acento pleno, sin borde negro ni sombra dura
+                  // (mismo lenguaje que "Compartir resultado" del detalle).
                   decoration: BoxDecoration(
                     color: _saving ? AppColors.white(0.1) : AppColors.accent,
                     borderRadius: BorderRadius.circular(AppShape.rBtn),
-                    border: Border.all(color: AppColors.ink, width: 2),
-                    boxShadow: _saving ? null : AppFx.hardShadow(),
                   ),
                   alignment: Alignment.center,
                   child: _saving
@@ -346,7 +352,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                         )
                       : Text('CREAR PICKUP',
                           style: AppText.archivo(
-                              size: 15, weight: FontWeight.w900, letterSpacing: 0.04, color: Colors.white)),
+                              size: 14, weight: FontWeight.w800, letterSpacing: 0.04, color: Colors.white)),
                 ),
               ),
             ],
@@ -356,7 +362,8 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     );
   }
 
-  // ── Card de sección: sólida con borde franco y sombra dura (neobrutalista). ──
+  // ── Card de sección: fill sutil, sin borde ni sombra (mismo lenguaje
+  // editorial que el perfil: un solo nivel de "caja" por sección). ──
   Widget _sectionCard({required Widget child}) {
     return Container(
       width: double.infinity,
@@ -364,8 +371,6 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(AppShape.rCard),
-        border: Border.all(color: AppColors.line, width: 2),
-        boxShadow: AppFx.hardShadow(),
       ),
       child: child,
     );
@@ -391,12 +396,13 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
       return Text('No hay canchas disponibles',
           style: AppText.grotesk(size: 14, color: AppColors.white(0.4)));
     }
+    // Input plano: fill sutil, sin borde (el chevron del dropdown ya da la
+    // affordance).
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: AppColors.white(0.06),
-        borderRadius: BorderRadius.circular(AppShape.rBtn),
-        border: Border.all(color: AppColors.white(0.12), width: 1),
+        color: AppColors.white(0.05),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: DropdownButton<Court>(
         value: _selected,
@@ -505,13 +511,12 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
+                    // Banda de selección: tinte de acento plano, sin borde.
                     Container(
                       height: 44,
                       decoration: BoxDecoration(
-                        color: AppColors.accent.withAlpha(30),
+                        color: AppColors.accent.withAlpha(26),
                         borderRadius: BorderRadius.circular(AppShape.rBtn),
-                        border:
-                            Border.all(color: AppColors.accent, width: 1.5),
                       ),
                     ),
                     ListWheelScrollView.useDelegate(
@@ -544,18 +549,16 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                 onTap: () => Navigator.pop(ctx, slots[selected]),
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: AppColors.accent,
                     borderRadius: BorderRadius.circular(AppShape.rBtn),
-                    border: Border.all(color: AppColors.ink, width: 2),
-                    boxShadow: AppFx.hardShadow(),
                   ),
                   child: Text('CONFIRMAR',
                       style: AppText.archivo(
-                          size: 15,
-                          weight: FontWeight.w900,
+                          size: 14,
+                          weight: FontWeight.w800,
                           letterSpacing: 0.04,
                           color: Colors.white)),
                 ),
@@ -599,23 +602,25 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
-          color: AppColors.white(0.06),
-          borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.white(0.12), width: 1),
+          color: AppColors.white(0.05),
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
             Icon(Icons.calendar_today, size: 16, color: AppColors.white(0.5)),
             const SizedBox(width: 10),
-            Text(
-              _when == null
-                  ? 'Elegir fecha y hora'
-                  : '${_when!.day}/${_when!.month}/${_when!.year} · ${_when!.hour.toString().padLeft(2, '0')}:${_when!.minute.toString().padLeft(2, '0')}',
-              style: AppText.grotesk(
-                size: 14,
-                color: _when == null ? AppColors.white(0.4) : Colors.white,
+            Expanded(
+              child: Text(
+                _when == null
+                    ? 'Elegir fecha y hora'
+                    : '${_when!.day}/${_when!.month}/${_when!.year} · ${_when!.hour.toString().padLeft(2, '0')}:${_when!.minute.toString().padLeft(2, '0')}',
+                style: AppText.grotesk(
+                  size: 14,
+                  color: _when == null ? AppColors.white(0.4) : Colors.white,
+                ),
               ),
             ),
+            Icon(Icons.chevron_right, size: 18, color: AppColors.white(0.3)),
           ],
         ),
       ),
@@ -628,15 +633,18 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
       onChanged: onChanged,
       style: AppText.grotesk(size: 14, color: Colors.white),
       cursorColor: cursorColor,
+      // Input plano: filled sin borde; el foco toma el color del equipo.
       decoration: InputDecoration(
         hintText: 'Nombre del equipo',
         hintStyle: AppText.grotesk(size: 13, color: AppColors.white(0.3)),
+        filled: true,
+        fillColor: AppColors.white(0.05),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppShape.rBtn),
-          borderSide: BorderSide(color: AppColors.white(0.12), width: 1),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: cursorColor, width: 1.5),
         ),
       ),
@@ -662,17 +670,10 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     final inB = _teamBMembers.contains(f.friendEmail);
     final assignedColor = inA ? _hex(_teamAColor) : (inB ? _hex(_teamBColor) : null);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.white(0.04),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: assignedColor ?? AppColors.white(0.1),
-          width: assignedColor != null ? 1.5 : 1,
-        ),
-      ),
+    // Fila plana (sin box por amigo): la asignación se lee en el color del
+    // avatar y los toggles A/B; las filas se separan con hairlines.
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
           CircleAvatar(
@@ -744,13 +745,10 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        // Chip plano: acento pleno si está activo, fill sutil si no (sin borde).
         decoration: BoxDecoration(
-          color: active ? AppColors.accent : AppColors.white(0.08),
+          color: active ? AppColors.accent : AppColors.white(0.06),
           borderRadius: BorderRadius.circular(AppShape.rChip),
-          border: Border.all(
-            color: active ? AppColors.accent : AppColors.white(0.12),
-            width: active ? 1.5 : 1,
-          ),
         ),
         child: Text(
           label,
@@ -771,9 +769,8 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
         width: 36,
         height: 36,
         decoration: BoxDecoration(
-          color: AppColors.white(0.1),
+          color: AppColors.white(0.08),
           borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.white(0.15), width: 1),
         ),
         child: Icon(icon, color: Colors.white, size: 18),
       ),
@@ -794,9 +791,6 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
             color: active ? Colors.white : Colors.transparent,
             width: 3,
           ),
-          boxShadow: active
-              ? [BoxShadow(color: color.withAlpha(80), blurRadius: 10)]
-              : null,
         ),
         child: active
             ? const Icon(Icons.check, size: 18, color: Colors.white)

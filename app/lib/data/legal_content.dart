@@ -11,7 +11,7 @@ library;
 /// Email de contacto / soporte / ejercicio de derechos de datos. Debe ser una
 /// casilla monitoreada: las tiendas exigen responder reportes de contenido en
 /// ≤ 24 h y atender pedidos de datos (acceso / eliminación).
-const String kSupportEmail = 'franco@mediadigitalgroup.com';
+const String kSupportEmail = 'francobusch130@gmail.com';
 
 /// URLs públicas de los documentos legales. Vacías por ahora (no hay sitio):
 /// cuando existan, la ficha de cada tienda debe apuntar acá y [LegalScreen]

@@ -8,7 +8,6 @@ import '../services/courts_provider.dart';
 import '../services/pickups_provider.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
-import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/pressable_widget.dart';
 
@@ -158,7 +157,9 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
     );
   }
 
-  // Título tocable que despliega/colapsa el panel de info.
+  // Título tocable que despliega/colapsa el panel de info. Header y panel son
+  // UNA sola card continua (lenguaje editorial): al abrir, el header redondea
+  // solo arriba y el panel continúa abajo separado por un hairline.
   Widget _infoHeader(Pickup pickup) {
     return PressableWidget(
       onTap: () => setState(() => _infoOpen = !_infoOpen),
@@ -166,9 +167,10 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: AppColors.card,
-          borderRadius: BorderRadius.circular(AppShape.rCard),
-          border: Border.all(color: AppColors.line, width: 2),
-          boxShadow: AppFx.hardShadow(),
+          borderRadius: _infoOpen
+              ? const BorderRadius.vertical(
+                  top: Radius.circular(AppShape.rCard))
+              : BorderRadius.circular(AppShape.rCard),
         ),
         child: Row(
           children: [
@@ -188,17 +190,20 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
   }
 
   Widget _infoPanel(Pickup pickup, bool isCreator) {
+    // Continuación de la card del header (misma superficie, redondeo solo
+    // abajo), separada por un hairline. Sin borde ni caja aparte.
     return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.bgElev,
-        borderRadius: BorderRadius.circular(AppShape.rCard),
-        border: Border.all(color: AppColors.line, width: 1),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      decoration: const BoxDecoration(
+        color: AppColors.card,
+        borderRadius:
+            BorderRadius.vertical(bottom: Radius.circular(AppShape.rCard)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _hairline(),
+          const SizedBox(height: 14),
           // Lugar / fecha / formato.
           _infoRow(Icons.place_outlined, _courtName(pickup)),
           const SizedBox(height: 8),
@@ -216,16 +221,20 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
           ],
           const SizedBox(height: 16),
           _label('Equipos'),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           _teamBlock(pickup, 'A', pickup.teamAName, pickup.teamAColor,
               pickup.teamAMembers, isCreator),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
+          _hairline(),
+          const SizedBox(height: 14),
           _teamBlock(pickup, 'B', pickup.teamBName, pickup.teamBColor,
               pickup.teamBMembers, isCreator),
         ],
       ),
     );
   }
+
+  Widget _hairline() => Container(height: 1, color: AppColors.white(0.06));
 
   Widget _infoRow(IconData icon, String text) {
     return Row(
@@ -250,44 +259,38 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
   Widget _teamBlock(Pickup pickup, String team, String name, String colorHex,
       List<String> members, bool isCreator) {
     final color = _hex(colorHex);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color, width: 1.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                  width: 10,
-                  height: 10,
-                  decoration:
-                      BoxDecoration(color: color, shape: BoxShape.circle)),
-              const SizedBox(width: 8),
-              Text(name,
-                  style: AppText.grotesk(
-                      size: 13, weight: FontWeight.w800, color: Colors.white)),
-              const SizedBox(width: 6),
-              Text('${members.length}',
-                  style:
-                      AppText.grotesk(size: 12, color: AppColors.white(0.4))),
-            ],
-          ),
-          if (members.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8, left: 2),
-              child: Text('Sin jugadores',
-                  style:
-                      AppText.grotesk(size: 12, color: AppColors.white(0.35))),
-            )
-          else
-            for (final m in members) _memberRow(pickup, m, team, isCreator),
-        ],
-      ),
+    // Bloque plano (sin caja con borde): el color del equipo vive en el dot y
+    // el nombre; los equipos se separan con hairlines en el panel.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+                width: 10,
+                height: 10,
+                decoration:
+                    BoxDecoration(color: color, shape: BoxShape.circle)),
+            const SizedBox(width: 8),
+            Text(name,
+                style: AppText.grotesk(
+                    size: 13, weight: FontWeight.w800, color: color)),
+            const SizedBox(width: 6),
+            Text('${members.length}',
+                style:
+                    AppText.grotesk(size: 12, color: AppColors.white(0.4))),
+          ],
+        ),
+        if (members.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8, left: 2),
+            child: Text('Sin jugadores',
+                style:
+                    AppText.grotesk(size: 12, color: AppColors.white(0.35))),
+          )
+        else
+          for (final m in members) _memberRow(pickup, m, team, isCreator),
+      ],
     );
   }
 
@@ -319,12 +322,6 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
     final titleColor = !accepted
         ? AppColors.white(0.2)
         : titleByName(title)?.color ?? AppColors.accent;
-    final levelBg = !accepted
-        ? AppColors.white(0.1)
-        : AppColors.accent.withAlpha(28);
-    final levelBorder = !accepted
-        ? AppColors.white(0.15)
-        : AppColors.accent;
     final levelText = !accepted
         ? AppColors.white(0.25)
         : AppColors.accent;
@@ -357,22 +354,15 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
                             color: nameColor),
                       ),
                     ),
-                    // Nivel inline: solo el número, pegado a la derecha.
+                    // Nivel plano pegado al nombre (sin chip bordeado), como
+                    // en la lista de amigos.
                     const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: levelBg,
-                        borderRadius: BorderRadius.circular(AppShape.rChip),
-                        border: Border.all(color: levelBorder, width: 1),
-                      ),
-                      child: Text(level,
-                          style: AppText.archivo(
-                              size: 10,
-                              weight: FontWeight.w900,
-                              color: levelText)),
-                    ),
+                    Text('NV $level',
+                        style: AppText.grotesk(
+                            size: 10,
+                            weight: FontWeight.w800,
+                            color: levelText,
+                            letterSpacing: 0.06)),
                   ],
                 ),
                 if (title.isNotEmpty)
@@ -420,12 +410,12 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
       width: 38,
       height: 38,
       alignment: Alignment.center,
+      // Plana, sin sombra dura (la cosmética vive en el color y el marco).
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppShape.rBtn),
         border: Border.all(
             color: grey ? AppColors.white(0.1) : AppColors.line, width: 1),
         color: color,
-        boxShadow: grey ? null : AppFx.hardShadow(offset: const Offset(2, 2)),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 3),
@@ -540,7 +530,6 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
                 decoration: BoxDecoration(
                   color: AppColors.white(0.05),
                   borderRadius: BorderRadius.circular(AppShape.rBtn),
-                  border: Border.all(color: AppColors.white(0.1), width: 1),
                 ),
                 child: Row(
                   children: [

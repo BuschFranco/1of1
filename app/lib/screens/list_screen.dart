@@ -4,7 +4,6 @@ import '../data/courts.dart';
 import '../services/court_rating_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
-import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
@@ -151,14 +150,13 @@ class _CourtListItem extends StatelessWidget {
     return PressableWidget(
       onTap: onTap,
       child: Container(
-        // Card de lista protagonista: sólida, borde claro franco y sombra
-        // dura (neobrutalismo; sin glow difuso).
+        // Card plana: fill sutil sin borde ni sombra (lenguaje editorial del
+        // perfil); la foto y la tipografía llevan el protagonismo.
         decoration: BoxDecoration(
           color: AppColors.card,
           borderRadius: BorderRadius.circular(AppShape.rCard),
-          border: Border.all(color: AppColors.line, width: 1),
-          boxShadow: AppFx.hardShadow(),
         ),
+        clipBehavior: Clip.antiAlias,
         child: Column(
           children: [
             Stack(
@@ -167,12 +165,8 @@ class _CourtListItem extends StatelessWidget {
                   url: court.img,
                   height: 140,
                   width: double.infinity,
-                  // 18 = rCard (20) menos el borde de 2px de la card, para que
-                  // la foto acompañe las esquinas redondeadas del contenedor.
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(18),
-                    topRight: Radius.circular(18),
-                  ),
+                  // El contenedor (clipBehavior) ya recorta las esquinas.
+                  borderRadius: BorderRadius.zero,
                 ),
                 // Scrim de LEGIBILIDAD sobre la foto: se conserva (no es
                 // decoración, da contraste a los badges y al ranking).
@@ -183,11 +177,7 @@ class _CourtListItem extends StatelessWidget {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [Colors.transparent, AppColors.black(0.85)],
-                      stops: [0.4, 1],
-                    ),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(18),
-                      topRight: Radius.circular(18),
+                      stops: const [0.4, 1],
                     ),
                   ),
                 ),
@@ -229,12 +219,12 @@ class _CourtListItem extends StatelessWidget {
                       if (proposer.handle.isNotEmpty)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                          // Autor sobre la foto: fondo oscuro plano, el acento
+                          // vive en el texto (sin borde).
                           decoration: BoxDecoration(
-                            color: AppColors.black(0.6),
+                            color: AppColors.black(0.55),
                             borderRadius:
                                 BorderRadius.circular(AppShape.rChip),
-                            border: Border.all(
-                                color: AppColors.accent, width: 1.5),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -342,11 +332,11 @@ class _CourtListItem extends StatelessWidget {
   }
 
   Widget _miniBadge(String label) {
+    // Chip de legibilidad sobre la foto: fondo oscuro plano, sin borde.
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: AppColors.black(0.7),
-        border: Border.all(color: Colors.white54, width: 1.5),
+        color: AppColors.black(0.55),
         borderRadius: BorderRadius.circular(AppShape.rChip),
       ),
       // Chip oscuro sobre la foto: texto blanco.

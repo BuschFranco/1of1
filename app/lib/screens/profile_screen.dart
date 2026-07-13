@@ -1737,7 +1737,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ctx,
             Icons.mail_outline,
             'Contacto y soporte',
-            kSupportEmail,
+            // Sin mostrar la casilla: el botón abre el mail directamente.
+            'Escribinos ante cualquier problema',
             () => launchUrl(
               Uri(scheme: 'mailto', path: kSupportEmail),
               mode: LaunchMode.externalApplication,
@@ -2778,8 +2779,14 @@ class _FriendsTabState extends State<_FriendsTab> {
             ),
           ),
           PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert, size: 20, color: AppColors.white(0.4)),
+            padding: EdgeInsets.zero,
             color: AppColors.bgElev,
+            // `child` en vez de `icon` para no heredar los 48px del IconButton.
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child:
+                  Icon(Icons.more_vert, size: 20, color: AppColors.white(0.4)),
+            ),
             onSelected: (v) {
               switch (v) {
                 case 'remove':
@@ -3054,16 +3061,13 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
         opacity: unlocked ? 1 : 0.45,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          // Chip plano (lenguaje editorial): fill sutil sin borde; el elegido
+          // se marca solo con el tinte de acento.
           decoration: BoxDecoration(
             color: selected
-                ? AppColors.accent.withAlpha(40)
-                : AppColors.paper,
+                ? AppColors.accent.withAlpha(45)
+                : AppColors.white(0.06),
             borderRadius: BorderRadius.circular(AppShape.rChip),
-            // Borde franco del branding: negro (accent cuando está elegido).
-            border: Border.all(
-              color: selected ? AppColors.accent : AppColors.ink,
-              width: selected ? 2 : 1.5,
-            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -3139,10 +3143,10 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
           const SizedBox(height: 6),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14),
+            // Input plano: fill sutil sin borde (mismo lenguaje que el auth).
             decoration: BoxDecoration(
-              color: AppColors.bgElev,
-              borderRadius: BorderRadius.circular(AppShape.rBtn),
-              border: Border.all(color: AppColors.white(0.25), width: 1.5),
+              color: AppColors.white(0.05),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: TextField(
               controller: _ctrl,
@@ -3346,13 +3350,14 @@ class _ColorPickerState extends State<_ColorPicker> {
                       decoration: BoxDecoration(
                         color: clanColor(c.hex),
                         shape: BoxShape.circle,
-                        // Aro negro (el blanco desaparecía sobre el diálogo
-                        // claro); seleccionado bien marcado.
+                        // Plano: aro blanco solo en el seleccionado; un aro
+                        // sutil en el resto para que los oscuros no se fundan
+                        // con el fondo del diálogo.
                         border: Border.all(
                           color: selected
-                              ? AppColors.ink
-                              : AppColors.black(0.3),
-                          width: selected ? 2.5 : 1.5,
+                              ? Colors.white
+                              : AppColors.white(0.12),
+                          width: selected ? 2.5 : 1,
                         ),
                       ),
                       child: !unlocked

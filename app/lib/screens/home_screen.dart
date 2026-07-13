@@ -17,7 +17,6 @@ import '../services/notion_service.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
-import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
@@ -696,18 +695,34 @@ class _HomeScreenState extends State<HomeScreen>
                     builder: (context) {
                       final ps = context.watch<PlaySessionService>();
                       final active = ps.isPlaying || ps.isDwelling;
+                      // Estado actual del banner, para que AnimatedSwitcher
+                      // detecte el cambio y haga el cross-fade entre estados.
+                      final bannerKey = ps.isPlaying
+                          ? 'playing'
+                          : ps.isDwelling
+                              ? 'dwell'
+                              : 'idle';
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           // El cronómetro se muestra SIEMPRE. Estar dentro del radio
                           // solo lo "activa" (arranca la cuenta regresiva y el
                           // partido); fuera del radio queda inactivo pero visible.
-                          if (ps.isPlaying)
-                            _playingBanner(context)
-                          else if (ps.isDwelling)
-                            _dwellBanner(context)
-                          else
-                            _idleTimer(context),
+                          // El cambio de estado (empieza → jugando → reposo) se
+                          // funde progresivamente en vez de saltar de golpe.
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 380),
+                            switchInCurve: Curves.easeOut,
+                            switchOutCurve: Curves.easeIn,
+                            child: KeyedSubtree(
+                              key: ValueKey(bannerKey),
+                              child: ps.isPlaying
+                                  ? _playingBanner(context)
+                                  : ps.isDwelling
+                                      ? _dwellBanner(context)
+                                      : _idleTimer(context),
+                            ),
+                          ),
                           if (!active) ...[
                             const SizedBox(height: 10),
                             _quickChips(),
@@ -913,18 +928,23 @@ class _HomeScreenState extends State<HomeScreen>
     final emm = (exit ~/ 60).toString().padLeft(2, '0');
     final ess = (exit % 60).toString().padLeft(2, '0');
     const amber = AppColors.busy;
-    final accent = paused ? AppColors.white(0.7) : AppColors.open;
-    return Center(
+    // El color de estado (verde jugando / gris pausado) transiciona suave en
+    // vez de saltar de golpe al pausar/reanudar.
+    final targetAccent = paused ? AppColors.white(0.7) : AppColors.open;
+    return TweenAnimationBuilder<Color?>(
+      tween: ColorTween(end: targetAccent),
+      duration: const Duration(milliseconds: 450),
+      builder: (context, animated, _) {
+        final accent = animated ?? targetAccent;
+        return Center(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16),
         padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+        // Plano: fill sólido sin borde ni sombra; el color de estado vive en
+        // el dot y el cronómetro (con transición suave).
         decoration: BoxDecoration(
           color: AppColors.glass,
-          // Neobrutalismo: rectángulo franco con borde pleno del color de
-          // estado (verde / gris) y sombra dura, sin glow.
           borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: accent, width: 1),
-          boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -962,11 +982,11 @@ class _HomeScreenState extends State<HomeScreen>
                             horizontal: 6,
                             vertical: 1,
                           ),
+                          // Tinte plano, sin borde (lenguaje editorial).
                           decoration: BoxDecoration(
                             color: AppColors.accent.withAlpha(38),
                             borderRadius:
                                 BorderRadius.circular(AppShape.rChip),
-                            border: Border.all(color: AppColors.accent),
                           ),
                           child: Text(
                             'x${ps.currentMultiplier.toStringAsFixed(2)}',
@@ -1043,9 +1063,8 @@ class _HomeScreenState extends State<HomeScreen>
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: AppColors.blush,
+                  color: AppColors.white(0.08),
                   borderRadius: BorderRadius.circular(AppShape.rBtn),
-                  border: Border.all(color: AppColors.line, width: 1.5),
                 ),
                 child: Icon(
                   paused ? Icons.play_arrow : Icons.pause,
@@ -1065,7 +1084,6 @@ class _HomeScreenState extends State<HomeScreen>
                 decoration: BoxDecoration(
                   color: AppColors.accent,
                   borderRadius: BorderRadius.circular(AppShape.rBtn),
-                  border: Border.all(color: AppColors.line, width: 1.5),
                 ),
                 child: Text(
                   'DETENER',
@@ -1081,6 +1099,8 @@ class _HomeScreenState extends State<HomeScreen>
           ],
         ),
       ),
+        );
+      },
     );
   }
 
@@ -1093,12 +1113,10 @@ class _HomeScreenState extends State<HomeScreen>
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        // Plano: fill sólido sin borde (estado inactivo = todo atenuado).
         decoration: BoxDecoration(
           color: AppColors.glass,
-          // Estado "inactivo": borde gris franco (se mantiene el gris de
-          // estado, solo cambia el lenguaje de forma).
           borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.white(0.25), width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1139,10 +1157,10 @@ class _HomeScreenState extends State<HomeScreen>
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16),
         padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+        // Plano: sin borde; el naranja vive en el ícono y la cuenta regresiva.
         decoration: BoxDecoration(
           color: AppColors.glass,
           borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.accent, width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1185,8 +1203,6 @@ class _HomeScreenState extends State<HomeScreen>
                 decoration: BoxDecoration(
                   color: AppColors.accent,
                   borderRadius: BorderRadius.circular(AppShape.rBtn),
-                  // Acento pleno → borde negro puro (contraste neobrutalista).
-                  border: Border.all(color: AppColors.line, width: 1),
                 ),
                 child: Text(
                   'EMPEZAR YA',
@@ -1694,6 +1710,8 @@ class _HomeScreenState extends State<HomeScreen>
   }) {
     // Neobrutalismo: overlay SÓLIDO sobre el mapa con borde franco y sombra
     // dura desplazada (nada de blur ni glow, que además tiraban los FPS).
+    // Overlay plano sobre el mapa (lenguaje editorial): fill sólido oscuro,
+    // sin borde ni sombra dura; el contraste con el mapa ya lo da el fill.
     return Container(
       width: width,
       height: height,
@@ -1702,8 +1720,6 @@ class _HomeScreenState extends State<HomeScreen>
       decoration: BoxDecoration(
         color: AppColors.glass,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: AppColors.line, width: 1),
-        boxShadow: AppFx.hardShadow(offset: const Offset(3, 3)),
       ),
       child: child,
     );
@@ -1728,16 +1744,14 @@ class _CourtSwipeCard extends StatelessWidget {
       sessionProfile: session.profile,
       sessionEmail: session.email,
     );
-    // Tarjeta protagonista del mapa: sólida, borde claro franco y sombra dura
-    // desplazada (lenguaje neobrutalista, sin blur sobre el mapa).
+    // Tarjeta plana sobre el mapa (lenguaje editorial): fill sólido sin borde
+    // ni sombra dura; la foto y la tipografía llevan el protagonismo.
     return Container(
       padding: const EdgeInsets.all(14),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.glass,
         borderRadius: BorderRadius.circular(AppShape.rCard),
-        border: Border.all(color: AppColors.line, width: 1),
-        boxShadow: AppFx.hardShadow(),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1753,7 +1767,8 @@ class _CourtSwipeCard extends StatelessWidget {
                   // miniatura.
                   borderRadius: BorderRadius.circular(12),
                 ),
-                // Distancia a la cancha: chip retro-pop (papel + borde negro).
+                // Distancia a la cancha: chip de legibilidad plano sobre la
+                // foto (fondo oscuro, sin borde).
                 Positioned(
                   top: 6,
                   left: 6,
@@ -1763,16 +1778,15 @@ class _CourtSwipeCard extends StatelessWidget {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.paper,
+                      color: AppColors.black(0.55),
                       borderRadius: BorderRadius.circular(AppShape.rChip),
-                      border: Border.all(color: AppColors.line, width: 1.5),
                     ),
                     child: Text(
                       court.dist.toUpperCase(),
                       style: AppText.grotesk(
                         size: 9,
                         weight: FontWeight.w800,
-                        color: AppColors.ink,
+                        color: Colors.white,
                         letterSpacing: 0.06,
                       ),
                     ),
@@ -1902,12 +1916,11 @@ class _CourtSwipeCard extends StatelessWidget {
       child: Container(
         height: 30,
         alignment: Alignment.center,
+        // Botones planos: primario = acento pleno; secundario = fill sutil con
+        // texto de acento (sin bordes).
         decoration: BoxDecoration(
-          color: filled ? AppColors.accent : AppColors.card,
+          color: filled ? AppColors.accent : AppColors.white(0.08),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-              color: filled ? AppColors.ink : AppColors.accent,
-              width: filled ? 1 : 1.5),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

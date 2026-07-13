@@ -1,10 +1,12 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/session.dart';
-import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/pop_background.dart';
@@ -42,6 +44,30 @@ class _AuthScreenState extends State<AuthScreen> {
   /// Edad mínima para crear cuenta (COPPA en EE.UU.; menores requieren
   /// representación en AR). Bloqueamos por debajo de 13.
   static const int _minAge = 13;
+
+  /// Último email con el que se inició sesión. Sobrevive al logout para
+  /// prellenar el login (la contraseña NO se guarda acá: la maneja el gestor
+  /// de contraseñas del sistema vía autofill, cifrada).
+  static const _kLastEmail = 'last_login_email';
+
+  @override
+  void initState() {
+    super.initState();
+    _prefillLastEmail();
+  }
+
+  Future<void> _prefillLastEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    final last = prefs.getString(_kLastEmail) ?? '';
+    if (last.isNotEmpty && mounted && _emailCtrl.text.isEmpty) {
+      _emailCtrl.text = last;
+    }
+  }
+
+  Future<void> _rememberEmail(String email) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kLastEmail, email.trim().toLowerCase());
+  }
 
   int _ageFrom(DateTime dob, DateTime now) {
     var age = now.year - dob.year;
@@ -154,6 +180,12 @@ class _AuthScreenState extends State<AuthScreen> {
       _loading = false;
       _error = err;
     });
+    if (err == null) {
+      // Éxito: dispara el "¿Guardar contraseña?" del gestor del sistema
+      // (Google/Samsung) y recuerda el email para prellenarlo la próxima.
+      TextInput.finishAutofillContext();
+      unawaited(_rememberEmail(email));
+    }
     // En éxito, Session notifica y _Root cambia a MainShell. No hace falta navegar.
   }
 
@@ -183,6 +215,7 @@ class _AuthScreenState extends State<AuthScreen> {
         name: name,
         avatarUrl: photo,
       );
+      if (err == null) unawaited(_rememberEmail(email));
       if (!mounted) return;
       setState(() { _loading = false; _error = err; });
     } catch (e) {
@@ -217,7 +250,10 @@ class _AuthScreenState extends State<AuthScreen> {
                     offset: Offset(_modeSlideDir * 56 * t, 0),
                     child: Opacity(opacity: (1 - t).clamp(0, 1), child: child),
                   ),
-                  child: Column(
+                  // AutofillGroup: agrupa email+contraseña para que el gestor
+                  // de contraseñas del sistema los reconozca como un login.
+                  child: AutofillGroup(
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _brand(),
@@ -245,7 +281,8 @@ class _AuthScreenState extends State<AuthScreen> {
                       const SizedBox(height: 20),
                       if (_isSignup) ...[
                         _label('Nombre'),
-                        _field(_nameCtrl, 'Tu nombre y apellido'),
+                        _field(_nameCtrl, 'Tu nombre y apellido',
+                            autofillHints: const [AutofillHints.name]),
                         const SizedBox(height: 16),
                       ],
                       _label('Email'),
@@ -253,6 +290,10 @@ class _AuthScreenState extends State<AuthScreen> {
                         _emailCtrl,
                         'tu@email.com',
                         keyboard: TextInputType.emailAddress,
+                        autofillHints: const [
+                          AutofillHints.username,
+                          AutofillHints.email,
+                        ],
                       ),
                       const SizedBox(height: 16),
                       _label('Contraseña'),
@@ -260,6 +301,18 @@ class _AuthScreenState extends State<AuthScreen> {
                         _passCtrl,
                         'Mínimo 6 caracteres',
                         isPassword: true,
+                        // En login es el último campo: "Listo" envía el form.
+                        action: _isSignup
+                            ? TextInputAction.next
+                            : TextInputAction.done,
+                        onSubmitted: _isSignup ? null : _submit,
+                        // newPassword en registro dispara el "¿guardar?" del
+                        // gestor; password en login ofrece la guardada.
+                        autofillHints: [
+                          _isSignup
+                              ? AutofillHints.newPassword
+                              : AutofillHints.password,
+                        ],
                       ),
                       if (_isSignup) ...[
                         const SizedBox(height: 16),
@@ -268,6 +321,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           _pass2Ctrl,
                           'Repetí tu contraseña',
                           isPassword: true,
+                          autofillHints: const [AutofillHints.newPassword],
                         ),
                         const SizedBox(height: 16),
                         _label('Fecha de nacimiento'),
@@ -281,6 +335,8 @@ class _AuthScreenState extends State<AuthScreen> {
                           _phoneCtrl,
                           '+54 11 ...',
                           keyboard: TextInputType.phone,
+                          // Último campo de texto del registro.
+                          action: TextInputAction.done,
                         ),
                         const SizedBox(height: 16),
                         _termsRow(),
@@ -302,6 +358,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       const SizedBox(height: 16),
                       Center(child: _switchModeLink()),
                     ],
+                    ),
                   ),
                 ),
               ),
@@ -320,12 +377,13 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _tabs() {
+    // Selector plano: fill sutil sin borde (mismo lenguaje editorial que el
+    // resto de la app); el activo se marca solo con el acento.
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: AppColors.bgElev,
+        color: AppColors.white(0.06),
         borderRadius: BorderRadius.circular(AppShape.rBtn),
-        border: Border.all(color: AppColors.white(0.25), width: 1.5),
       ),
       child: Row(
         children: [
@@ -382,6 +440,9 @@ class _AuthScreenState extends State<AuthScreen> {
     String hint, {
     bool isPassword = false,
     TextInputType? keyboard,
+    TextInputAction action = TextInputAction.next,
+    VoidCallback? onSubmitted,
+    List<String>? autofillHints,
   }) {
     return _GlowField(
       controller: controller,
@@ -392,6 +453,9 @@ class _AuthScreenState extends State<AuthScreen> {
       onToggleObscure: isPassword
           ? () => setState(() => _obscurePass = !_obscurePass)
           : null,
+      action: action,
+      onSubmitted: onSubmitted,
+      autofillHints: autofillHints,
     );
   }
 
@@ -438,9 +502,8 @@ class _AuthScreenState extends State<AuthScreen> {
       onTap: _loading ? null : _pickBirthdate,
       child: Container(
         decoration: BoxDecoration(
-          color: AppColors.bgElev,
-          borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.line, width: 1.5),
+          color: AppColors.white(0.05),
+          borderRadius: BorderRadius.circular(12),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         child: Row(
@@ -534,14 +597,14 @@ class _AuthScreenState extends State<AuthScreen> {
       );
 
   Widget _errorBox(String msg) {
+    // Error plano: tinte del color de error, sin borde; el color vive en el
+    // ícono y el texto.
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.paper,
-        borderRadius: BorderRadius.circular(AppShape.rBtn),
-        // Estado de error: borde rojo pleno, franco.
-        border: Border.all(color: AppColors.accentDark, width: 1),
+        color: AppColors.accentDark.withAlpha(28),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
@@ -570,13 +633,11 @@ class _AuthScreenState extends State<AuthScreen> {
         height: 54,
         width: double.infinity,
         alignment: Alignment.center,
+        // CTA plano: acento pleno, sin borde ni sombra dura (mismo lenguaje
+        // que "Crear pickup" y "Compartir resultado").
         decoration: BoxDecoration(
-          color: _loading ? AppColors.black(0.08) : AppColors.accent,
+          color: _loading ? AppColors.white(0.1) : AppColors.accent,
           borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.accentDark, width: 1),
-          boxShadow: !_loading
-              ? AppFx.hardShadow(offset: const Offset(4, 4))
-              : null,
         ),
         child: _loading
             ? SizedBox(
@@ -623,10 +684,10 @@ class _AuthScreenState extends State<AuthScreen> {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 14),
+        // Botón secundario plano: fill sutil sin borde.
         decoration: BoxDecoration(
-          color: AppColors.card,
+          color: AppColors.white(0.06),
           borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: AppColors.line, width: 1.5),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -689,6 +750,18 @@ class _GlowField extends StatefulWidget {
   final bool obscure;
   final VoidCallback? onToggleObscure;
 
+  /// Botón de acción del teclado: `next` salta al siguiente campo (default),
+  /// `done` cierra el teclado (último campo del formulario).
+  final TextInputAction action;
+
+  /// Callback al confirmar desde el teclado (ej. enviar el login desde el
+  /// campo de contraseña).
+  final VoidCallback? onSubmitted;
+
+  /// Hints de autofill (AutofillHints.email/password/...): permiten que el
+  /// gestor de contraseñas del sistema sugiera y guarde las credenciales.
+  final List<String>? autofillHints;
+
   const _GlowField({
     required this.controller,
     required this.hint,
@@ -696,6 +769,9 @@ class _GlowField extends StatefulWidget {
     required this.keyboard,
     required this.obscure,
     required this.onToggleObscure,
+    this.action = TextInputAction.next,
+    this.onSubmitted,
+    this.autofillHints,
   });
 
   @override
@@ -720,16 +796,17 @@ class _GlowFieldState extends State<_GlowField> {
   @override
   Widget build(BuildContext context) {
     final focused = _node.hasFocus;
-    // Neobrutalismo: relleno sólido y borde franco (acento pleno en foco);
-    // sin BackdropFilter ni glow.
+    // Input plano (lenguaje editorial): fill sutil sin borde; el foco se marca
+    // con un borde de acento fino, único momento con borde.
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       decoration: BoxDecoration(
-        color: AppColors.bgElev,
-        borderRadius: BorderRadius.circular(AppShape.rBtn),
+        color: AppColors.white(0.05),
+        borderRadius: BorderRadius.circular(12),
+        // Borde transparente cuando no hay foco para que el layout no salte.
         border: Border.all(
-          color: focused ? AppColors.accent : AppColors.line,
-          width: focused ? 2 : 1.5,
+          color: focused ? AppColors.accent : Colors.transparent,
+          width: 1.5,
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -741,6 +818,13 @@ class _GlowFieldState extends State<_GlowField> {
               focusNode: _node,
               obscureText: widget.obscure,
               keyboardType: widget.keyboard,
+              // "Siguiente" salta solo al próximo campo (comportamiento nativo
+              // de TextInputAction.next); "Listo" cierra el teclado.
+              textInputAction: widget.action,
+              onSubmitted: widget.onSubmitted == null
+                  ? null
+                  : (_) => widget.onSubmitted!(),
+              autofillHints: widget.autofillHints,
               style: AppText.grotesk(size: 14),
               cursorColor: AppColors.accent,
               decoration: InputDecoration(
