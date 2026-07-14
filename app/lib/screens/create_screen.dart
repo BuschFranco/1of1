@@ -1,9 +1,16 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/notifications_service.dart';
+import '../services/pickups_provider.dart';
+import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/basketball_graffiti.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/under_construction.dart';
 import 'add_court_screen.dart';
+import 'main_shell.dart';
+import 'pickup_chat_screen.dart';
 import 'pickup_create_screen.dart';
 
 class CreateScreen extends StatelessWidget {
@@ -11,12 +18,13 @@ class CreateScreen extends StatelessWidget {
 
   static const _options = [
     ('Crear pickup game', 'Organizá un partido en cualquier cancha', Icons.sports_basketball),
+    ('Unirse a pickup game', 'Entrá con el código que te pasaron', Icons.key_outlined),
     ('Agregar cancha', '¿Conocés una cancha que no está?', Icons.add_location_alt_outlined),
     ('Reservar cancha', 'Reservá un horario', Icons.event_available_outlined),
   ];
 
-  // La opción 1 (Reservar) todavía no tiene backend.
-  static const _wip = {2};
+  // La opción 3 (Reservar) todavía no tiene backend.
+  static const _wip = {3};
 
   void _onTap(BuildContext context, int i) {
     if (i == 0) {
@@ -24,12 +32,140 @@ class CreateScreen extends StatelessWidget {
         MaterialPageRoute(builder: (_) => const PickupCreateScreen()),
       );
     } else if (i == 1) {
+      _showJoinDialog(context);
+    } else if (i == 2) {
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const AddCourtScreen()),
       );
     } else {
       showUnderConstruction(context, _options[i].$1);
     }
+  }
+
+  /// Modal para unirse a un pickup con el código de 5 dígitos que pasa el
+  /// creador. Éxito → notificación, badge de Crew y directo al chat del pickup.
+  void _showJoinDialog(BuildContext context) {
+    final codeCtrl = TextEditingController();
+    var busy = false;
+    String? error;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setState) {
+          Future<void> join() async {
+            if (busy) return;
+            setState(() {
+              busy = true;
+              error = null;
+            });
+            final email = ctx.read<Session>().email ?? '';
+            final res = await ctx
+                .read<PickupsProvider>()
+                .joinByCode(codeCtrl.text, email);
+            if (!ctx.mounted) return;
+            if (res.error != null) {
+              setState(() {
+                busy = false;
+                error = res.error;
+              });
+              return;
+            }
+            // Dentro: avisar y caer directo en el chat del pickup.
+            unawaited(NotificationsService.instance.show(
+                '¡Estás dentro! 🏀', 'Te uniste al pickup. Ya estás en el chat.'));
+            crewActivityNotifier.value = true;
+            Navigator.of(dialogCtx).pop();
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => PickupChatScreen(pickupId: res.pickupId!),
+              ),
+            );
+          }
+
+          return AlertDialog(
+            backgroundColor: AppColors.bgElev,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppShape.rCard)),
+            title: Text('Unirse a pickup game',
+                style: AppText.archivo(size: 18, weight: FontWeight.w900)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Ingresá el código de 5 dígitos que te pasó quien creó el pickup.',
+                  style:
+                      AppText.grotesk(size: 13, color: AppColors.white(0.65)),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: codeCtrl,
+                  enabled: !busy,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  maxLength: 5,
+                  textAlign: TextAlign.center,
+                  style: AppText.archivo(
+                      size: 24,
+                      weight: FontWeight.w900,
+                      color: AppColors.accent,
+                      letterSpacing: 0.35),
+                  decoration: InputDecoration(
+                    counterText: '',
+                    hintText: '·····',
+                    hintStyle: AppText.archivo(
+                        size: 24,
+                        weight: FontWeight.w900,
+                        color: AppColors.white(0.2),
+                        letterSpacing: 0.35),
+                    filled: true,
+                    fillColor: AppColors.white(0.05),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  onSubmitted: (_) => join(),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(error!,
+                      textAlign: TextAlign.center,
+                      style: AppText.grotesk(
+                          size: 12,
+                          weight: FontWeight.w600,
+                          color: AppColors.busy)),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: busy ? null : () => Navigator.of(dialogCtx).pop(),
+                child: Text('Cancelar',
+                    style: AppText.grotesk(
+                        size: 13, color: AppColors.white(0.6))),
+              ),
+              TextButton(
+                onPressed: busy ? null : join,
+                child: busy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.accent),
+                      )
+                    : Text('UNIRME',
+                        style: AppText.archivo(
+                            size: 13,
+                            weight: FontWeight.w900,
+                            color: AppColors.accent,
+                            letterSpacing: 0.08)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   @override

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../data/achievements.dart';
 import '../data/cosmetics.dart';
@@ -211,6 +212,11 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
           const SizedBox(height: 8),
           _infoRow(Icons.sports_basketball_outlined,
               '${pickup.teamSize}v${pickup.teamSize} · a ${pickup.targetScore} pts'),
+          // Código de invitación: SOLO lo ve el creador. Tap = copiar.
+          if (isCreator && pickup.inviteCode.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _inviteCodeRow(pickup.inviteCode),
+          ],
           if (pickup.notes.isNotEmpty) ...[
             const SizedBox(height: 14),
             _label('Descripción'),
@@ -235,6 +241,54 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
   }
 
   Widget _hairline() => Container(height: 1, color: AppColors.white(0.06));
+
+  /// Fila del código de invitación (solo creador): tap para copiar.
+  Widget _inviteCodeRow(String code) {
+    return PressableWidget(
+      onTap: () {
+        Clipboard.setData(ClipboardData(text: code));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Código copiado',
+                style: AppText.grotesk(size: 13)),
+            backgroundColor: AppColors.bgElev,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.key, size: 16, color: AppColors.accent),
+              const SizedBox(width: 8),
+              Text('Código de invitación',
+                  style: AppText.grotesk(
+                      size: 13, color: AppColors.white(0.85))),
+              const SizedBox(width: 8),
+              Text(code,
+                  style: AppText.archivo(
+                      size: 15,
+                      weight: FontWeight.w800,
+                      color: AppColors.accent,
+                      letterSpacing: 0.18)),
+              const SizedBox(width: 6),
+              Icon(Icons.copy, size: 14, color: AppColors.white(0.4)),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Padding(
+            padding: const EdgeInsets.only(left: 24),
+            child: Text(
+              'Pasáselo a quien quieras sumar: entra desde "+" → Unirse a pickup game.',
+              style: AppText.grotesk(size: 11, color: AppColors.white(0.45)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _infoRow(IconData icon, String text) {
     return Row(

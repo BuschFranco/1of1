@@ -309,6 +309,10 @@ class Pickup {
   /// Emails que RECHAZARON la invitación.
   final List<String> declinedMembers;
 
+  /// Código de 5 dígitos para unirse al pickup. Solo lo ve el creador (en el
+  /// chat del pickup) y se valida server-side al unirse.
+  final String inviteCode;
+
   const Pickup({
     this.pageId = '',
     required this.title,
@@ -328,6 +332,7 @@ class Pickup {
     this.targetScore = 21,
     this.acceptedMembers = const [],
     this.declinedMembers = const [],
+    this.inviteCode = '',
   });
 
   /// Todos los invitados (miembros asignados a cualquier equipo).
@@ -388,6 +393,7 @@ class Pickup {
       targetScore: targetScore,
       acceptedMembers: acceptedMembers ?? this.acceptedMembers,
       declinedMembers: declinedMembers ?? this.declinedMembers,
+      inviteCode: inviteCode,
     );
   }
 
@@ -416,6 +422,7 @@ class Pickup {
       targetScore: NotionService.readInt(p, 'TargetScore', fallback: 21),
       acceptedMembers: rawAcc.isEmpty ? [] : rawAcc.split(',').where((e) => e.isNotEmpty).toList(),
       declinedMembers: rawDec.isEmpty ? [] : rawDec.split(',').where((e) => e.isNotEmpty).toList(),
+      inviteCode: NotionService.readText(p, 'InviteCode'),
     );
   }
 
@@ -438,6 +445,7 @@ class Pickup {
       'TargetScore': NotionService.number(targetScore),
       'AcceptedMembers': NotionService.richText(acceptedMembers.join(',')),
       'DeclinedMembers': NotionService.richText(declinedMembers.join(',')),
+      'InviteCode': NotionService.richText(inviteCode),
     };
   }
 }

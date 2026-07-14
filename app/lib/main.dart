@@ -116,6 +116,7 @@ Future<void> _ensureNotionSchema() async {
         'TargetScore': 'number',
         'AcceptedMembers': 'rich_text',
         'DeclinedMembers': 'rich_text',
+        'InviteCode': 'rich_text',
       },
     );
     if (NotionConfig.dbChats.isNotEmpty) {

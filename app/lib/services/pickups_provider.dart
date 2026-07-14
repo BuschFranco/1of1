@@ -141,6 +141,74 @@ class PickupsProvider extends ChangeNotifier {
     ));
   }
 
+  /// Unirse a un pickup por código de invitación (5 dígitos). Busca el pickup
+  /// server-side, valida estado y capacidad, y mete al usuario en el equipo con
+  /// espacio (el de menos miembros primero) como miembro ya ACEPTADO.
+  ///
+  /// Límite conocido: el creador no recibe aviso push cuando alguien se une (no
+  /// existe canal push entre usuarios); ve al nuevo miembro al abrir el chat.
+  Future<({String? error, String? pickupId})> joinByCode(
+      String code, String email) async {
+    final c = code.trim();
+    final e = email.trim().toLowerCase();
+    if (c.length != 5 || int.tryParse(c) == null) {
+      return (error: 'Código inválido. Revisá los 5 dígitos.', pickupId: null);
+    }
+    if (e.isEmpty || !NotionConfig.isConfigured) {
+      return (error: 'No se pudo conectar. Probá de nuevo.', pickupId: null);
+    }
+    try {
+      final rows = await _notion.queryDatabase(
+        NotionConfig.dbPickups,
+        filter: NotionService.filterText('InviteCode', c),
+      );
+      if (rows.isEmpty) {
+        return (
+          error: 'Código inválido. Revisá los 5 dígitos.',
+          pickupId: null
+        );
+      }
+      final p = Pickup.fromNotion(rows.first);
+      if (p.isExpired) {
+        return (error: 'Ese pickup ya terminó.', pickupId: null);
+      }
+      if (p.isCreator(e)) {
+        return (error: 'Este pickup es tuyo 🙂', pickupId: null);
+      }
+      if (p.teamOf(e) != null) {
+        // Ya estaba invitado: si tenía la invitación pendiente, aceptarla.
+        if (!p.hasAccepted(e)) {
+          await accept(p, e);
+          await loadForUser(e);
+          return (error: null, pickupId: p.pageId);
+        }
+        return (error: 'Ya estás en este pickup.', pickupId: null);
+      }
+      // Elegir el equipo con espacio (menos miembros primero) según teamSize.
+      final aFree = p.teamAMembers.length < p.teamSize;
+      final bFree = p.teamBMembers.length < p.teamSize;
+      if (!aFree && !bFree) {
+        return (error: 'El pickup ya está completo.', pickupId: null);
+      }
+      final toA = aFree &&
+          (!bFree || p.teamAMembers.length <= p.teamBMembers.length);
+      final updated = p.copyWith(
+        teamAMembers: toA ? [...p.teamAMembers, e] : null,
+        teamBMembers: toA ? null : [...p.teamBMembers, e],
+        acceptedMembers: [
+          ...p.acceptedMembers.where((x) => !_eq(x, e)),
+          e,
+        ],
+      );
+      await _notion.updatePage(updated.pageId, updated.toNotionProperties());
+      // El pickup no estaba en la lista local del que se une: recargar.
+      await loadForUser(e);
+      return (error: null, pickupId: p.pageId);
+    } catch (_) {
+      return (error: 'No se pudo conectar. Probá de nuevo.', pickupId: null);
+    }
+  }
+
   /// El usuario abandona el pickup: se quita de equipos y respuestas en Notion y
   /// se remueve de la lista local (ya no participa).
   Future<void> leave(Pickup p, String email) async {

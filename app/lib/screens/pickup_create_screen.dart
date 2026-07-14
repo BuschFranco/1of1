@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -100,6 +101,9 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
       final notion = NotionService();
       final totalPlayers =
           _teamSize * 2 + _teamAMembers.length + _teamBMembers.length;
+      // Código de invitación de 5 dígitos (10000–99999, sin ceros a la
+      // izquierda). Solo lo ve el creador dentro del chat del pickup.
+      final inviteCode = (Random().nextInt(90000) + 10000).toString();
 
       final pickupPage = await notion.createPage(
         NotionConfig.dbPickups,
@@ -119,6 +123,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
           teamAMembers: _teamAMembers,
           teamBMembers: _teamBMembers,
           targetScore: _targetScore,
+          inviteCode: inviteCode,
         ).toNotionProperties(),
       );
 
