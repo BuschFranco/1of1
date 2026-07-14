@@ -23,6 +23,14 @@ import 'session_alarms.dart';
 class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   static const double radiusMeters = 110;
   static const Duration dwellThreshold = Duration(minutes: 6);
+  // "No juego": al declinar la cuenta regresiva, el detector de ESA cancha
+  // queda silenciado por este tiempo (mientras sigas dentro del radio).
+  static const Duration dwellSnooze = Duration(hours: 1);
+  // El snooze se limpia solo si venís leyendo FUERA del radio de la cancha
+  // silenciada de forma continua por este tiempo (más tolerante que
+  // gpsJitterGrace: un salto de GPS no debe revivir el banner, que es justo lo
+  // que "No juego" quiere evitar).
+  static const Duration snoozeExitClear = Duration(minutes: 2);
   // Tolerancia a saltos de GPS: al salir del radio (durante la cuenta de inicio)
   // o al re-entrar (durante la cuenta de cierre), esperamos este tiempo continuo
   // antes de resetear/cancelar, para que un salto accidental no reinicie nada.
@@ -67,6 +75,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   String _k(String base) => _userKey.isEmpty ? base : '$base::$_userKey';
 
   String get _kActive => _k('play_active_session');
+  String get _kDwellSnooze => _k('play_dwell_snooze');
   String get _kTotals => _k('play_totals_by_court');
   String get _kBackground => _k('play_background_enabled');
   String get _kPlays => _k('play_total_count');
@@ -179,6 +188,17 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   // Durante la permanencia, desde cuándo venimos leyendo FUERA de la cancha del
   // dwell. Toleramos [gpsJitterGrace] antes de resetear la cuenta de inicio.
   DateTime? _dwellOutsideSince;
+
+  // "No juego": cancha cuyo detector está silenciado y hasta cuándo. Mientras
+  // esté vigente y sigas adentro del radio, no se siembra dwell ahí y la UI
+  // ofrece el arranque manual ([manualStartCourt] / [startManualNow]).
+  String? _snoozeCourtId;
+  DateTime? _snoozeUntil;
+  // Desde cuándo venimos leyendo fuera del radio de la cancha silenciada (el
+  // snooze se limpia tras [snoozeExitClear] continuos afuera: te fuiste real).
+  DateTime? _snoozeOutsideSince;
+  // Si la última lectura de GPS cayó dentro del radio de la cancha silenciada.
+  bool _atSnoozedCourt = false;
 
   // Gracia de salida: desde cuándo estamos fuera del radio teniendo una sesión
   // activa. null = estamos dentro. Al superar [exitGrace] se corta el partido.
@@ -551,6 +571,26 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
       } catch (_) {}
     }
+
+    // 4) Permanencia sembrada en background (radar) → adoptarla, para que la
+    // cuenta regresiva siga donde iba en vez de reiniciarse al abrir la app.
+    if (!isPlaying && _dwellCourtId == null) {
+      final t = await readPendingStartTarget();
+      final atMillis = (t?['atMillis'] as num?)?.toInt();
+      if (t != null &&
+          atMillis != null &&
+          (t['userKey'] ?? '') == _userKey &&
+          DateTime.fromMillisecondsSinceEpoch(atMillis)
+              .isAfter(DateTime.now())) {
+        _dwellCourtId = t['courtId'] as String?;
+        _dwellSince = DateTime.fromMillisecondsSinceEpoch(atMillis)
+            .subtract(dwellThreshold);
+        _dwellOutsideSince = null;
+        unawaited(_startStream());
+        _renderSessionNotif();
+        notifyListeners();
+      }
+    }
   }
 
   /// Segundos que faltan para que el partido arranque solo. Si no hay
@@ -581,9 +621,15 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       _outsideSince?.add(exitGrace);
 
   /// Detiene el partido en curso manualmente (botón "Detener"). Lo deja como
-  /// "pendiente de resultado", igual que si hubiera terminado por salir del radio.
+  /// "pendiente de resultado", igual que si hubiera terminado por salir del
+  /// radio. Como seguís parado en la cancha, silenciamos su detector 1 h
+  /// (igual que "No juego"): sin esto arrancaría OTRA cuenta regresiva al
+  /// instante. Queda el banner "Iniciar partido" por si querés jugar de nuevo;
+  /// si te vas, el snooze se limpia solo.
   void stopNow() {
     if (!isPlaying) return;
+    final id = _courtId;
+    if (id != null) unawaited(_setSnooze(id));
     _endSession();
   }
 
@@ -599,6 +645,108 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         _startSession(c);
         return;
       }
+    }
+  }
+
+  // ── "No juego": declinar la cuenta regresiva + arranque manual ────────────
+
+  /// Cancha silenciada en la que TODAVÍA estás parado: la UI muestra el banner
+  /// de arranque manual ("Iniciar partido") mientras esto no sea null.
+  Court? get manualStartCourt {
+    if (isPlaying || _snoozeCourtId == null || !_atSnoozedCourt) return null;
+    if (_snoozeUntil == null || DateTime.now().isAfter(_snoozeUntil!)) {
+      return null;
+    }
+    return _courtById(_snoozeCourtId);
+  }
+
+  /// Silencia el detector de [courtId] por [dwellSnooze] (memoria + prefs,
+  /// para que el radar de background tampoco siembre la permanencia ahí).
+  /// Asume que estás parado en esa cancha; si no, _maintainSnooze lo corrige.
+  Future<void> _setSnooze(String courtId) async {
+    _snoozeCourtId = courtId;
+    _snoozeUntil = DateTime.now().add(dwellSnooze);
+    _snoozeOutsideSince = null;
+    _atSnoozedCourt = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _kDwellSnooze,
+      jsonEncode({
+        'courtId': courtId,
+        'untilMillis': _snoozeUntil!.millisecondsSinceEpoch,
+      }),
+    );
+  }
+
+  /// "No juego": cancela la cuenta regresiva y silencia el detector de esa
+  /// cancha por [dwellSnooze] mientras sigas dentro del radio.
+  Future<void> declineDwell() async {
+    if (!isDwelling) return;
+    final id = _dwellCourtId!;
+    _dwellCourtId = null;
+    _dwellSince = null;
+    _dwellOutsideSince = null;
+    // Sin esto, reconcileFromPrefs resucitaría la cuenta desde _kAlarmStart (y
+    // la alarma arrancaría el partido igual a los 6 min).
+    unawaited(cancelStartAlarm());
+    await _setSnooze(id);
+    _renderSessionNotif(); // la notif de cuenta regresiva desaparece
+    notifyListeners();
+  }
+
+  /// Arranca el partido manualmente en la cancha silenciada (el usuario cambió
+  /// de opinión después de "No juego"). Limpia el snooze.
+  void startManualNow() {
+    final c = manualStartCourt;
+    if (c == null || isPlaying) return;
+    _clearSnooze();
+    _startSession(c);
+  }
+
+  /// Limpia el snooze (memoria + prefs) y avisa a la UI si el banner de
+  /// arranque manual estaba visible.
+  void _clearSnooze() {
+    if (_snoozeCourtId == null) return;
+    final wasVisible = manualStartCourt != null;
+    _snoozeCourtId = null;
+    _snoozeUntil = null;
+    _snoozeOutsideSince = null;
+    _atSnoozedCourt = false;
+    unawaited(
+        SharedPreferences.getInstance().then((p) => p.remove(_kDwellSnooze)));
+    if (wasVisible) notifyListeners();
+  }
+
+  /// Mantenimiento del snooze en cada lectura de GPS: lo vence a la hora, lo
+  /// limpia si te fuiste del radio de verdad ([snoozeExitClear] continuos
+  /// afuera) y mantiene [_atSnoozedCourt] al día para el banner manual.
+  void _maintainSnooze(Position pos) {
+    final id = _snoozeCourtId;
+    if (id == null) return;
+    if (_snoozeUntil == null || DateTime.now().isAfter(_snoozeUntil!)) {
+      _clearSnooze();
+      return;
+    }
+    final c = _courtById(id);
+    if (c == null) {
+      _clearSnooze();
+      return;
+    }
+    final inside = Geolocator.distanceBetween(
+            pos.latitude, pos.longitude, c.lat, c.lng) <=
+        radiusMeters;
+    if (inside) {
+      _snoozeOutsideSince = null;
+    } else {
+      _snoozeOutsideSince ??= DateTime.now();
+      if (DateTime.now().difference(_snoozeOutsideSince!) >= snoozeExitClear) {
+        _clearSnooze();
+        return;
+      }
+    }
+    if (inside != _atSnoozedCourt) {
+      _atSnoozedCourt = inside;
+      notifyListeners();
     }
   }
 
@@ -884,6 +1032,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _dwellCourtId = null;
     _dwellSince = null;
     _dwellOutsideSince = null;
+    _snoozeCourtId = null;
+    _snoozeUntil = null;
+    _snoozeOutsideSince = null;
+    _atSnoozedCourt = false;
     _mock = null;
   }
 
@@ -1022,8 +1174,24 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       // la cancha simulada), dispararía la gracia de salida a cada rato,
       // resetearía la permanencia y cancelaría las alarmas en plena prueba.
       if (_mock != null) return;
+      _noteBgFix();
       _evaluate(pos);
     }, onError: (_) {});
+  }
+
+  // Diagnóstico: deja registrado el último fix recibido en background (visible
+  // en los controles DEV del mapa). Throttled para no escribir a disco cada 10s.
+  DateTime? _lastBgFixWrite;
+  void _noteBgFix() {
+    if (_foreground) return;
+    final now = DateTime.now();
+    if (_lastBgFixWrite != null &&
+        now.difference(_lastBgFixWrite!) < const Duration(minutes: 1)) {
+      return;
+    }
+    _lastBgFixWrite = now;
+    unawaited(SharedPreferences.getInstance()
+        .then((p) => p.setInt(kLastBgFixKey, now.millisecondsSinceEpoch)));
   }
 
   void _stopStream() {
@@ -1132,6 +1300,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     // Descartamos lecturas demasiado imprecisas para un radio de 110m.
     if (pos.accuracy > radiusMeters * 1.5) return;
 
+    // "No juego": vencimiento / salida real / flag de "sigo parado ahí".
+    _maintainSnooze(pos);
+
     // En segundo plano (con el foreground-service vivo) esta es la vía para
     // revisar la batería: si estás jugando y quedó muy baja, cerramos el partido.
     if (isPlaying) unawaited(_maybeEndForLowBattery());
@@ -1232,6 +1403,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
 
     // Caso 3: sin dwell en curso.
     if (near != null) {
+      // "No juego" vigente en esta cancha: no sembramos la permanencia (el
+      // arranque queda manual vía startManualNow hasta que el snooze caiga).
+      if (near.id == _snoozeCourtId && manualStartCourt != null) return;
       _beginDwell(near); // arranca la permanencia en esta cancha
     } else if (!_background) {
       // Fuera de toda cancha y sin background: cortamos el foreground-service.
@@ -1655,6 +1829,30 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// datos): devuelve un resumen legible de las últimas horas.
   Future<String> diagnoseHealth() => _health.diagnose();
 
+  /// Re-lee las métricas de salud de un partido del historial que quedó SIN
+  /// datos: el reloj suele sincronizar Health Connect DESPUÉS de resolverse el
+  /// resultado, y ese 0 quedaba persistido para siempre. Se llama al abrir el
+  /// detalle de un partido; si ahora hay datos, actualiza el historial (los
+  /// puntos y el récord no cambian: es registro visual retroactivo).
+  Future<void> refreshHealthFor(PlaySession s) async {
+    if (!_healthEnabled || s.hasHealth || s.seconds <= 0) return;
+    final end = DateTime.fromMillisecondsSinceEpoch(s.endedAtMillis);
+    final start = end.subtract(Duration(seconds: s.seconds));
+    HealthMetrics? hm;
+    try {
+      hm = await _health.metricsFor(start, end);
+    } catch (_) {
+      return;
+    }
+    if (hm == null || !hm.hasData) return;
+    final idx = _log.indexWhere(
+        (e) => e.endedAtMillis == s.endedAtMillis && e.courtId == s.courtId);
+    if (idx < 0) return;
+    _log[idx] = _log[idx].withHealth(hm);
+    await _persistLog();
+    notifyListeners();
+  }
+
   /// Siembra el récord de calorías desde el perfil (Notion) al iniciar sesión,
   /// para que sobreviva a reinstalar sin poder re-farmearse. Solo sube: nunca
   /// baja el récord local con un valor menor del servidor.
@@ -1757,6 +1955,23 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       try {
         _pendingSession = PlaySession.fromJson(
             jsonDecode(rawPending) as Map<String, dynamic>);
+      } catch (_) {/* ignorar */}
+    }
+
+    // Snooze de "No juego" (si sigue vigente; _atSnoozedCourt se resuelve con
+    // la próxima lectura de GPS).
+    final rawSnooze = prefs.getString(_kDwellSnooze);
+    if (rawSnooze != null) {
+      try {
+        final j = jsonDecode(rawSnooze) as Map<String, dynamic>;
+        final until = DateTime.fromMillisecondsSinceEpoch(
+            (j['untilMillis'] as num).toInt());
+        if (until.isAfter(DateTime.now())) {
+          _snoozeCourtId = j['courtId'] as String?;
+          _snoozeUntil = until;
+        } else {
+          unawaited(prefs.remove(_kDwellSnooze));
+        }
       } catch (_) {/* ignorar */}
     }
 
@@ -1981,6 +2196,24 @@ class PlaySession {
         maxHr: maxHr,
         steps: steps,
         distance: distance,
+        calorieRecord: calorieRecord,
+      );
+
+  /// Copia con datos de salud llegados tarde (el wearable sincroniza Health
+  /// Connect después de resolver el partido). No toca puntos ni récord: es
+  /// solo registro visual retroactivo.
+  PlaySession withHealth(HealthMetrics hm) => PlaySession(
+        courtId: courtId,
+        courtName: courtName,
+        seconds: seconds,
+        endedAtMillis: endedAtMillis,
+        result: result,
+        points: points,
+        calories: hm.calories,
+        avgHr: hm.avgHr,
+        maxHr: hm.maxHr,
+        steps: hm.steps,
+        distance: hm.distance,
         calorieRecord: calorieRecord,
       );
 

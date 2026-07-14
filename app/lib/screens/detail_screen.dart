@@ -7,6 +7,7 @@ import '../notion/notion_config.dart';
 import '../services/blocked_provider.dart';
 import '../services/court_rating_service.dart';
 import '../services/favorites_provider.dart';
+import '../services/location_service.dart';
 import '../services/notion_service.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
@@ -264,13 +265,23 @@ class DetailScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  '${court.area} · ${court.dist} · ${court.hoursLabel}',
-                  style: AppText.grotesk(
-                    size: 13,
-                    color: AppColors.white(0.6),
-                  ),
-                ),
+                // Distancia REAL al usuario (fallback: texto de Notion).
+                Builder(builder: (context) {
+                  final m = metersTo(
+                    context.watch<LocationService>().last,
+                    court.lat,
+                    court.lng,
+                  );
+                  final dist = m != null ? formatDist(m) : court.dist;
+                  return Text(
+                    [court.area, if (dist.isNotEmpty) dist, court.hoursLabel]
+                        .join(' · '),
+                    style: AppText.grotesk(
+                      size: 13,
+                      color: AppColors.white(0.6),
+                    ),
+                  );
+                }),
                 const SizedBox(height: 12),
                 // Crear un pickup con esta cancha ya seleccionada.
                 Builder(

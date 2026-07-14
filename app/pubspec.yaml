@@ -49,7 +49,8 @@ flutter_launcher_icons:
   android: true
   ios: false
   image_path: assets/branding/icon_legacy.png
-  adaptive_icon_background: "#0A0F14"
+  # Mismo azul índigo que el fondo del loader (AppColors.lilac).
+  adaptive_icon_background: "#1E1B4B"
   adaptive_icon_foreground: assets/branding/icon_foreground.png
 
 flutter:

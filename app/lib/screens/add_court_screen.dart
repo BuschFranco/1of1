@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../data/courts.dart';
 import '../services/courts_provider.dart';
+import '../services/geocoding_service.dart';
 import '../services/session.dart';
 import '../widgets/pressable_widget.dart';
 import '../theme/app_fx.dart';
@@ -48,6 +49,11 @@ class AddCourtScreen extends StatefulWidget {
 class _AddCourtScreenState extends State<AddCourtScreen> {
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
+  // Zona/barrio (el `Court.area` que se ve en listas y detalle). Se
+  // autocompleta con reverse geocoding al asentarse el pin; editable.
+  final _areaCtrl = TextEditingController();
+  bool _areaEdited = false;
+  bool _areaLookupBusy = false;
 
   // Horario estructurado: apertura, cierre y toggle 24h.
   TimeOfDay? _openTime = const TimeOfDay(hour: 8, minute: 0);
@@ -88,9 +94,22 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _descCtrl.dispose();
+    _areaCtrl.dispose();
     _priceCtrl.dispose();
     _mapCtrl?.dispose();
     super.dispose();
+  }
+
+  /// El pin se asentó (onCameraIdle): resolver la zona/barrio y prellenar el
+  /// campo, salvo que el usuario ya lo haya escrito a mano.
+  Future<void> _onPinSettled() async {
+    if (_areaEdited || _areaLookupBusy) return;
+    _areaLookupBusy = true;
+    final area = await GeocodingService.areaFromLatLng(
+        _pinLocation.latitude, _pinLocation.longitude);
+    _areaLookupBusy = false;
+    if (!mounted || area == null || _areaEdited) return;
+    setState(() => _areaCtrl.text = area);
   }
 
   Future<void> _tryLoadCurrentLocation() async {
@@ -168,10 +187,21 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
     final openStr = _is24h ? '00:00' : _fmtTime(_openTime!);
     final closeStr = _is24h ? '00:00' : _fmtTime(_closeTime!);
 
+    // Zona/barrio: lo que haya en el campo (autocompletado o editado); si
+    // quedó vacío, último intento de reverse geocode. Antes se guardaba ''
+    // siempre y las canchas creadas en la app quedaban sin ubicación textual.
+    var area = _areaCtrl.text.trim();
+    if (area.isEmpty) {
+      area = await GeocodingService.areaFromLatLng(
+              _pinLocation.latitude, _pinLocation.longitude) ??
+          '';
+    }
+    if (!mounted) return;
+
     final court = Court(
       id: '',
       name: _nameCtrl.text.trim(),
-      area: '',
+      area: area,
       dist: '',
       // TODO: subir _pickedImage a storage y guardar la URL acá. Por ahora la
       // imagen elegida solo se previsualiza en el front y no se persiste.
@@ -236,11 +266,13 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Íconos CLAROS: el fondo es oscuro. (Antes forzaba Brightness.dark y el
+    // estilo quedaba pegado al salir: hora/batería negras en toda la app.)
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
       ),
       child: Scaffold(
         backgroundColor: AppColors.bg,
@@ -265,6 +297,13 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
                     const SizedBox(height: 24),
                     _sectionTitle('Ubicación'),
                     _mapPicker(),
+                    const SizedBox(height: 24),
+                    _sectionTitle('Zona / barrio'),
+                    _glassField(
+                      controller: _areaCtrl,
+                      hint: 'Se completa solo al mover el pin',
+                      onChanged: (_) => _areaEdited = true,
+                    ),
                     const SizedBox(height: 24),
                     _sectionTitle('Tipo'),
                     _chipRow(['Exterior', 'Interior'], _type, (v) => setState(() => _type = v)),
@@ -350,6 +389,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
     required TextEditingController controller,
     required String hint,
     int maxLines = 1,
+    ValueChanged<String>? onChanged,
   }) {
     // Input sólido con borde franco (sin blur "glass").
     return Container(
@@ -363,6 +403,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
         controller: controller,
         maxLines: maxLines,
         minLines: 1,
+        onChanged: onChanged,
         style: AppText.grotesk(size: 14),
         cursorColor: AppColors.accent,
         decoration: InputDecoration(
@@ -462,6 +503,8 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
             onMapCreated: (ctrl) => _mapCtrl = ctrl,
             initialCameraPosition: CameraPosition(target: _pinLocation, zoom: 15),
             onCameraMove: (pos) => _pinLocation = pos.target,
+            // Pin asentado → autocompletar la zona/barrio (reverse geocode).
+            onCameraIdle: _onPinSettled,
             zoomControlsEnabled: false,
             myLocationButtonEnabled: false,
             compassEnabled: false,

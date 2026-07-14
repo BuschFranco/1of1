@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -14,13 +15,44 @@ import '../widgets/app_logo.dart';
 import '../widgets/court_image.dart';
 import '../widgets/pressable_widget.dart';
 
-class MatchDetailScreen extends StatelessWidget {
+class MatchDetailScreen extends StatefulWidget {
   final PlaySession session;
   final ValueChanged<String>? onSelectCourt;
   const MatchDetailScreen({super.key, required this.session, this.onSelectCourt});
 
   @override
+  State<MatchDetailScreen> createState() => _MatchDetailScreenState();
+}
+
+class _MatchDetailScreenState extends State<MatchDetailScreen> {
+  ValueChanged<String>? get onSelectCourt => widget.onSelectCourt;
+
+  /// Versión más fresca del partido: si la re-lectura de salud actualizó el
+  /// historial (los datos del reloj llegan tarde a Health Connect), usamos esa
+  /// entrada; si no, el snapshot recibido.
+  PlaySession get session {
+    for (final e in context.read<PlaySessionService>().log) {
+      if (e.endedAtMillis == widget.session.endedAtMillis &&
+          e.courtId == widget.session.courtId) {
+        return e;
+      }
+    }
+    return widget.session;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Partido sin datos de salud: reintentar la lectura ahora (Health Connect
+    // puede haber sincronizado el reloj después de resolverse el resultado).
+    unawaited(
+        context.read<PlaySessionService>().refreshHealthFor(widget.session));
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Rebuild cuando la re-lectura de salud actualiza el historial.
+    context.watch<PlaySessionService>();
     final s = session;
     final courts = context.read<CourtsProvider>().courts;
     Court? court;

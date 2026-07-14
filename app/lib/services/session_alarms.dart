@@ -29,6 +29,11 @@ const int kAlarmBatteryId = 100013;
 // Aviso de "tu partido se cierra pronto": dispara cuando quedan
 // [_kEndNotifLead] de la gracia de salida, aunque la app esté cerrada.
 const int kAlarmWarnId = 100014;
+// RADAR periódico de respaldo: cada [_kRadarEvery] re-muestrea el GPS en un
+// isolate de background y avanza la detección (sembrar permanencia al llegar,
+// arrancar la gracia de salida al irse) aunque Samsung haya matado el proceso
+// y el foreground service. Es la red de seguridad de las geofences.
+const int kAlarmRadarId = 100015;
 
 /// Puerto para avisarle al isolate principal que reconcilie desde prefs.
 const String kPlayPortName = 'oneofone_play_port';
@@ -42,6 +47,15 @@ const String kBgUserKey = 'play_bg_userkey';
 /// la respeten y el arranque/cierre automático sea testeable sin ir a la cancha.
 const String kMockPosKey = 'play_mock_pos';
 
+/// Cache global de canchas (id/nombre/lat/lng en JSON) para que el radar pueda
+/// medir cercanía sin memoria compartida. Lo escribe SyncCoordinator.
+const String kCourtsGeoCacheKey = 'courts_geo_cache';
+
+/// Diagnóstico: momento (epoch ms) del último fix de GPS obtenido en
+/// background (radar o stream con la app minimizada). Visible en los controles
+/// DEV del mapa para verificar en la calle que el background funciona.
+const String kLastBgFixKey = 'last_bg_fix_millis';
+
 // Claves fijas (no namespaced) con el "objetivo" de cada alarma.
 const String _kAlarmStart = 'play_alarm_start';
 const String _kAlarmEnd = 'play_alarm_end';
@@ -50,6 +64,9 @@ const String _kAlarmWarn = 'play_alarm_warn';
 // Claves base de PlaySessionService (deben coincidir EXACTO).
 const String _kActiveBase = 'play_active_session';
 const String _kPendingBase = 'play_pending_result';
+// Snooze de "No juego": {courtId, untilMillis}. El radar no debe volver a
+// sembrar la permanencia en la cancha silenciada mientras siga vigente.
+const String _kDwellSnoozeBase = 'play_dwell_snooze';
 
 // Constantes espejo de PlaySessionService (mantener en sync).
 const double _kRadiusMeters = 110;
@@ -58,6 +75,11 @@ const int _kBatteryEndPercent = 5;
 const Duration _kBatteryWatchEvery = Duration(minutes: 15);
 // Gemela de PlaySessionService.endNotifLeadTime: cuánto antes del cierre avisamos.
 const Duration _kEndNotifLead = Duration(minutes: 3);
+// Gemelas de PlaySessionService.dwellThreshold / exitGrace.
+const Duration _kDwellThreshold = Duration(minutes: 6);
+const Duration _kExitGrace = Duration(minutes: 6);
+// Cadencia del radar de respaldo (peor caso de detección sin geofence/FGS).
+const Duration _kRadarEvery = Duration(minutes: 15);
 
 String _nsKey(String base, String uk) => uk.isEmpty ? base : '$base::$uk';
 
@@ -232,6 +254,42 @@ Future<void> cancelBatteryWatch() async {
   await AndroidAlarmManager.cancel(kAlarmBatteryId);
 }
 
+/// Arranca el radar periódico de respaldo (con `rescheduleOnReboot` para que
+/// sobreviva reinicios del equipo). Lo programa SyncCoordinator cuando hay
+/// sesión + background habilitado + permiso "Siempre".
+Future<void> scheduleRadarWatch() async {
+  if (!_isAndroid) return;
+  await AndroidAlarmManager.cancel(kAlarmRadarId);
+  await AndroidAlarmManager.periodic(
+    _kRadarEvery,
+    kAlarmRadarId,
+    alarmRadarCallback,
+    wakeup: true,
+    allowWhileIdle: true,
+    rescheduleOnReboot: true,
+  );
+}
+
+Future<void> cancelRadarWatch() async {
+  if (!_isAndroid) return;
+  await AndroidAlarmManager.cancel(kAlarmRadarId);
+}
+
+/// Target de la alarma de arranque pendiente (permanencia sembrada por el radar
+/// o por _beginDwell), para que el isolate principal la adopte al volver al
+/// frente en vez de reiniciar la cuenta regresiva.
+Future<Map<String, dynamic>?> readPendingStartTarget() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    final raw = prefs.getString(_kAlarmStart);
+    if (raw == null) return null;
+    return jsonDecode(raw) as Map<String, dynamic>;
+  } catch (_) {
+    return null;
+  }
+}
+
 // ── Callbacks (isolate de background) ────────────────────────────────────────
 
 /// Arranca el partido si al cumplirse la permanencia seguís en la cancha.
@@ -397,6 +455,169 @@ Future<void> alarmBatteryCallback() async {
   }
   await _closeActiveToPending(prefs, uk, lowBattery: true);
   _pingMain();
+}
+
+/// RADAR de respaldo (alarma periódica): re-muestrea el GPS y avanza la
+/// detección aunque el proceso y el foreground service estén muertos. Espejo
+/// en background de lo que hace _evaluate con la app viva:
+///  - sin partido ni permanencia → si estás dentro del radio de una cancha,
+///    siembra la permanencia (alarma de arranque a +6 min + notificación);
+///  - con partido en curso → si estás fuera del radio y no hay gracia en
+///    curso, arranca la gracia de salida (alarma de cierre + aviso).
+/// Las geofences siguen siendo la vía rápida; esto cubre cuando el OEM las
+/// estrangula o mata el servicio (peor caso: [_kRadarEvery] de demora).
+@pragma('vm:entry-point')
+Future<void> alarmRadarCallback() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  final uk = prefs.getString(kBgUserKey) ?? '';
+
+  final pos = await _currentLatLng();
+  if (pos == null) return; // sin fix: el próximo tick reintenta
+  await prefs.setInt(
+      kLastBgFixKey, DateTime.now().millisecondsSinceEpoch);
+
+  final activeKey = _nsKey(_kActiveBase, uk);
+  final activeRaw = prefs.getString(activeKey);
+
+  if (activeRaw != null) {
+    // Partido en curso: detectar la SALIDA si nadie más la detectó.
+    if (prefs.getString(_kAlarmEnd) != null) return; // gracia ya programada
+    Map<String, dynamic> a;
+    try {
+      a = jsonDecode(activeRaw) as Map<String, dynamic>;
+    } catch (_) {
+      return;
+    }
+    if (a['endsAtMillis'] != null) return; // gracia ya en curso
+    final startMillis = (a['startMillis'] as num?)?.toInt();
+    final courtId = (a['courtId'] ?? '') as String;
+    final court = await _courtFromCache(prefs, courtId);
+    if (startMillis == null || court == null) return;
+    final d = Geolocator.distanceBetween(
+        pos.$1, pos.$2, court.$2, court.$3);
+    if (d <= _kRadiusMeters) return; // seguís adentro: todo normal
+
+    // Estás afuera sin gracia en curso: la arrancamos igual que _beginExitGrace
+    // (persistir endsAtMillis + alarma de cierre + notificación de cierre).
+    final endsAt = DateTime.now().add(_kExitGrace);
+    a['endsAtMillis'] = endsAt.millisecondsSinceEpoch;
+    await prefs.setString(activeKey, jsonEncode(a));
+    await scheduleEndAlarm(
+      userKey: uk,
+      courtId: courtId,
+      courtName: court.$1,
+      lat: court.$2,
+      lng: court.$3,
+      startMillis: startMillis,
+      at: endsAt,
+    );
+    _pingMain();
+    return;
+  }
+
+  // Sin partido en curso: detectar la LLEGADA si no hay permanencia armada.
+  if (prefs.getString(_kAlarmStart) != null) return; // dwell ya sembrado
+  final near = await _nearestCourtInRadius(prefs, pos.$1, pos.$2);
+  if (near == null) return;
+
+  // "No juego" vigente en esta cancha: no sembramos (arranque manual desde la
+  // app). Si el snooze ya venció, lo limpiamos de paso.
+  final snoozeRaw = prefs.getString(_nsKey(_kDwellSnoozeBase, uk));
+  if (snoozeRaw != null) {
+    try {
+      final s = jsonDecode(snoozeRaw) as Map<String, dynamic>;
+      final until = (s['untilMillis'] as num?)?.toInt() ?? 0;
+      if (until > DateTime.now().millisecondsSinceEpoch) {
+        if (s['courtId'] == near.$1) return;
+      } else {
+        await prefs.remove(_nsKey(_kDwellSnoozeBase, uk));
+      }
+    } catch (_) {}
+  }
+
+  final at = DateTime.now().add(_kDwellThreshold);
+  await scheduleStartAlarm(
+    userKey: uk,
+    courtId: near.$1,
+    courtName: near.$2,
+    lat: near.$3,
+    lng: near.$4,
+    at: at,
+  );
+  // Cuenta regresiva visible: mismo formato que el camino con la app viva.
+  await NotificationsService.instance.init();
+  await NotificationsService.instance
+      .showDwellCountdown(near.$2, _kDwellThreshold.inSeconds);
+  _pingMain();
+}
+
+/// Posición actual (lat, lng) respetando la ubicación simulada del modo
+/// prueba. null si no hay fix.
+Future<(double, double)?> _currentLatLng() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final mock = prefs.getString(kMockPosKey);
+    if (mock != null) {
+      final parts = mock.split(',');
+      final mlat = double.tryParse(parts[0]);
+      final mlng = double.tryParse(parts.length > 1 ? parts[1] : '');
+      if (mlat != null && mlng != null) return (mlat, mlng);
+    }
+  } catch (_) {}
+  try {
+    final pos = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+    ).timeout(const Duration(seconds: 12));
+    return (pos.latitude, pos.longitude);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// (nombre, lat, lng) de una cancha del cache por id. null si no está.
+Future<(String, double, double)?> _courtFromCache(
+    SharedPreferences prefs, String courtId) async {
+  final raw = prefs.getString(kCourtsGeoCacheKey);
+  if (raw == null || courtId.isEmpty) return null;
+  try {
+    for (final e in jsonDecode(raw) as List) {
+      final m = e as Map<String, dynamic>;
+      if (m['id'] == courtId) {
+        return (
+          (m['name'] ?? '') as String,
+          (m['lat'] as num).toDouble(),
+          (m['lng'] as num).toDouble(),
+        );
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+/// (id, nombre, lat, lng) de la cancha más cercana dentro del radio. null si
+/// ninguna cae dentro.
+Future<(String, String, double, double)?> _nearestCourtInRadius(
+    SharedPreferences prefs, double lat, double lng) async {
+  final raw = prefs.getString(kCourtsGeoCacheKey);
+  if (raw == null) return null;
+  (String, String, double, double)? best;
+  var bestDist = _kRadiusMeters + 1;
+  try {
+    for (final e in jsonDecode(raw) as List) {
+      final m = e as Map<String, dynamic>;
+      final clat = (m['lat'] as num?)?.toDouble() ?? 0;
+      final clng = (m['lng'] as num?)?.toDouble() ?? 0;
+      if (clat == 0 && clng == 0) continue;
+      final d = Geolocator.distanceBetween(lat, lng, clat, clng);
+      if (d <= _kRadiusMeters && d < bestDist) {
+        bestDist = d;
+        best = ((m['id'] ?? '') as String, (m['name'] ?? '') as String, clat, clng);
+      }
+    }
+  } catch (_) {}
+  return best;
 }
 
 /// Cierra el partido en curso (sesión activa → pendiente de resultado) desde el

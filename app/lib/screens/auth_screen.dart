@@ -3,9 +3,11 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/geocoding_service.dart';
 import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
@@ -54,6 +56,34 @@ class _AuthScreenState extends State<AuthScreen> {
   void initState() {
     super.initState();
     _prefillLastEmail();
+  }
+
+  // Autocompletado de Ciudad: una sola vez por sesión de registro. Pide el
+  // permiso de ubicación en contexto (el usuario tocó el campo) y, si hay fix,
+  // resuelve la ciudad con reverse geocoding. Siempre editable; si algo falla
+  // el campo queda manual como siempre.
+  bool _cityAutofillTried = false;
+  Future<void> _maybeAutofillCity() async {
+    if (_cityAutofillTried || _cityCtrl.text.trim().isNotEmpty) return;
+    _cityAutofillTried = true;
+    try {
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm != LocationPermission.always &&
+          perm != LocationPermission.whileInUse) {
+        return; // denegado (o para siempre): no insistimos en pleno registro
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.medium),
+      ).timeout(const Duration(seconds: 10));
+      final city =
+          await GeocodingService.cityFromLatLng(pos.latitude, pos.longitude);
+      if (!mounted || city == null || _cityCtrl.text.trim().isNotEmpty) return;
+      setState(() => _cityCtrl.text = city);
+    } catch (_) {/* sin fix o sin Geocoding API: queda manual */}
   }
 
   Future<void> _prefillLastEmail() async {
@@ -328,7 +358,14 @@ class _AuthScreenState extends State<AuthScreen> {
                         _birthdateField(),
                         const SizedBox(height: 16),
                         _label('Ciudad (opcional)'),
-                        _field(_cityCtrl, 'Ej. Buenos Aires'),
+                        // Al enfocar por primera vez pedimos ubicación EN
+                        // CONTEXTO y autocompletamos la ciudad (editable).
+                        Focus(
+                          onFocusChange: (has) {
+                            if (has) _maybeAutofillCity();
+                          },
+                          child: _field(_cityCtrl, 'Ej. Buenos Aires'),
+                        ),
                         const SizedBox(height: 16),
                         _label('Teléfono (opcional)'),
                         _field(

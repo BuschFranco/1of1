@@ -1,5 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:geolocator/geolocator.dart';
 import 'package:native_geofence/native_geofence.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../data/courts.dart';
 import '../notion/notion_config.dart';
 import 'courts_provider.dart';
 import 'blocked_provider.dart';
@@ -10,6 +14,7 @@ import 'notion_service.dart';
 import 'pickups_provider.dart';
 import 'play_session_service.dart';
 import 'session.dart';
+import 'session_alarms.dart';
 
 /// Conecta la sesión del usuario con el detector de partidos
 /// ([PlaySessionService]) y el catálogo de canchas ([CourtsProvider]).
@@ -53,6 +58,9 @@ class SyncCoordinator {
   // Cantidad de canchas con la que se registraron geofences por última vez
   // (para no re-registrar en cada notify del catálogo).
   int _geofencedCount = -1;
+  // Si el radar periódico de background está programado (evita re-programarlo
+  // en cada sync, lo que reiniciaría su fase).
+  bool _radarOn = false;
 
   void _wire() {
     // Presencia "Jugando" → Notion (best-effort, con reintento vía batch).
@@ -113,7 +121,7 @@ class SyncCoordinator {
       }
     };
     // Al cambiar la preferencia de background, registramos o quitamos geofences.
-    _play.onBackgroundChanged = (_) => _syncGeofences();
+    _play.onBackgroundChanged = (_) => unawaited(_syncGeofences());
 
     // Cada recompensa (logro/título/nivel) también dispara un push del sistema.
     // chatCreated se salta: solo se muestra el banner in-app.
@@ -137,6 +145,8 @@ class SyncCoordinator {
     NotificationsService.instance.onStartNowAction = () => _play.startNow();
     NotificationsService.instance.onStopAction = () => _play.stopNow();
     NotificationsService.instance.onPauseAction = () => _play.togglePause();
+    NotificationsService.instance.onDeclineAction =
+        () => unawaited(_play.declineDwell());
 
     // Batch: cuando el service lo pide (cada 2 min / al pausar / cerrar),
     // stageamos las stats actuales y subimos TODO el perfil en una sola
@@ -205,25 +215,57 @@ class SyncCoordinator {
 
   void _pushCourts() {
     _play.setCourts(_courts.courts);
-    _syncGeofences();
+    unawaited(_syncGeofences());
   }
 
-  /// Registra (o quita) las geofences de las canchas según haya sesión, esté
-  /// habilitada la detección en background y haya canchas cargadas. Evita
-  /// re-registrar si la cantidad de canchas no cambió.
-  void _syncGeofences() {
+  /// Registra (o quita) las geofences de las canchas y el radar periódico de
+  /// respaldo según haya sesión, esté habilitada la detección en background,
+  /// haya canchas cargadas Y el permiso de ubicación sea "Siempre" — sin ese
+  /// permiso Android no entrega geofences ni GPS en background: registrarlas
+  /// solo daría una falsa sensación de que funciona. Evita re-registrar si la
+  /// cantidad de canchas no cambió.
+  Future<void> _syncGeofences() async {
     final loggedIn = _session.profile != null;
     final courts = _courts.courts;
-    if (!loggedIn || !_play.backgroundEnabled || courts.isEmpty) {
+    var always = false;
+    try {
+      always = await Geolocator.checkPermission() == LocationPermission.always;
+    } catch (_) {}
+    if (!loggedIn || !_play.backgroundEnabled || courts.isEmpty || !always) {
       if (_geofencedCount != 0) {
         _geofencedCount = 0;
         GeofenceService.instance.clear();
       }
+      if (_radarOn) {
+        _radarOn = false;
+        unawaited(cancelRadarWatch());
+      }
       return;
+    }
+    if (!_radarOn) {
+      _radarOn = true;
+      unawaited(scheduleRadarWatch());
     }
     if (_geofencedCount == courts.length) return; // sin cambios relevantes
     _geofencedCount = courts.length;
+    // Cache global de canchas para que el radar (isolate sin memoria
+    // compartida) pueda medir cercanía.
+    unawaited(_writeCourtsGeoCache(courts));
     GeofenceService.instance.syncCourts(courts);
+  }
+
+  Future<void> _writeCourtsGeoCache(List<Court> courts) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        kCourtsGeoCacheKey,
+        jsonEncode([
+          for (final c in courts)
+            if (!(c.lat == 0 && c.lng == 0))
+              {'id': c.id, 'name': c.name, 'lat': c.lat, 'lng': c.lng},
+        ]),
+      );
+    } catch (_) {}
   }
 
   void _onSessionChanged() {
@@ -239,6 +281,8 @@ class SyncCoordinator {
         _trackingStarted = false;
         _geofencedCount = -1;
         GeofenceService.instance.clear();
+        _radarOn = false;
+        unawaited(cancelRadarWatch());
       }
       return;
     }
@@ -261,7 +305,7 @@ class SyncCoordinator {
       seedBadges: p.unlockedBadges,
       seedTotalsJson: p.playTimeByCourt,
     );
-    _syncGeofences();
+    unawaited(_syncGeofences());
   }
 
   void dispose() {

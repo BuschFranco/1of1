@@ -213,6 +213,11 @@ sobreescribir por `--dart-define` si hace falta.
 > (para que la app cree las columnas nuevas sola) y compartir la página con las
 > databases con esa integración.
 
+> Para la `MAPS_API_KEY`: además de Maps SDK y Places, habilitar la
+> **Directions API** en Google Cloud Console — la usa la "marca" de ruta hacia
+> una cancha (waypoint del mapa). Si no está habilitada, la marca degrada a una
+> línea recta punteada (sin ruta por calles ni ETA).
+
 ### 2. Instalar dependencias y correr
 
 ```bash

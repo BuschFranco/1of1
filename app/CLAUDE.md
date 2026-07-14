@@ -223,10 +223,19 @@ datos sabe que existe Notion**.
 
 ### Permisos
 
-- **Regla dura:** los permisos (ubicación, notificaciones, alarmas exactas) **NO se
-  piden al abrir la app**. Solo se piden cuando el usuario activa el switch
-  correspondiente en el modal de permisos ([`lib/widgets/permissions_modal.dart`](lib/widgets/permissions_modal.dart)).
-  No agregues auto-requests en `initState`/`onMapCreated`/etc.
+- Política de pedidos (decisión de producto, jul 2026):
+  - **Notificaciones**: diálogo directo del sistema UNA vez, en el primer
+    arranque tras login/registro (`PermissionsModal.showOnceIfNeeded`). Si el
+    usuario acepta, la fila ni aparece en el modal.
+  - **Ubicación**: se pide EN CONTEXTO — al tocar "mi ubicación" en el mapa
+    (`_goToMyLocation`) o desde el switch del modal (que encadena con
+    "Permitir todo el tiempo" tras la divulgación destacada).
+  - El **modal de permisos** ([`lib/widgets/permissions_modal.dart`](lib/widgets/permissions_modal.dart))
+    en su flujo automático muestra SOLO lo que falta; abierto a mano desde el
+    perfil muestra todo como panel de gestión.
+  - Fuera de esos puntos, **no agregues auto-requests** en
+    `initState`/`onMapCreated`/etc. La divulgación destacada de Google Play es
+    obligatoria antes de pedir background ("Permitir siempre").
 
 ---
 

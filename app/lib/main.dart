@@ -18,6 +18,7 @@ import 'services/court_rating_service.dart';
 import 'services/courts_provider.dart';
 import 'services/favorites_provider.dart';
 import 'services/geofence_service.dart';
+import 'services/location_service.dart';
 import 'services/notifications_service.dart';
 import 'services/notion_service.dart';
 import 'services/pickups_provider.dart';
@@ -166,6 +167,9 @@ class OneOfOneApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => PlaySessionService()),
         ChangeNotifierProvider(create: (_) => PickupsProvider()),
         ChangeNotifierProvider(create: (_) => BlockedProvider()),
+        // Última posición conocida compartida: la alimenta el mapa y la leen
+        // canchas/detalle para mostrar distancias reales.
+        ChangeNotifierProvider(create: (_) => LocationService()..warmUp()),
         ChangeNotifierProvider(create: (_) => AppLoadingState()),
         Provider(create: (_) => CourtRatingService()),
         // Pegamento de sincronización (presencia, batch, sembrado). Se crea de
@@ -188,6 +192,18 @@ class OneOfOneApp extends StatelessWidget {
         title: '1of1',
         debugShowCheckedModeBanner: false,
         theme: buildAppTheme(),
+        // Blindaje: íconos de la barra de estado SIEMPRE claros (tema dark).
+        // Sin esto, cualquier pantalla que pise el estilo lo deja pegado.
+        builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+          value: const SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.light,
+            statusBarBrightness: Brightness.dark,
+            systemNavigationBarColor: AppColors.bg,
+            systemNavigationBarIconBrightness: Brightness.light,
+          ),
+          child: child!,
+        ),
         home: const _Root(),
       ),
     );

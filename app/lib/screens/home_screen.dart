@@ -11,15 +11,20 @@ import '../data/courts.dart';
 import '../data/models.dart';
 import '../notion/notion_config.dart';
 import '../services/app_loading_state.dart';
+import '../services/app_permissions.dart' as app_perms;
 import '../services/court_rating_service.dart';
+import '../services/location_service.dart';
+import '../services/route_service.dart';
 import '../services/notifications_service.dart';
 import '../services/notion_service.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
+import '../services/session_alarms.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
+import '../widgets/court_marker_icon.dart';
 import '../widgets/permissions_modal.dart';
 import '../widgets/rating_badge.dart';
 import '../widgets/pressable_widget.dart';
@@ -118,6 +123,17 @@ class _HomeScreenState extends State<HomeScreen>
   final Set<String> _activeFilters = {'Cerca'};
   Position? _userPos;
 
+  // Marca de ruta (waypoint estilo GTA): cancha destino, modo elegido y la
+  // ruta calculada. La polyline violeta se dibuja de _userPos a la cancha.
+  Court? _waypointCourt;
+  String _waypointMode = 'walking';
+  RouteResult? _route;
+  // Posición desde la que se calculó la última ruta: si el usuario se aleja
+  // lo suficiente de ese punto, se recalcula (throttle por distancia).
+  Position? _routeOrigin;
+  bool _routeLoading = false;
+  static const Color _kWaypointColor = Color(0xFFB16CEA);
+
   // Punto de "mi ubicación" con animación de pulso. _userScreen es la posición
   // en pantalla (px lógicos) de _userPos, recalculada al mover la cámara.
   // Es un ValueNotifier para que reposicionar el punto en cada frame del
@@ -136,6 +152,11 @@ class _HomeScreenState extends State<HomeScreen>
   // Canchas visibles tras aplicar los filtros activos. Alimenta tanto los
   // marcadores del mapa como la tarjeta inferior.
   List<Court> _filtered = [];
+
+  // Íconos custom de los marcadores (disco con pelota, dibujados con Canvas).
+  // Hasta que terminan de rasterizar se usa el pin default como fallback.
+  BitmapDescriptor? _markerIcon;
+  BitmapDescriptor? _markerIconSel;
 
   // Reseñas de la cancha seleccionada (máx. 2, rating ≥ 4). Se cargan al
   // cambiar de cancha y se muestran como burbujas sobre el punto GPS.
@@ -248,6 +269,7 @@ class _HomeScreenState extends State<HomeScreen>
       );
       if (!mounted) return;
       _userPos = pos;
+      context.read<LocationService>().update(pos);
       _updateUserScreenPos();
     } catch (_) {}
   }
@@ -269,6 +291,7 @@ class _HomeScreenState extends State<HomeScreen>
         _userPos = pos;
         _applyFilters();
       });
+      context.read<LocationService>().update(pos);
       _syncPageToIndex();
       _updateUserScreenPos();
     } catch (_) {
@@ -311,6 +334,22 @@ class _HomeScreenState extends State<HomeScreen>
     // Modal de permisos sobre el mapa: UNA sola vez por usuario (tras el primer
     // login/registro). Después se abre a mano desde el perfil.
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowPerms());
+    // Rasterizar los íconos custom de marcador (necesitan el dpr del device,
+    // por eso post-frame). Mientras tanto se ve el pin default.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadMarkerIcons());
+  }
+
+  Future<void> _loadMarkerIcons() async {
+    if (!mounted) return;
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+    final normal = await buildCourtMarker(selected: false, dpr: dpr);
+    final sel = await buildCourtMarker(selected: true, dpr: dpr);
+    if (!mounted) return;
+    setState(() {
+      _markerIcon = normal;
+      _markerIconSel = sel;
+      _rebuildMarkers();
+    });
   }
 
   /// DEV: alinea el flag de UI del modo prueba con el estado del servicio (el
@@ -363,7 +402,10 @@ class _HomeScreenState extends State<HomeScreen>
             // cada update de GPS producía jank sobre el mapa.
             final firstFix = _userPos == null;
             _userPos = pos;
+            context.read<LocationService>().update(pos);
             _updateUserScreenPos();
+            _onPositionForWaypoint(pos);
+            _autoSelectNearCourt(pos);
             if (firstFix) {
               // Primer fix: centrar el mapa en la ubicación del usuario.
               _mapCtrl?.animateCamera(
@@ -400,9 +442,14 @@ class _HomeScreenState extends State<HomeScreen>
         Marker(
           markerId: MarkerId(_filtered[i].id),
           position: LatLng(_filtered[i].lat, _filtered[i].lng),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            i == _index ? 22.0 : BitmapDescriptor.hueAzure,
-          ),
+          // Ícono propio (disco con pelota); pin default solo mientras
+          // termina de rasterizar en el arranque.
+          icon: (i == _index ? _markerIconSel : _markerIcon) ??
+              BitmapDescriptor.defaultMarkerWithHue(
+                i == _index ? 22.0 : BitmapDescriptor.hueAzure,
+              ),
+          // La puntita del disco apunta al punto exacto de la cancha.
+          anchor: const Offset(0.5, 1.0),
           onTap: () => _selectIndex(i),
         ),
     };
@@ -670,6 +717,23 @@ class _HomeScreenState extends State<HomeScreen>
                 initialCameraPosition: _kInitialCam,
                 markers: _markers,
                 circles: _circles,
+                // Ruta de la marca activa (waypoint): violeta estilo GTA. Si
+                // Directions no está disponible cae a línea recta punteada.
+                polylines: {
+                  if (_waypointCourt != null && _route != null)
+                    Polyline(
+                      polylineId: const PolylineId('waypoint'),
+                      points: _route!.points,
+                      color: _kWaypointColor,
+                      width: 5,
+                      startCap: Cap.roundCap,
+                      endCap: Cap.roundCap,
+                      jointType: JointType.round,
+                      patterns: _route!.straightLine
+                          ? [PatternItem.dash(18), PatternItem.gap(10)]
+                          : const [],
+                    ),
+                },
                 zoomControlsEnabled: false,
                 myLocationButtonEnabled: false,
                 compassEnabled: false,
@@ -701,7 +765,9 @@ class _HomeScreenState extends State<HomeScreen>
                           ? 'playing'
                           : ps.isDwelling
                               ? 'dwell'
-                              : 'idle';
+                              : ps.manualStartCourt != null
+                                  ? 'manual'
+                                  : 'idle';
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -720,7 +786,9 @@ class _HomeScreenState extends State<HomeScreen>
                                   ? _playingBanner(context)
                                   : ps.isDwelling
                                       ? _dwellBanner(context)
-                                      : _idleTimer(context),
+                                      : ps.manualStartCourt != null
+                                          ? _manualStartBanner(context)
+                                          : _idleTimer(context),
                             ),
                           ),
                           if (!active) ...[
@@ -732,6 +800,16 @@ class _HomeScreenState extends State<HomeScreen>
                     },
                   ),
                 ),
+              // Siempre presente (vacío sin marca): insertar/quitar un hijo en
+              // el medio del Stack re-crea los siguientes — el carrusel perdía
+              // su página y volvía a la primera cancha.
+              Positioned(
+                left: 16,
+                bottom: 312,
+                child: _waypointCourt != null
+                    ? _routeChip()
+                    : const SizedBox.shrink(),
+              ),
               Positioned(
                 right: 16,
                 bottom: 312,
@@ -1189,10 +1267,47 @@ class _HomeScreenState extends State<HomeScreen>
                       color: AppColors.white(0.6),
                     ),
                   ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Entrá en calor tranquilo: arrancamos y registramos '
+                    'el partido por vos.',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.grotesk(
+                      size: 9.5,
+                      color: AppColors.white(0.45),
+                    ),
+                  ),
                 ],
               ),
             ),
             const SizedBox(width: 12),
+            // "No juego": cancela la cuenta y silencia esta cancha por 1 h
+            // (mientras sigas adentro queda el arranque manual).
+            PressableWidget(
+              onTap: () =>
+                  context.read<PlaySessionService>().declineDwell(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.white(0.08),
+                  borderRadius: BorderRadius.circular(AppShape.rBtn),
+                ),
+                child: Text(
+                  'NO JUEGO',
+                  style: AppText.archivo(
+                    size: 10,
+                    weight: FontWeight.w800,
+                    letterSpacing: 0.04,
+                    color: AppColors.white(0.7),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
             PressableWidget(
               onTap: () => context.read<PlaySessionService>().startNow(),
               child: Container(
@@ -1206,6 +1321,79 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
                 child: Text(
                   'EMPEZAR YA',
+                  style: AppText.archivo(
+                    size: 10,
+                    weight: FontWeight.w800,
+                    letterSpacing: 0.04,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Banner tras "No juego": la detección de esta cancha queda silenciada 1 h,
+  /// con el arranque manual a un tap por si el usuario cambia de opinión.
+  Widget _manualStartBanner(BuildContext context) {
+    final ps = context.watch<PlaySessionService>();
+    final court = ps.manualStartCourt;
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+        decoration: BoxDecoration(
+          color: AppColors.glass,
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.sports_basketball,
+                size: 15, color: AppColors.white(0.55)),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Detección pausada',
+                    style: AppText.archivo(
+                      size: 13,
+                      weight: FontWeight.w800,
+                      color: AppColors.white(0.85),
+                    ),
+                  ),
+                  Text(
+                    court?.name ?? 'En una cancha',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.grotesk(
+                      size: 10,
+                      color: AppColors.white(0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            PressableWidget(
+              onTap: () =>
+                  context.read<PlaySessionService>().startManualNow(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.accent,
+                  borderRadius: BorderRadius.circular(AppShape.rBtn),
+                ),
+                child: Text(
+                  'INICIAR PARTIDO',
                   style: AppText.archivo(
                     size: 10,
                     weight: FontWeight.w800,
@@ -1269,12 +1457,21 @@ class _HomeScreenState extends State<HomeScreen>
     if (_locating) return;
     setState(() => _locating = true);
     try {
-      final permission = await Geolocator.checkPermission();
+      var permission = await Geolocator.checkPermission();
       if (permission != LocationPermission.always &&
           permission != LocationPermission.whileInUse) {
-        // Sin permiso: no lo pedimos acá, abrimos el modal de permisos.
-        await _maybeShowPerms();
-        return;
+        // Pedido EN CONTEXTO: el usuario tocó "mi ubicación", este es el
+        // momento natural para el diálogo del sistema (si quedó denegado
+        // permanente, requestLocation abre los ajustes de la app).
+        await app_perms.requestLocation();
+        permission = await Geolocator.checkPermission();
+        if (permission != LocationPermission.always &&
+            permission != LocationPermission.whileInUse) {
+          return;
+        }
+        // Recién concedido: el stream en vivo del arranque se había salteado
+        // por falta de permiso — lo levantamos ahora.
+        if (_posStream == null) unawaited(_startLocationUpdates());
       }
 
       final pos = await Geolocator.getCurrentPosition(
@@ -1286,6 +1483,7 @@ class _HomeScreenState extends State<HomeScreen>
       // Sin esto el indicador de ubicación nunca se dibuja: el punto se ancla a
       // _userPos y se reposiciona vía _updateUserScreenPos.
       _userPos = pos;
+      context.read<LocationService>().update(pos);
       await _mapCtrl?.animateCamera(
         CameraUpdate.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 15),
       );
@@ -1293,6 +1491,220 @@ class _HomeScreenState extends State<HomeScreen>
     } finally {
       if (mounted) setState(() => _locating = false);
     }
+  }
+
+  // Última cancha auto-seleccionada por entrar a su radio: dispara UNA vez
+  // por entrada (el usuario puede swipear a otra sin que se lo pelee).
+  String? _autoSelectedCourtId;
+
+  /// Al entrar al radio de una cancha, el carrusel salta solo a su miniatura.
+  void _autoSelectNearCourt(Position pos) {
+    var idx = -1;
+    var best = PlaySessionService.radiusMeters + 1;
+    for (var i = 0; i < _filtered.length; i++) {
+      final c = _filtered[i];
+      if (c.lat == 0 && c.lng == 0) continue;
+      final d = Geolocator.distanceBetween(
+          pos.latitude, pos.longitude, c.lat, c.lng);
+      if (d <= PlaySessionService.radiusMeters && d < best) {
+        best = d;
+        idx = i;
+      }
+    }
+    if (idx < 0) {
+      _autoSelectedCourtId = null; // fuera de todo radio: re-arma el disparo
+      return;
+    }
+    final id = _filtered[idx].id;
+    if (id == _autoSelectedCourtId) return; // ya disparado en esta entrada
+    _autoSelectedCourtId = id;
+    if (_index != idx) _selectIndex(idx);
+  }
+
+  // ── Marca de ruta (waypoint estilo GTA) ──────────────────────────────────
+
+  /// Coloca la marca hacia [court] y calcula la ruta desde la posición actual.
+  Future<void> _setWaypoint(Court court, String mode) async {
+    final pos = _userPos;
+    if (pos == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Todavía no hay señal de GPS para trazar la ruta'),
+      ));
+      return;
+    }
+    setState(() {
+      _waypointCourt = court;
+      _waypointMode = mode;
+      _route = null;
+    });
+    await _refreshRoute(pos);
+    // Encuadrar la ruta completa (usuario + cancha) en el mapa.
+    final r = _route;
+    if (r != null && _mapCtrl != null && _waypointCourt?.id == court.id) {
+      var minLat = double.infinity, maxLat = -double.infinity;
+      var minLng = double.infinity, maxLng = -double.infinity;
+      for (final p in r.points) {
+        if (p.latitude < minLat) minLat = p.latitude;
+        if (p.latitude > maxLat) maxLat = p.latitude;
+        if (p.longitude < minLng) minLng = p.longitude;
+        if (p.longitude > maxLng) maxLng = p.longitude;
+      }
+      _mapCtrl!.animateCamera(CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(minLat, minLng),
+          northeast: LatLng(maxLat, maxLng),
+        ),
+        60,
+      ));
+    }
+  }
+
+  void _clearWaypoint() {
+    if (_waypointCourt == null) return;
+    setState(() {
+      _waypointCourt = null;
+      _route = null;
+      _routeOrigin = null;
+    });
+  }
+
+  /// Pide la ruta a Directions (o línea recta de fallback) desde [pos].
+  Future<void> _refreshRoute(Position pos) async {
+    final court = _waypointCourt;
+    if (court == null || _routeLoading) return;
+    _routeLoading = true;
+    _routeOrigin = pos;
+    final r = await RouteService.fetchRoute(
+      origin: LatLng(pos.latitude, pos.longitude),
+      dest: LatLng(court.lat, court.lng),
+      mode: _waypointMode,
+    );
+    _routeLoading = false;
+    // Puede haberse quitado/cambiado la marca mientras esperábamos la red.
+    if (!mounted || _waypointCourt?.id != court.id) return;
+    setState(() => _route = r);
+  }
+
+  /// Cada fix de GPS con marca activa: recalcular si nos movimos bastante del
+  /// origen de la última ruta, y auto-quitar la marca al llegar a la cancha.
+  void _onPositionForWaypoint(Position pos) {
+    final court = _waypointCourt;
+    if (court == null) return;
+    final toCourt = Geolocator.distanceBetween(
+        pos.latitude, pos.longitude, court.lat, court.lng);
+    if (toCourt <= PlaySessionService.radiusMeters) {
+      _clearWaypoint();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Llegaste a ${court.name} 🏀'),
+      ));
+      return;
+    }
+    final origin = _routeOrigin;
+    final moved = origin == null
+        ? double.infinity
+        : Geolocator.distanceBetween(
+            origin.latitude, origin.longitude, pos.latitude, pos.longitude);
+    // ~un tercio de cuadra: la ruta se siente "viva" sin abusar de la API.
+    if (moved > 35) _refreshRoute(pos);
+  }
+
+  /// Sheet para elegir el modo de la marca (caminando / en auto), con la
+  /// opción de quitarla si ya está puesta en esta cancha.
+  void _onWaypointTap(Court court) {
+    if (_waypointCourt?.id == court.id) {
+      _clearWaypoint();
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppShape.rCard)),
+      ),
+      builder: (sheetCtx) {
+        Widget option(IconData icon, String label, String mode) {
+          return PressableWidget(
+            onTap: () {
+              Navigator.of(sheetCtx).pop();
+              _setWaypoint(court, mode);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Row(
+                children: [
+                  Icon(icon, size: 20, color: _kWaypointColor),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(label,
+                        style:
+                            AppText.grotesk(size: 14, weight: FontWeight.w700)),
+                  ),
+                  Icon(Icons.chevron_right,
+                      size: 18, color: AppColors.white(0.35)),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+                child: Row(
+                  children: [
+                    Icon(Icons.flag_rounded, size: 16, color: _kWaypointColor),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'COLOCAR MARCA · ${court.name.toUpperCase()}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.archivo(
+                            size: 12,
+                            weight: FontWeight.w800,
+                            letterSpacing: 0.06),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              option(Icons.directions_walk, 'Caminando', 'walking'),
+              Container(height: 1, color: AppColors.white(0.06)),
+              option(
+                  Icons.directions_car_filled_outlined, 'Vehículo', 'driving'),
+              if (_waypointCourt != null) ...[
+                Container(height: 1, color: AppColors.white(0.06)),
+                PressableWidget(
+                  onTap: () {
+                    Navigator.of(sheetCtx).pop();
+                    _clearWaypoint();
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 16),
+                    child: Row(
+                      children: [
+                        Icon(Icons.close, size: 20, color: AppColors.busy),
+                        const SizedBox(width: 14),
+                        Text('Quitar marca actual',
+                            style: AppText.grotesk(
+                                size: 14,
+                                weight: FontWeight.w700,
+                                color: AppColors.busy)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Widget _userLocationDot() {
@@ -1579,7 +1991,10 @@ class _HomeScreenState extends State<HomeScreen>
       speed: 0,
       speedAccuracy: 0,
     );
+    context.read<LocationService>().update(_userPos!);
     _updateUserScreenPos();
+    _onPositionForWaypoint(_userPos!);
+    _autoSelectNearCourt(_userPos!);
   }
 
   void _toggleMockMode() {
@@ -1591,9 +2006,30 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  /// DEV: estado de la detección en background — permiso real y momento del
+  /// último fix de GPS recibido con la app minimizada (radar o stream). Permite
+  /// verificar en la calle que el background funciona, sin conectar el USB.
+  Future<void> _showBgDiagnostics() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    final last = prefs.getInt(kLastBgFixKey);
+    final perm = await Geolocator.checkPermission();
+    if (!mounted) return;
+    final fix = last == null
+        ? 'sin fixes aún'
+        : 'último fix hace '
+            '${DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(last)).inMinutes} min';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Background · permiso: ${perm.name} · $fix',
+          style: AppText.grotesk(size: 13)),
+    ));
+  }
+
   Widget _devControls() {
     return Column(
       children: [
+        _devBtn(Icons.gps_fixed, AppColors.white(0.7), _showBgDiagnostics),
+        const SizedBox(height: 10),
         if (_mockMode) ...[
           // Botón de prueba de notificación: si aparece la notificación,
           // el permiso está concedido y el canal funciona.
@@ -1658,6 +2094,69 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+  /// Chip flotante de la marca activa: modo + ETA/distancia de Google y ✕
+  /// para quitarla. Si la ruta es de fallback (línea recta) muestra la
+  /// distancia geodésica calculada localmente.
+  Widget _routeChip() {
+    final court = _waypointCourt!;
+    final r = _route;
+    final meters = metersTo(_userPos, court.lat, court.lng);
+    final dist = (r != null && r.distText.isNotEmpty)
+        ? r.distText
+        : (meters != null ? formatDist(meters) : '');
+    final eta = r?.durationText ?? '';
+    return _glassContainer(
+      padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+      radius: AppShape.rBtn,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _waypointMode == 'driving'
+                ? Icons.directions_car_filled_outlined
+                : Icons.directions_walk,
+            size: 16,
+            color: _kWaypointColor,
+          ),
+          const SizedBox(width: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 150),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  r == null ? 'TRAZANDO RUTA…' : [
+                    if (eta.isNotEmpty) eta.toUpperCase(),
+                    if (dist.isNotEmpty) dist.toUpperCase(),
+                  ].join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.archivo(
+                      size: 11, weight: FontWeight.w800, color: _kWaypointColor),
+                ),
+                Text(
+                  court.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.grotesk(size: 9, color: AppColors.white(0.55)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 4),
+          PressableWidget(
+            onTap: _clearWaypoint,
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(Icons.close, size: 16, color: AppColors.white(0.6)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _bottomSwipe() {
     return Column(
       children: [
@@ -1670,13 +2169,22 @@ class _HomeScreenState extends State<HomeScreen>
             onPageChanged: _onPageChanged,
             clipBehavior: Clip.none,
             itemCount: _filtered.length,
-            itemBuilder: (context, i) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: _CourtSwipeCard(
-                court: _filtered[i],
-                onSelect: () => widget.onSelectCourt?.call(_filtered[i].id),
-              ),
-            ),
+            itemBuilder: (context, i) {
+              final court = _filtered[i];
+              // Distancia REAL al usuario; sin GPS aún, cae al texto de Notion.
+              final meters = metersTo(_userPos, court.lat, court.lng);
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: _CourtSwipeCard(
+                  court: court,
+                  distLabel: meters != null ? formatDist(meters) : court.dist,
+                  isWaypoint: _waypointCourt?.id == court.id,
+                  waypointColor: _kWaypointColor,
+                  onWaypoint: () => _onWaypointTap(court),
+                  onSelect: () => widget.onSelectCourt?.call(court.id),
+                ),
+              );
+            },
           ),
         ),
         const SizedBox(height: 10),
@@ -1729,10 +2237,20 @@ class _HomeScreenState extends State<HomeScreen>
 class _CourtSwipeCard extends StatelessWidget {
   final Court court;
   final VoidCallback onSelect;
+  // Distancia ya formateada (real si hay GPS; texto de Notion si no).
+  final String distLabel;
+  // Marca de ruta: si esta cancha es el waypoint activo y el tap del botón.
+  final bool isWaypoint;
+  final Color waypointColor;
+  final VoidCallback onWaypoint;
 
   const _CourtSwipeCard({
     required this.court,
     required this.onSelect,
+    required this.distLabel,
+    required this.isWaypoint,
+    required this.waypointColor,
+    required this.onWaypoint,
   });
 
   @override
@@ -1768,7 +2286,8 @@ class _CourtSwipeCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 // Distancia a la cancha: chip de legibilidad plano sobre la
-                // foto (fondo oscuro, sin borde).
+                // foto (fondo oscuro, sin borde). Se oculta si no hay dato.
+                if (distLabel.isNotEmpty)
                 Positioned(
                   top: 6,
                   left: 6,
@@ -1782,7 +2301,7 @@ class _CourtSwipeCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(AppShape.rChip),
                     ),
                     child: Text(
-                      court.dist.toUpperCase(),
+                      distLabel.toUpperCase(),
                       style: AppText.grotesk(
                         size: 9,
                         weight: FontWeight.w800,
@@ -1889,6 +2408,28 @@ class _CourtSwipeCard extends StatelessWidget {
                             builder: (_) =>
                                 PickupCreateScreen(initialCourt: court),
                           ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Marca de ruta (waypoint estilo GTA): elegir modo y trazar
+                    // el camino hasta la cancha; re-tap con marca puesta la quita.
+                    PressableWidget(
+                      onTap: onWaypoint,
+                      child: Container(
+                        width: 34,
+                        height: 30,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: isWaypoint
+                              ? waypointColor
+                              : AppColors.white(0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          isWaypoint ? Icons.flag : Icons.flag_outlined,
+                          size: 15,
+                          color: isWaypoint ? AppColors.ink : waypointColor,
                         ),
                       ),
                     ),

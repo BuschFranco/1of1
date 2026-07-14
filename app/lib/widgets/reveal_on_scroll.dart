@@ -8,11 +8,17 @@ class RevealOnScroll extends StatefulWidget {
   final Duration duration;
   final double slideDistance;
 
+  /// Offset inicial del slide, en FRACCIÓN del tamaño del hijo (lo consume un
+  /// SlideTransition). null → vertical legado `Offset(0, slideDistance)`.
+  /// Ej: `Offset(0.15, 0)` entra deslizando desde la derecha.
+  final Offset? begin;
+
   const RevealOnScroll({
     super.key,
     required this.child,
     this.duration = const Duration(milliseconds: 600),
     this.slideDistance = 12,
+    this.begin,
   });
 
   @override
@@ -33,7 +39,7 @@ class _RevealOnScrollState extends State<RevealOnScroll>
     _ctrl = AnimationController(vsync: this, duration: widget.duration);
     _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
     _slide = Tween<Offset>(
-      begin: Offset(0, widget.slideDistance),
+      begin: widget.begin ?? Offset(0, widget.slideDistance),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutQuart));
     WidgetsBinding.instance.addPostFrameCallback((_) => _attach());

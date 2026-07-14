@@ -38,9 +38,13 @@ class HealthService {
   /// pulso y pasos son registro visual en el historial. OJO: si se pidieran
   /// varios tipos en UNA sola llamada y uno fallara (permiso/soporte), Health
   /// Connect tira excepción y se cae toda la lectura; por eso leemos por tipo.
+  /// TOTAL_CALORIES es el fallback de calorías: muchos orígenes (Samsung
+  /// Health, sobre todo) solo escriben totales, no activas — sin él, calorías
+  /// daba 0 para siempre en esos equipos.
   static const List<HealthDataType> _types = [
     HealthDataType.HEART_RATE,
     HealthDataType.ACTIVE_ENERGY_BURNED,
+    HealthDataType.TOTAL_CALORIES_BURNED,
     HealthDataType.STEPS,
     HealthDataType.DISTANCE_DELTA,
   ];
@@ -131,6 +135,7 @@ class HealthService {
         }
         final agg = switch (t) {
           HealthDataType.ACTIVE_ENERGY_BURNED => ' · ${sum.round()} kcal',
+          HealthDataType.TOTAL_CALORIES_BURNED => ' · ${sum.round()} kcal',
           HealthDataType.STEPS => ' · ${sum.round()} pasos',
           HealthDataType.DISTANCE_DELTA => ' · ${sum.round()} m',
           _ => '',
@@ -156,7 +161,8 @@ class HealthService {
     // Leemos CADA tipo por separado: si uno falla (permiso/soporte), no anula
     // la lectura de los demás. En Android no se puede verificar el permiso de
     // LECTURA (Health Connect lo oculta), así que intentamos leer directo.
-    double calories = 0;
+    double activeCal = 0;
+    double totalCal = 0;
     int steps = 0;
     double distance = 0;
     final hrs = <double>[];
@@ -173,7 +179,10 @@ class HealthService {
           final num n = v is NumericHealthValue ? v.numericValue : 0;
           switch (p.type) {
             case HealthDataType.ACTIVE_ENERGY_BURNED:
-              calories += n.toDouble();
+              activeCal += n.toDouble();
+              break;
+            case HealthDataType.TOTAL_CALORIES_BURNED:
+              totalCal += n.toDouble();
               break;
             case HealthDataType.STEPS:
               steps += n.toInt();
@@ -199,7 +208,9 @@ class HealthService {
     }
 
     return HealthMetrics(
-      calories: calories,
+      // Preferimos calorías ACTIVAS; si el origen no las escribe, caemos a las
+      // totales. Nunca se suman (sería doble conteo: total incluye activas).
+      calories: activeCal > 0 ? activeCal : totalCal,
       avgHr: avgHr,
       maxHr: maxHr,
       steps: steps,

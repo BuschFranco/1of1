@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/app_permissions.dart';
+import '../services/notifications_service.dart';
 import '../services/play_session_service.dart';
 import '../services/session.dart';
 import '../theme/app_theme.dart';
@@ -43,6 +45,10 @@ class PermissionsModal extends StatefulWidget {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(flagKey) ?? false) return;
     await prefs.setBool(flagKey, true);
+    // Notificaciones: diálogo directo del sistema, sin pasar por el modal
+    // (fricción mínima). Si acepta, la fila ni aparece en el modal; si
+    // rechaza, queda ahí como recordatorio.
+    await NotificationsService.instance.requestPermission();
     if (!context.mounted) return;
     await showIfNeeded(context);
   }
@@ -88,6 +94,12 @@ class _PermissionsModalState extends State<PermissionsModal>
     final st = await checkPermissions();
     if (!mounted) return;
     setState(() => _state = st);
+    // "Permitir siempre" concedido: sincronizamos la preferencia de background
+    // (idempotente) para que el coordinador registre geofences + radar ya mismo,
+    // sin esperar a reiniciar la app.
+    if (st.background) {
+      unawaited(context.read<PlaySessionService>().setBackground(true));
+    }
     // Se cierra solo cuando no falta NADA (batería incluida): si cerráramos con
     // la batería pendiente, el modal se abriría y cerraría al instante.
     if (st.missing.isEmpty && widget.autoClose) {
@@ -99,54 +111,121 @@ class _PermissionsModalState extends State<PermissionsModal>
 
   Future<void> _activate(AppPerm p) async {
     if (_busy) return;
+    // Background exige la divulgación destacada de Google Play ANTES de pedir
+    // el permiso del sistema (misma que usa el switch del perfil).
+    if (p == AppPerm.background && !await _backgroundDisclosure()) return;
     setState(() => _busy = true);
     await requestPerm(p);
     await _refresh();
     if (mounted) setState(() => _busy = false);
+    // Encadenado: al conceder la ubicación base seguimos de una con "Permitir
+    // todo el tiempo" (Android lo obliga en dos pasos: el diálogo del sistema
+    // no ofrece "Siempre"; hay que pasar por los ajustes). Así el usuario no
+    // tiene que descubrir el segundo switch.
+    if (p == AppPerm.location && mounted) {
+      final st = _state;
+      if (st != null && st.location && !st.background) {
+        await _activate(AppPerm.background);
+      }
+    }
   }
 
+  /// Divulgación destacada previa al permiso "Permitir siempre". Devuelve true
+  /// si el usuario acepta continuar hacia los ajustes del sistema.
+  Future<bool> _backgroundDisclosure() async {
+    final accept = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bgElev,
+        title: Text('Ubicación en segundo plano',
+            style: AppText.archivo(size: 17, weight: FontWeight.w800)),
+        content: Text(
+          '1of1 recolecta tu ubicación para detectar y registrar tus partidos, '
+          'incluso cuando la app está cerrada o no la estás usando. '
+          'Solo guardamos en qué cancha jugaste, no tus coordenadas. '
+          'En la pantalla que sigue, elegí "Permitir todo el tiempo". '
+          'Podés desactivarlo cuando quieras desde el perfil o los ajustes del '
+          'sistema.',
+          style: AppText.grotesk(size: 13, color: AppColors.white(0.75)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Ahora no',
+                style: AppText.grotesk(size: 13, color: AppColors.white(0.6))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Permitir',
+                style: AppText.grotesk(
+                    size: 13,
+                    weight: FontWeight.w800,
+                    color: AppColors.accent)),
+          ),
+        ],
+      ),
+    );
+    return accept == true;
+  }
+
+  // Copy orientado al beneficio: qué ganás con cada permiso y qué perdés sin
+  // él, sin jerga técnica ("alarmas exactas", "batería sin restricciones"
+  // sonaban agresivos y espantaban en vez de invitar).
   static const _meta = {
     AppPerm.location: (
       Icons.location_on_outlined,
       'Ubicación',
-      'Detecta las canchas cercanas, te ubica en el mapa y cuenta tu partido.',
+      'Encuentra canchas cerca tuyo y detecta cuándo estás jugando.',
+    ),
+    AppPerm.background: (
+      Icons.share_location,
+      'Detección automática',
+      'Tus partidos arrancan y se guardan solos al llegar a la cancha, aunque '
+          'la app esté cerrada. Sin esto, solo cuentan con la app abierta.',
     ),
     AppPerm.notifications: (
       Icons.notifications_active_outlined,
-      'Notificaciones',
-      'Te avisa cuándo arranca y cuándo termina tu partido.',
+      'Avisos de partido',
+      'Te avisa cuándo arranca y cuándo termina tu partido. Sin esto todo '
+          'funciona igual, pero sin avisos.',
     ),
     AppPerm.alarm: (
       Icons.alarm,
-      'Alarmas exactas',
-      'Arranca y cierra tu partido solo, aunque tengas la app cerrada.',
+      'Arranque puntual',
+      'El partido arranca y se cierra justo a tiempo, incluso con el celu '
+          'bloqueado. Sin esto puede demorar unos minutos.',
     ),
     AppPerm.battery: (
       Icons.battery_charging_full,
-      'Batería sin restricciones',
-      'Evita que el sistema congele la app en pleno partido. Sin esto tu '
-          'partido no se pierde, pero el cronómetro puede dejar de verse en vivo.',
+      'Detección estable',
+      'Evita que el sistema pause la app en pleno partido. No gasta batería '
+          'extra (odiaríamos eso): solo se usa cuando estás en una cancha. '
+          'Sin esto, el cronómetro puede congelarse en algunos celus.',
     ),
   };
 
   @override
   Widget build(BuildContext context) {
     final st = _state;
+    // SIEMPRE solo lo que falta (también abierto desde el perfil): lo ya
+    // concedido desaparece en vez de quedar como fila en verde. La fila de
+    // background recién aparece con la ubicación base concedida (sin ella,
+    // "Permitir siempre" no existe; además el switch de Ubicación ya encadena
+    // hacia "todo el tiempo").
+    final pending = st == null
+        ? const <AppPerm>[]
+        : st.missing
+            .where((p) => p != AppPerm.background || st.location)
+            .toList();
     return AlertDialog(
       backgroundColor: AppColors.bgElev,
       scrollable: true,
-      title: Text('Permisos necesarios',
+      title: Text('Que todo funcione solo',
           style: AppText.archivo(size: 18, weight: FontWeight.w800)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Para que 1of1 detecte y registre tus partidos correctamente, '
-            'necesita estos permisos:',
-            style: AppText.grotesk(size: 12, color: AppColors.white(0.6)),
-          ),
-          const SizedBox(height: 12),
           if (st == null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -160,8 +239,18 @@ class _PermissionsModalState extends State<PermissionsModal>
               ),
             )
           else ...[
-            for (final p in AppPerm.values) _row(p, !st.missing.contains(p)),
-            Divider(color: AppColors.white(0.08), height: 24),
+            // Con todo concedido, el modal queda como panel de Salud a secas
+            // (sin intro de permisos ni cartel de "todo listo").
+            if (pending.isNotEmpty) ...[
+              Text(
+                'Con esto 1of1 arranca, cuenta y guarda tus partidos sin que '
+                'toques nada. Activá todo para la mejor experiencia:',
+                style: AppText.grotesk(size: 12, color: AppColors.white(0.6)),
+              ),
+              const SizedBox(height: 12),
+              for (final p in pending) _row(p, false),
+              Divider(color: AppColors.white(0.08), height: 24),
+            ],
             _healthRow(),
           ],
         ],
@@ -338,9 +427,9 @@ class _PermissionsModalState extends State<PermissionsModal>
 
   Widget _row(AppPerm p, bool granted) {
     final (icon, title, why) = _meta[p]!;
-    // La batería es recomendada, no obligatoria: no bloquea el cierre del modal
-    // (ver PermState.allGranted) y lo aclaramos con un badge.
-    final recommended = p == AppPerm.battery;
+    // Batería y background son recomendados, no obligatorios: no bloquean el
+    // cierre del modal (ver PermState.allGranted) y lo aclaramos con un badge.
+    final recommended = p == AppPerm.battery || p == AppPerm.background;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(

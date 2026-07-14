@@ -10,6 +10,10 @@ const String kStopAction = 'stop_now';
 /// Id de la acción "PAUSAR/REANUDAR" (alterna la pausa del cronómetro).
 const String kPauseAction = 'toggle_pause';
 
+/// Id de la acción "NO JUEGO" (declina la cuenta regresiva y silencia el
+/// detector de esa cancha por una hora).
+const String kDeclineAction = 'decline_dwell';
+
 /// Handler de respuestas que corre en un ISOLATE DE BACKGROUND (app cerrada).
 /// No puede tocar el estado vivo del partido, así que es un no-op: la acción
 /// "EMPEZAR YA" solo arranca el partido con el proceso vivo (app minimizada).
@@ -47,6 +51,10 @@ class NotificationsService {
   /// SyncCoordinator para llamar a `PlaySessionService.togglePause()`.
   VoidCallback? onPauseAction;
 
+  /// Lo invoca el handler de la acción "NO JUEGO". Lo cablea SyncCoordinator
+  /// para llamar a `PlaySessionService.declineDwell()`.
+  VoidCallback? onDeclineAction;
+
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'rewards',
     'Recompensas',
@@ -68,6 +76,7 @@ class NotificationsService {
     if (response.actionId == kStartNowAction) onStartNowAction?.call();
     if (response.actionId == kStopAction) onStopAction?.call();
     if (response.actionId == kPauseAction) onPauseAction?.call();
+    if (response.actionId == kDeclineAction) onDeclineAction?.call();
   }
 
   /// Inicializa el plugin y crea el canal Android. Idempotente. Best-effort:
@@ -173,6 +182,8 @@ class NotificationsService {
             // isolate principal (el handler de background es no-op y no puede
             // tocar el partido en curso).
             AndroidNotificationAction(kStartNowAction, 'EMPEZAR YA',
+                showsUserInterface: true, cancelNotification: false),
+            AndroidNotificationAction(kDeclineAction, 'NO JUEGO',
                 showsUserInterface: true, cancelNotification: false),
           ],
         ),

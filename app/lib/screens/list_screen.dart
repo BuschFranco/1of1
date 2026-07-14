@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../data/courts.dart';
 import '../services/court_rating_service.dart';
+import '../services/location_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
 import '../theme/app_theme.dart';
@@ -15,7 +16,18 @@ import '../widgets/status_dot.dart';
 class ListScreen extends StatefulWidget {
   final List<Court> courts;
   final ValueChanged<String>? onSelectCourt;
-  const ListScreen({super.key, required this.courts, this.onSelectCourt});
+
+  /// Dirección por la que entra la pestaña (+1 desde la derecha, -1 desde la
+  /// izquierda — el mismo `_slideDir` del shell): las cards entran deslizando
+  /// desde el lado contrario a la pestaña de la que venís.
+  final int enterDir;
+
+  const ListScreen({
+    super.key,
+    required this.courts,
+    this.onSelectCourt,
+    this.enterDir = 1,
+  });
 
   @override
   State<ListScreen> createState() => _ListScreenState();
@@ -24,8 +36,22 @@ class ListScreen extends StatefulWidget {
 class _ListScreenState extends State<ListScreen> {
   String _sort = 'near';
 
-  double _distKm(Court c) =>
-      double.tryParse(c.dist.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 1e9;
+  // La animación de entrada corre UNA sola vez por visita a la pestaña: al
+  // cambiar el filtro/orden se apaga (re-animar el reorden dejaba cards a
+  // mitad de camino).
+  bool _introPlayed = false;
+
+  Offset get _revealBegin => Offset(widget.enterDir * 0.15, 0);
+
+  /// Distancia real en metros al usuario si hay posición; si no, cae al texto
+  /// de Notion parseado (legado) para no romper el orden "cerca".
+  double _distMeters(Court c) {
+    final m = metersTo(context.read<LocationService>().last, c.lat, c.lng);
+    if (m != null) return m;
+    final parsed =
+        double.tryParse(c.dist.replaceAll(RegExp(r'[^0-9.]'), ''));
+    return parsed != null ? parsed * 1000 : 1e12;
+  }
 
   List<Court> get _sortedCourts {
     final list = [...widget.courts];
@@ -35,7 +61,7 @@ class _ListScreenState extends State<ListScreen> {
       case 'busy':
         list.sort((a, b) => b.players.compareTo(a.players));
       case 'near':
-        list.sort((a, b) => _distKm(a).compareTo(_distKm(b)));
+        list.sort((a, b) => _distMeters(a).compareTo(_distMeters(b)));
       case 'new':
         break; // orden original (más nuevas primero según Notion)
     }
@@ -44,12 +70,15 @@ class _ListScreenState extends State<ListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Reconstruye (y re-ordena "cerca") cuando cambia la posición del usuario.
+    context.watch<LocationService>();
     return Container(
       color: AppColors.lilac,
       child: ListView(
         padding: const EdgeInsets.only(top: 56, bottom: 160),
         children: [
           RevealOnScroll(
+            begin: _revealBegin,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
@@ -85,6 +114,7 @@ class _ListScreenState extends State<ListScreen> {
           ),
           const SizedBox(height: 16),
           RevealOnScroll(
+            begin: _revealBegin,
             child: SizedBox(
               height: 34,
               child: ListView(
@@ -100,7 +130,11 @@ class _ListScreenState extends State<ListScreen> {
                     AppChip(
                       label: c.$2,
                       active: _sort == c.$1,
-                      onTap: () => setState(() => _sort = c.$1),
+                      onTap: () => setState(() {
+                        _sort = c.$1;
+                        // El reorden no se re-anima (dejaba cards trabadas).
+                        _introPlayed = true;
+                      }),
                     ),
                     const SizedBox(width: 8),
                   ],
@@ -110,17 +144,30 @@ class _ListScreenState extends State<ListScreen> {
           ),
           const SizedBox(height: 16),
           for (var i = 0; i < _sortedCourts.length; i++)
-            RevealOnScroll(
-              key: ValueKey(_sortedCourts[i].id),
-              child: Padding(
+            if (_introPlayed)
+              Padding(
+                key: ValueKey(_sortedCourts[i].id),
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
                 child: _CourtListItem(
                   court: _sortedCourts[i],
                   rank: i + 1,
                   onTap: () => widget.onSelectCourt?.call(_sortedCourts[i].id),
                 ),
+              )
+            else
+              RevealOnScroll(
+                key: ValueKey(_sortedCourts[i].id),
+                begin: _revealBegin,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                  child: _CourtListItem(
+                    court: _sortedCourts[i],
+                    rank: i + 1,
+                    onTap: () =>
+                        widget.onSelectCourt?.call(_sortedCourts[i].id),
+                  ),
+                ),
               ),
-            ),
         ],
       ),
     );
@@ -279,13 +326,25 @@ class _CourtListItem extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 3),
-                            Text(
-                              '${court.area} · ${court.dist}',
-                              style: AppText.grotesk(
-                                size: 12,
-                                color: AppColors.white(0.6),
-                              ),
-                            ),
+                            // Distancia REAL al usuario (fallback: Notion).
+                            Builder(builder: (context) {
+                              final m = metersTo(
+                                context.watch<LocationService>().last,
+                                court.lat,
+                                court.lng,
+                              );
+                              final dist =
+                                  m != null ? formatDist(m) : court.dist;
+                              return Text(
+                                dist.isEmpty
+                                    ? court.area
+                                    : '${court.area} · $dist',
+                                style: AppText.grotesk(
+                                  size: 12,
+                                  color: AppColors.white(0.6),
+                                ),
+                              );
+                            }),
                           ],
                         ),
                       ),

@@ -376,6 +376,9 @@ class _MainShellState extends State<MainShell> {
           key: const ValueKey('tab:list'),
           courts: courts,
           onSelectCourt: _openDetail,
+          // Las cards entran deslizando en la misma dirección que la pantalla
+          // (el lado contrario a la pestaña de la que venís).
+          enterDir: _slideDir,
         ),
       AppTab.plus => const CreateScreen(key: ValueKey('tab:plus')),
       AppTab.chat => const CrewScreen(key: ValueKey('tab:chat')),

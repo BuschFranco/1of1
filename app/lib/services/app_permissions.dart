@@ -3,7 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'notifications_service.dart';
 
 /// Permisos que la app necesita para funcionar bien.
-enum AppPerm { location, notifications, alarm, battery }
+enum AppPerm { location, background, notifications, alarm, battery }
 
 /// Canal nativo para consultar/abrir el permiso de alarmas exactas (Android 12+)
 /// y la exención de optimización de batería.
@@ -12,6 +12,10 @@ const MethodChannel _alarmChannel = MethodChannel('oneofone/alarm_perm');
 /// Estado de los permisos clave.
 class PermState {
   final bool location; // permiso concedido Y servicio de ubicación encendido
+  // Ubicación "Permitir siempre": sin esto Android no entrega geofences ni GPS
+  // a los isolates de background — la detección solo funciona con la app
+  // abierta. Es LA pieza que hace que los partidos arranquen/cierren solos.
+  final bool background;
   final bool notifications;
   final bool alarm; // puede programar alarmas exactas
   // Exención de optimización de batería: sin ella, Samsung/One UI congela o
@@ -20,18 +24,20 @@ class PermState {
 
   const PermState({
     required this.location,
+    required this.background,
     required this.notifications,
     required this.alarm,
     required this.battery,
   });
 
-  // La batería NO cuenta acá: es RECOMENDADA (mejora mucho la confiabilidad en
-  // Samsung) pero no obligatoria — el partido no se pierde sin ella gracias a
-  // la persistencia + alarmas. Así el modal no insiste si el usuario la ignora.
+  // Ni la batería ni el background cuentan acá: son RECOMENDADOS (sin ellos la
+  // detección funciona solo con la app abierta/foreground service) pero no
+  // obligatorios. Así el modal no insiste si el usuario los ignora.
   bool get allGranted => location && notifications && alarm;
 
   List<AppPerm> get missing => [
         if (!location) AppPerm.location,
+        if (!background) AppPerm.background,
         if (!notifications) AppPerm.notifications,
         if (!alarm) AppPerm.alarm,
         if (!battery) AppPerm.battery,
@@ -59,18 +65,24 @@ Future<bool> _ignoresBatteryOptimizations() async {
 /// Revisa el estado actual de los permisos.
 Future<PermState> checkPermissions() async {
   var loc = false;
+  var bg = false;
   try {
     final perm = await Geolocator.checkPermission();
     final service = await Geolocator.isLocationServiceEnabled();
     loc = service &&
         (perm == LocationPermission.always ||
             perm == LocationPermission.whileInUse);
+    bg = perm == LocationPermission.always;
   } catch (_) {}
   final notif = await NotificationsService.instance.isEnabled();
   final alarm = await _canScheduleExact();
   final battery = await _ignoresBatteryOptimizations();
   return PermState(
-      location: loc, notifications: notif, alarm: alarm, battery: battery);
+      location: loc,
+      background: bg,
+      notifications: notif,
+      alarm: alarm,
+      battery: battery);
 }
 
 /// Pide (o guía a activar) la ubicación. Si el servicio está apagado abre sus
@@ -147,6 +159,9 @@ Future<void> requestPerm(AppPerm p) async {
   switch (p) {
     case AppPerm.location:
       await requestLocation();
+      break;
+    case AppPerm.background:
+      await requestBackgroundLocation();
       break;
     case AppPerm.notifications:
       await requestNotifications();
