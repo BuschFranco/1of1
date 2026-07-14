@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/app_permissions.dart';
+import '../services/location_service.dart';
 import '../services/notifications_service.dart';
 import '../services/play_session_service.dart';
 import '../services/session.dart';
@@ -100,9 +102,14 @@ class _PermissionsModalState extends State<PermissionsModal>
     if (st.background) {
       unawaited(context.read<PlaySessionService>().setBackground(true));
     }
-    // Se cierra solo cuando no falta NADA (batería incluida): si cerráramos con
-    // la batería pendiente, el modal se abriría y cerraría al instante.
-    if (st.missing.isEmpty && widget.autoClose) {
+    // Se cierra solo cuando no falta NADA (batería incluida) Y Salud quedó
+    // conectada: sin la condición de Salud se cerraba antes de llegar a esa
+    // fila. Si el usuario no quiere Salud, cierra con "Listo" — y no volvemos
+    // a insistir: la reaparición (showIfNeeded) solo mira los permisos
+    // necesarios (`missing`), nunca Salud.
+    if (st.missing.isEmpty &&
+        widget.autoClose &&
+        context.read<PlaySessionService>().healthEnabled) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) Navigator.of(context).maybePop();
       });
@@ -124,10 +131,26 @@ class _PermissionsModalState extends State<PermissionsModal>
     // tiene que descubrir el segundo switch.
     if (p == AppPerm.location && mounted) {
       final st = _state;
-      if (st != null && st.location && !st.background) {
-        await _activate(AppPerm.background);
+      if (st != null && st.location) {
+        // Primer fix al LocationService apenas hay permiso: el mapa (que lo
+        // escucha) se centra solo, sin esperar el botón "mi ubicación".
+        unawaited(_pushFirstFix());
+        if (!st.background) await _activate(AppPerm.background);
       }
     }
+  }
+
+  /// Obtiene una posición y la publica en [LocationService] para que el mapa
+  /// reaccione al permiso recién concedido. Best-effort: sin fix, no pasa nada
+  /// (el stream del mapa lo cubrirá en cuanto arranque).
+  Future<void> _pushFirstFix() async {
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      if (mounted) context.read<LocationService>().update(pos);
+    } catch (_) {/* sin fix: el mapa se centrará con el próximo */}
   }
 
   /// Divulgación destacada previa al permiso "Permitir siempre". Devuelve true
@@ -293,7 +316,11 @@ class _PermissionsModalState extends State<PermissionsModal>
           ),
         ),
       );
+      return;
     }
+    // Salud conectada: si era lo último que faltaba, el modal se cierra solo
+    // (el chequeo de _refresh ahora incluye healthEnabled).
+    await _refresh();
   }
 
   /// Corre una lectura de prueba y muestra el resultado, para entender por qué

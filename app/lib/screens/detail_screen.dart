@@ -17,12 +17,16 @@ import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
+import '../widgets/player_avatar.dart';
 import '../widgets/pop_button.dart';
-import '../widgets/pop_panel.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/section_title.dart';
 import '../widgets/status_dot.dart';
 import 'pickup_create_screen.dart';
+
+// Rojo destructivo (eliminar cancha/reseña). Local: AppColors no tiene token
+// de peligro y este es el único lugar que lo usa.
+const Color _danger = Color(0xFFEF4444);
 
 class DetailScreen extends StatelessWidget {
   final String courtId;
@@ -124,10 +128,9 @@ class DetailScreen extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 12),
+                          // Card plana: fill sin borde (lenguaje editorial).
                           decoration: BoxDecoration(
                             color: AppColors.card,
-                            border: Border.all(
-                                color: AppColors.white(0.25), width: 1.5),
                             borderRadius:
                                 BorderRadius.circular(AppShape.rBtn),
                           ),
@@ -181,10 +184,6 @@ class DetailScreen extends StatelessWidget {
                     const SectionTitle(
                         title: 'Actividad semanal', right: 'Hoy'),
                     _activityChart(),
-                    const SizedBox(height: 24),
-                    const SectionTitle(
-                        title: 'Jugando ahora', right: 'Ver todos'),
-                    _playersRow(court),
                     if (context.read<Session>().isAdmin) ...[
                       const SizedBox(height: 24),
                       _adminDeleteCourt(context, court),
@@ -211,24 +210,49 @@ class DetailScreen extends StatelessWidget {
     );
   }
 
+  /// Jugadores jugando AHORA en esta cancha, con presencia REAL:
+  ///  - YO primero, desde el estado LOCAL del partido (PlaySessionService):
+  ///    instantáneo, sin depender del round-trip a Notion ni de shareCourt
+  ///    (verte a vos mismo no es un problema de privacidad).
+  ///  - Los demás, desde los perfiles de Notion, solo si comparten cancha
+  ///    (shareCourt) — excluyendo mi email para no duplicarme cuando Notion
+  ///    ya refleje mi presencia.
+  List<({Profile profile, bool isMe})> _livePlayers(
+      BuildContext context, Court court) {
+    final session = context.watch<Session>();
+    final play = context.watch<PlaySessionService>();
+    final myEmail = (session.email ?? '').trim().toLowerCase();
+    final out = <({Profile profile, bool isMe})>[];
+    final me = session.profile;
+    if (me != null && play.courtId == court.id) {
+      out.add((profile: me, isMe: true));
+    }
+    for (final p in context.watch<ProfilesProvider>().all) {
+      if (!p.playing || !p.shareCourt || p.playingCourtId != court.id) {
+        continue;
+      }
+      if (p.userEmail.trim().toLowerCase() == myEmail) continue;
+      out.add((profile: p, isMe: false));
+    }
+    return out;
+  }
+
   Widget _hero(Court court) {
     return SizedBox(
       height: 360,
       child: Stack(
         children: [
           Positioned.fill(child: CourtImage(url: court.img)),
+          // Scrim plano de 2 stops (lenguaje editorial, como la lista): funde
+          // la foto con el fondo sin el degradado triple viejo.
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    AppColors.black(0.15),
-                    AppColors.black(0.6),
-                    AppColors.bg,
-                  ],
-                  stops: [0, 0.65, 1],
+                  colors: [Colors.transparent, AppColors.bg],
+                  stops: const [0.35, 1],
                 ),
               ),
             ),
@@ -243,15 +267,24 @@ class DetailScreen extends StatelessWidget {
                 Row(
                   children: [
                     StatusDot(status: court.status),
-                    const SizedBox(width: 8),
-                    Text(
-                      '· ${court.players} JUGANDO AHORA',
-                      style: AppText.grotesk(
-                        size: 10.5,
-                        color: AppColors.white(0.6),
-                        letterSpacing: 0.1,
-                      ),
-                    ),
+                    // Conteo REAL de presencia (incluyéndome): oculto si nadie
+                    // está jugando. `court.players` (campo estático de Notion)
+                    // ya no se usa como "jugando ahora".
+                    Builder(builder: (context) {
+                      final n = _livePlayers(context, court).length;
+                      if (n == 0) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Text(
+                          '· $n JUGANDO AHORA',
+                          style: AppText.grotesk(
+                            size: 10.5,
+                            color: AppColors.white(0.6),
+                            letterSpacing: 0.1,
+                          ),
+                        ),
+                      );
+                    }),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -327,74 +360,88 @@ class DetailScreen extends StatelessWidget {
     );
   }
 
-  /// Lista de jugadores que están jugando ahora en esta cancha (solo los que
-  /// lo permiten: shareCourt; el tiempo se muestra si además shareTime).
+  /// Jugadores jugando ahora en esta cancha (presencia REAL, ver
+  /// [_livePlayers]): mazo horizontal de insignias superpuestas (yo primero)
+  /// + el total al lado, aclarando que la actividad es de usuarios de la app.
   Widget _playingNow(Court court) {
     return Builder(builder: (context) {
-      final players = context
-          .watch<ProfilesProvider>()
-          .all
-          .where((p) =>
-              p.playing && p.shareCourt && p.playingCourtId == court.id)
-          .toList();
+      final players = _livePlayers(context, court);
       if (players.isEmpty) return const SizedBox.shrink();
+      const maxShown = 5;
+      const double avatarSize = 36;
+      const double overlap = 26; // corrimiento entre insignias (mazo)
+      final shown = players.take(maxShown).toList();
+      final extra = players.length - shown.length;
+      final bubbles = shown.length + (extra > 0 ? 1 : 0);
       return Padding(
         padding: const EdgeInsets.only(top: 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SectionTitle(title: 'Jugando ahora'),
-            for (final p in players)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.card,
-                    border:
-                        Border.all(color: AppColors.white(0.25), width: 1.5),
-                    borderRadius: BorderRadius.circular(AppShape.rBtn),
-                  ),
-                  child: Row(
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                SizedBox(
+                  width: avatarSize + (bubbles - 1) * overlap,
+                  height: avatarSize,
+                  child: Stack(
                     children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: AppColors.open,
-                          shape: BoxShape.circle,
+                      for (var i = 0; i < shown.length; i++)
+                        Positioned(
+                          left: i * overlap,
+                          child: PlayerAvatar(
+                            profile: shown[i].profile,
+                            size: avatarSize,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          p.handle.isNotEmpty
-                              ? p.handle
-                              : (p.name.isEmpty ? 'Jugador' : p.name),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppText.grotesk(
-                              size: 13, weight: FontWeight.w600),
-                        ),
-                      ),
-                      if (p.shareTime && p.playingSince.isNotEmpty)
-                        Builder(builder: (_) {
-                          final since = DateTime.tryParse(p.playingSince);
-                          if (since == null) return const SizedBox.shrink();
-                          return Text(
-                            PlaySessionService.fmt(
-                                DateTime.now().difference(since).inSeconds),
-                            style: AppText.grotesk(
-                                size: 13,
+                      if (extra > 0)
+                        Positioned(
+                          left: shown.length * overlap,
+                          child: Container(
+                            width: avatarSize,
+                            height: avatarSize,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppColors.bgElev,
+                              border:
+                                  Border.all(color: AppColors.line, width: 1),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '+$extra',
+                              style: AppText.grotesk(
+                                size: 11,
                                 weight: FontWeight.w700,
-                                color: AppColors.accent),
-                          );
-                        }),
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        players.length == 1
+                            ? '1 jugando ahora'
+                            : '${players.length} jugando ahora',
+                        style:
+                            AppText.archivo(size: 14, weight: FontWeight.w700),
+                      ),
+                      Text(
+                        'Actividad de usuarios registrados en 1of1',
+                        style: AppText.grotesk(
+                            size: 11, color: AppColors.white(0.5)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       );
@@ -406,9 +453,13 @@ class DetailScreen extends StatelessWidget {
         ? courtRating!.average!.toStringAsFixed(1)
         : '—';
     final reviewCount = courtRating?.count ?? court.reviews;
-    return PopPanel(
-      radius: AppShape.rCard,
+    // Panel plano: fill sin borde (antes PopPanel con borde 1px).
+    return Container(
       padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+      ),
       child: Row(
         children: [
           _statCell(
@@ -472,10 +523,10 @@ class DetailScreen extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       height: 160,
+      // Card plana: fill sin borde (lenguaje editorial).
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(AppShape.rCard),
-        border: Border.all(color: AppColors.white(0.25), width: 1.5),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -508,77 +559,6 @@ class DetailScreen extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
-
-  Widget _playersRow(Court court) {
-    const avatars = [
-      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&q=80',
-      'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&q=80',
-      'https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?w=100&q=80',
-      'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&q=80',
-    ];
-    return Row(
-      children: [
-        SizedBox(
-          width: 36 + (avatars.length + 1) * 26,
-          height: 36,
-          child: Stack(
-            children: [
-              for (var i = 0; i < avatars.length; i++)
-                Positioned(
-                  left: i * 26,
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.bg, width: 1),
-                      image: DecorationImage(
-                        image: NetworkImage(avatars[i]),
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                ),
-              Positioned(
-                left: avatars.length * 26,
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.bgElev,
-                    border: Border.all(color: AppColors.bg, width: 1),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    '+${court.players - 4}',
-                    style: AppText.grotesk(
-                      size: 11,
-                      weight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 10),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${court.players} jugadores',
-              style: AppText.archivo(size: 14, weight: FontWeight.w700),
-            ),
-            Text(
-              'Pickup game · 5v5',
-              style: AppText.grotesk(size: 11, color: AppColors.white(0.5)),
-            ),
-          ],
-        ),
-      ],
     );
   }
 
@@ -625,7 +605,7 @@ class DetailScreen extends StatelessWidget {
                 child: Text('Eliminar',
                     style: AppText.grotesk(
                         size: 13,
-                        color: const Color(0xFFEF4444),
+                        color: _danger,
                         weight: FontWeight.w700)),
               ),
             ],
@@ -661,22 +641,22 @@ class DetailScreen extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFFEF4444).withAlpha(20),
+          color: _danger.withAlpha(20),
           borderRadius: BorderRadius.circular(AppShape.rBtn),
           border: Border.all(
-              color: const Color(0xFFEF4444).withAlpha(60), width: 1),
+              color: _danger.withAlpha(60), width: 1),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.delete_outline,
-                size: 18, color: Color(0xFFEF4444)),
+                size: 18, color: _danger),
             const SizedBox(width: 8),
             Text('ELIMINAR CANCHA',
                 style: AppText.archivo(
                     size: 13,
                     weight: FontWeight.w800,
-                    color: const Color(0xFFEF4444))),
+                    color: _danger)),
           ],
         ),
       ),
@@ -795,10 +775,9 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
               return Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                // Card plana: fill sin borde (lenguaje editorial).
                 decoration: BoxDecoration(
                   color: AppColors.card,
-                  border:
-                      Border.all(color: AppColors.white(0.25), width: 1.5),
                   borderRadius: BorderRadius.circular(AppShape.rCard),
                 ),
                 child: Text(
@@ -824,9 +803,9 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
+      // Card plana: fill sin borde (lenguaje editorial).
       decoration: BoxDecoration(
         color: AppColors.card,
-        border: Border.all(color: AppColors.white(0.25), width: 1.5),
         borderRadius: BorderRadius.circular(AppShape.rCard),
       ),
       child: Column(
@@ -952,7 +931,7 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: Text('Eliminar',
-                style: AppText.grotesk(size: 13, color: const Color(0xFFEF4444), weight: FontWeight.w700)),
+                style: AppText.grotesk(size: 13, color: _danger, weight: FontWeight.w700)),
           ),
         ],
       ),

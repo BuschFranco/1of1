@@ -14,6 +14,14 @@ const String kPauseAction = 'toggle_pause';
 /// detector de esa cancha por una hora).
 const String kDeclineAction = 'decline_dwell';
 
+/// Id de la acción "SÍ, SIGO" de la pregunta de partido largo (2h): reanuda
+/// el partido con una hora extra como máximo.
+const String kConfirmYesAction = 'confirm_yes';
+
+/// Id de la acción "NO, TERMINÉ" de la pregunta de partido largo: cierra el
+/// partido con el tiempo congelado en el momento de la pregunta.
+const String kConfirmNoAction = 'confirm_no';
+
 /// Handler de respuestas que corre en un ISOLATE DE BACKGROUND (app cerrada).
 /// No puede tocar el estado vivo del partido, así que es un no-op: la acción
 /// "EMPEZAR YA" solo arranca el partido con el proceso vivo (app minimizada).
@@ -39,6 +47,10 @@ class NotificationsService {
   /// estado: dwell → jugando → limpia).
   static const int _sessionId = 100000;
 
+  /// Id fijo de la pregunta "¿Seguís jugando?" (partido largo). Fijo para
+  /// poder cancelarla al responder / al vencer el timeout.
+  static const int _confirmId = 100001;
+
   /// Lo invoca el handler de la acción "EMPEZAR YA" (con el proceso vivo). Lo
   /// cablea SyncCoordinator para llamar a `PlaySessionService.startNow()`.
   VoidCallback? onStartNowAction;
@@ -54,6 +66,14 @@ class NotificationsService {
   /// Lo invoca el handler de la acción "NO JUEGO". Lo cablea SyncCoordinator
   /// para llamar a `PlaySessionService.declineDwell()`.
   VoidCallback? onDeclineAction;
+
+  /// Lo invoca el handler de "SÍ, SIGO" (pregunta de partido largo). Lo cablea
+  /// SyncCoordinator para llamar a `PlaySessionService.confirmContinue()`.
+  VoidCallback? onConfirmYesAction;
+
+  /// Lo invoca el handler de "NO, TERMINÉ". Lo cablea SyncCoordinator para
+  /// llamar a `PlaySessionService.confirmStop()`.
+  VoidCallback? onConfirmNoAction;
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'rewards',
@@ -77,6 +97,8 @@ class NotificationsService {
     if (response.actionId == kStopAction) onStopAction?.call();
     if (response.actionId == kPauseAction) onPauseAction?.call();
     if (response.actionId == kDeclineAction) onDeclineAction?.call();
+    if (response.actionId == kConfirmYesAction) onConfirmYesAction?.call();
+    if (response.actionId == kConfirmNoAction) onConfirmNoAction?.call();
   }
 
   /// Inicializa el plugin y crea el canal Android. Idempotente. Best-effort:
@@ -307,6 +329,54 @@ class NotificationsService {
         'Si no volvés, el partido se cierra solo',
         details,
       );
+    } catch (_) {/* ignorar */}
+  }
+
+  /// Pregunta "¿Seguís jugando?" del partido largo (2h). Va por el canal de
+  /// recompensas (importancia alta: DEBE sonar — la de sesión es silenciosa y
+  /// pasarla por alto termina en una cancelación injusta a los 20 min). Botones
+  /// SÍ/NO que abren la app y responden en el isolate principal.
+  Future<void> showContinueCheck(String court) async {
+    if (!_ready) await init();
+    if (!_ready) return;
+    try {
+      const details = NotificationDetails(
+        android: AndroidNotificationDetails(
+          'rewards',
+          'Recompensas',
+          channelDescription: 'Logros, títulos y subidas de nivel',
+          importance: Importance.high,
+          priority: Priority.high,
+          autoCancel: false,
+          // Igual que la notif de sesión: la cancha revela dónde estás.
+          visibility: NotificationVisibility.private,
+          actions: <AndroidNotificationAction>[
+            // Ambas abren la app (el handler de background es no-op) y la
+            // notif se descarta sola al responder.
+            AndroidNotificationAction(kConfirmYesAction, 'SÍ, SIGO',
+                showsUserInterface: true, cancelNotification: true),
+            AndroidNotificationAction(kConfirmNoAction, 'NO, TERMINÉ',
+                showsUserInterface: true, cancelNotification: true),
+          ],
+        ),
+        iOS: DarwinNotificationDetails(),
+      );
+      await _plugin.show(
+        _confirmId,
+        court.isEmpty ? '¿Seguís jugando?' : '¿Seguís jugando en $court?',
+        'Pausamos tu partido a las 2 horas. Si no respondés en 20 minutos, '
+            'lo cancelamos.',
+        details,
+      );
+    } catch (_) {/* ignorar */}
+  }
+
+  /// Quita la pregunta de partido largo (respondida, vencida o reconciliada).
+  Future<void> cancelContinueCheck() async {
+    if (!_ready) await init();
+    if (!_ready) return;
+    try {
+      await _plugin.cancel(_confirmId);
     } catch (_) {/* ignorar */}
   }
 

@@ -28,3 +28,8 @@ Thumbs.db
 /android/
 /ios/
 /build/
+
+# graphify (grafo de conocimiento): se versiona el grafo/reporte para usarlo
+# en otras PCs, pero no el cache de extracción ni los temporales de pipeline.
+graphify-out/cache/
+graphify-out/.graphify_*

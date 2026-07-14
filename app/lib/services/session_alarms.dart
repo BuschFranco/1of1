@@ -34,6 +34,14 @@ const int kAlarmWarnId = 100014;
 // arrancar la gracia de salida al irse) aunque Samsung haya matado el proceso
 // y el foreground service. Es la red de seguridad de las geofences.
 const int kAlarmRadarId = 100015;
+// Pregunta de partido largo: a las 2h de juego neto pausa el partido y
+// pregunta "¿Seguís jugando?" aunque la app esté cerrada.
+const int kAlarmConfirmId = 100016;
+// Timeout de la pregunta: sin respuesta en [_kConfirmTimeout], descarta el
+// partido por completo (sin pendiente, sin puntos, sin historial).
+const int kAlarmConfirmTimeoutId = 100017;
+// Tope duro de la hora extra tras el "SÍ": cierra y GUARDA el partido.
+const int kAlarmHardEndId = 100018;
 
 /// Puerto para avisarle al isolate principal que reconcilie desde prefs.
 const String kPlayPortName = 'oneofone_play_port';
@@ -60,6 +68,7 @@ const String kLastBgFixKey = 'last_bg_fix_millis';
 const String _kAlarmStart = 'play_alarm_start';
 const String _kAlarmEnd = 'play_alarm_end';
 const String _kAlarmWarn = 'play_alarm_warn';
+const String _kAlarmHardEnd = 'play_alarm_hardend';
 
 // Claves base de PlaySessionService (deben coincidir EXACTO).
 const String _kActiveBase = 'play_active_session';
@@ -80,6 +89,12 @@ const Duration _kDwellThreshold = Duration(minutes: 6);
 const Duration _kExitGrace = Duration(minutes: 6);
 // Cadencia del radar de respaldo (peor caso de detección sin geofence/FGS).
 const Duration _kRadarEvery = Duration(minutes: 15);
+// GEMELAS de PlaySessionService.pointsTimeCap / confirmTimeout / dwellSnooze:
+// umbral de la pregunta de partido largo, ventana de respuesta, y snooze del
+// detector tras descartar (el celu probablemente sigue en el radio).
+const Duration _kConfirmAfter = Duration(hours: 2);
+const Duration _kConfirmTimeout = Duration(minutes: 20);
+const Duration _kDwellSnooze = Duration(hours: 1);
 
 String _nsKey(String base, String uk) => uk.isEmpty ? base : '$base::$uk';
 
@@ -275,6 +290,54 @@ Future<void> cancelRadarWatch() async {
   await AndroidAlarmManager.cancel(kAlarmRadarId);
 }
 
+/// Programa la pregunta de partido largo para [at] (2h de juego NETO). La
+/// programa PlaySessionService al arrancar el partido y la REPROGRAMA al
+/// reanudar una pausa manual (la pausa corre el umbral). También la programa
+/// alarmStartCallback cuando el partido arranca en background.
+Future<void> scheduleConfirmAlarm({required DateTime at}) async {
+  if (!_isAndroid) return;
+  await AndroidAlarmManager.cancel(kAlarmConfirmId);
+  await _oneShotAt(at, kAlarmConfirmId, alarmConfirmCallback);
+}
+
+Future<void> cancelConfirmAlarm() async {
+  if (!_isAndroid) return;
+  await AndroidAlarmManager.cancel(kAlarmConfirmId);
+}
+
+/// Programa el descarte por falta de respuesta para [at] (+20 min de la
+/// pregunta). La programan tanto _beginConfirm (foreground) como el callback
+/// de la pregunta (background); el cancel previo la hace idempotente.
+Future<void> scheduleConfirmTimeoutAlarm({required DateTime at}) async {
+  if (!_isAndroid) return;
+  await AndroidAlarmManager.cancel(kAlarmConfirmTimeoutId);
+  await _oneShotAt(at, kAlarmConfirmTimeoutId, alarmConfirmTimeoutCallback);
+}
+
+Future<void> cancelConfirmTimeoutAlarm() async {
+  if (!_isAndroid) return;
+  await AndroidAlarmManager.cancel(kAlarmConfirmTimeoutId);
+}
+
+/// Programa el cierre duro para [at] (tope de la hora extra tras el "SÍ"):
+/// cierra y GUARDA el partido aunque la app esté cerrada, con [at] como fin
+/// para no inflar la duración si la alarma llega tarde.
+Future<void> scheduleHardEndAlarm({required DateTime at}) async {
+  if (!_isAndroid) return;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString(
+      _kAlarmHardEnd, jsonEncode({'atMillis': at.millisecondsSinceEpoch}));
+  await AndroidAlarmManager.cancel(kAlarmHardEndId);
+  await _oneShotAt(at, kAlarmHardEndId, alarmHardEndCallback);
+}
+
+Future<void> cancelHardEndAlarm() async {
+  if (!_isAndroid) return;
+  await AndroidAlarmManager.cancel(kAlarmHardEndId);
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.remove(_kAlarmHardEnd);
+}
+
 /// Target de la alarma de arranque pendiente (permanencia sembrada por el radar
 /// o por _beginDwell), para que el isolate principal la adopte al volver al
 /// frente en vez de reiniciar la cuenta regresiva.
@@ -347,8 +410,12 @@ Future<void> alarmStartCallback() async {
   await _setNotionPresence(prefs,
       playing: true, courtId: courtId, sinceIso: startIso);
 
-  // Arrancó un partido en background → vigilamos la batería.
+  // Arrancó un partido en background → vigilamos la batería y programamos la
+  // pregunta de partido largo (arranque por alarma = sin pausas previas, el
+  // umbral de juego neto coincide con el de reloj).
   await scheduleBatteryWatch();
+  await scheduleConfirmAlarm(
+      at: DateTime.fromMillisecondsSinceEpoch(atMillis).add(_kConfirmAfter));
 
   _pingMain();
 }
@@ -457,6 +524,151 @@ Future<void> alarmBatteryCallback() async {
   _pingMain();
 }
 
+/// Pregunta de partido largo (2h de juego): "pausa" el partido estampando
+/// `confirmAskedAtMillis` en la sesión activa y muestra "¿Seguís jugando?".
+/// Con la app viva el ticker suele adelantarse (_beginConfirm) y este callback
+/// no hace nada (idempotente). Es la vía con el proceso muerto.
+@pragma('vm:entry-point')
+Future<void> alarmConfirmCallback() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  final uk = prefs.getString(kBgUserKey) ?? '';
+  final activeKey = _nsKey(_kActiveBase, uk);
+  final raw = prefs.getString(activeKey);
+  if (raw == null) return; // no hay partido: nada que preguntar
+  Map<String, dynamic> a;
+  try {
+    a = jsonDecode(raw) as Map<String, dynamic>;
+  } catch (_) {
+    return;
+  }
+  // Gracia de salida en curso: el partido ya se está cerrando solo.
+  if (a['endsAtMillis'] != null) return;
+  // Ya preguntado (el ticker se adelantó) o ya confirmó su hora extra.
+  if (a['confirmAskedAtMillis'] != null) return;
+  if (a['confirmedOnce'] == true) return;
+
+  final now = DateTime.now();
+  a['confirmAskedAtMillis'] = now.millisecondsSinceEpoch;
+  await prefs.setString(activeKey, jsonEncode(a));
+  await scheduleConfirmTimeoutAlarm(at: now.add(_kConfirmTimeout));
+  await NotificationsService.instance.init();
+  await NotificationsService.instance
+      .showContinueCheck((a['courtName'] ?? '') as String);
+  _pingMain();
+}
+
+/// Timeout de la pregunta: si nadie respondió (el flag sigue en la sesión
+/// activa), descarta el partido POR COMPLETO — sin pendiente, sin puntos, sin
+/// historial.
+@pragma('vm:entry-point')
+Future<void> alarmConfirmTimeoutCallback() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  final uk = prefs.getString(kBgUserKey) ?? '';
+  final raw = prefs.getString(_nsKey(_kActiveBase, uk));
+  if (raw == null) return;
+  Map<String, dynamic> a;
+  try {
+    a = jsonDecode(raw) as Map<String, dynamic>;
+  } catch (_) {
+    return;
+  }
+  // Respondida (el isolate principal limpió el flag): nada que hacer.
+  if (a['confirmAskedAtMillis'] == null) return;
+  await _discardActive(prefs, uk, a);
+  _pingMain();
+}
+
+/// Tope duro de la hora extra tras el "SÍ": cierra y GUARDA el partido
+/// (pendiente de resultado) usando el tope como fin, y avisa que llegó al
+/// límite de tiempo.
+@pragma('vm:entry-point')
+Future<void> alarmHardEndCallback() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  final raw = prefs.getString(_kAlarmHardEnd);
+  await prefs.remove(_kAlarmHardEnd);
+  final uk = prefs.getString(kBgUserKey) ?? '';
+  final activeRaw = prefs.getString(_nsKey(_kActiveBase, uk));
+  if (activeRaw == null) return;
+  int? atMillis;
+  if (raw != null) {
+    try {
+      atMillis =
+          ((jsonDecode(raw) as Map<String, dynamic>)['atMillis'] as num?)
+              ?.toInt();
+    } catch (_) {}
+  }
+  // Snooze de la cancha (mismo flujo que "No juego"): el celu sigue en el
+  // radio y sin esto el radar re-sembraría la permanencia enseguida. Al
+  // reabrir, el restore adopta el snooze y aparece el botón "Iniciar partido".
+  // Se lee ANTES del cierre porque _closeActiveToPending borra la sesión.
+  try {
+    final a = jsonDecode(activeRaw) as Map<String, dynamic>;
+    final courtId = (a['courtId'] ?? '') as String;
+    if (courtId.isNotEmpty) {
+      await prefs.setString(
+        _nsKey(_kDwellSnoozeBase, uk),
+        jsonEncode({
+          'courtId': courtId,
+          'untilMillis':
+              DateTime.now().add(_kDwellSnooze).millisecondsSinceEpoch,
+        }),
+      );
+    }
+  } catch (_) {}
+  await _closeActiveToPending(
+    prefs,
+    uk,
+    lowBattery: false,
+    endsAtMillis: atMillis,
+    notifTitle: 'Llegaste al tiempo límite',
+    notifBody: 'Guardamos tu partido de 3 horas. Abrí 1of1 para registrar '
+        'el resultado.',
+  );
+  _pingMain();
+}
+
+/// Descarta el partido en curso POR COMPLETO desde background (timeout de la
+/// pregunta): sin pendiente, sin puntos, sin historial. Silencia el detector
+/// de esa cancha 1h (el celu probablemente sigue dentro del radio: sin snooze
+/// el dwell re-arrancaría enseguida) y avisa por notificación.
+Future<void> _discardActive(
+    SharedPreferences prefs, String uk, Map<String, dynamic> a) async {
+  await prefs.remove(_nsKey(_kActiveBase, uk));
+  final courtId = (a['courtId'] ?? '') as String;
+  if (courtId.isNotEmpty) {
+    await prefs.setString(
+      _nsKey(_kDwellSnoozeBase, uk),
+      jsonEncode({
+        'courtId': courtId,
+        'untilMillis':
+            DateTime.now().add(_kDwellSnooze).millisecondsSinceEpoch,
+      }),
+    );
+  }
+  await cancelBatteryWatch();
+  await cancelConfirmAlarm();
+  await cancelConfirmTimeoutAlarm();
+  await cancelHardEndAlarm();
+  await AndroidAlarmManager.cancel(kAlarmEndId);
+  await AndroidAlarmManager.cancel(kAlarmWarnId);
+  await prefs.remove(_kAlarmEnd);
+  await prefs.remove(_kAlarmWarn);
+  await _setNotionPresence(prefs, playing: false, courtId: '', sinceIso: '');
+  await NotificationsService.instance.init();
+  await NotificationsService.instance.cancelContinueCheck();
+  await NotificationsService.instance.show(
+    'Partido cancelado',
+    'No respondiste si seguías jugando, así que no lo guardamos.',
+  );
+  await NotificationsService.instance.cancelSession();
+}
+
 /// RADAR de respaldo (alarma periódica): re-muestrea el GPS y avanza la
 /// detección aunque el proceso y el foreground service estén muertos. Espejo
 /// en background de lo que hace _evaluate con la app viva:
@@ -491,6 +703,10 @@ Future<void> alarmRadarCallback() async {
       return;
     }
     if (a['endsAtMillis'] != null) return; // gracia ya en curso
+    // Pausado esperando la respuesta de "¿Seguís jugando?": la pregunta (y su
+    // timeout) gobiernan — no sembramos la gracia de salida (semántica de
+    // pausa, igual que _evaluate con _pausedAt != null).
+    if (a['confirmAskedAtMillis'] != null) return;
     final startMillis = (a['startMillis'] as num?)?.toInt();
     final courtId = (a['courtId'] ?? '') as String;
     final court = await _courtFromCache(prefs, courtId);
@@ -622,11 +838,15 @@ Future<(String, String, double, double)?> _nearestCourtInRadius(
 
 /// Cierra el partido en curso (sesión activa → pendiente de resultado) desde el
 /// isolate de background. Descarta si duró menos de [_kMinMatchSeconds].
+/// [notifTitle]/[notifBody] permiten personalizar el aviso (p. ej. el cierre
+/// por tiempo límite); si no se pasan, va el texto estándar.
 Future<void> _closeActiveToPending(
   SharedPreferences prefs,
   String uk, {
   required bool lowBattery,
   int? endsAtMillis,
+  String? notifTitle,
+  String? notifBody,
 }) async {
   final activeKey = _nsKey(_kActiveBase, uk);
   final activeRaw = prefs.getString(activeKey);
@@ -647,13 +867,23 @@ Future<void> _closeActiveToPending(
   // corre el callback (la alarma puede llegar tarde). Así la duración no se
   // infla. Fallback (batería): usamos "now".
   final nowMs = now.millisecondsSinceEpoch;
-  final endMs = (endsAtMillis != null && endsAtMillis < nowMs) ? endsAtMillis : nowMs;
+  var endMs = (endsAtMillis != null && endsAtMillis < nowMs) ? endsAtMillis : nowMs;
+  // Defensivo: con la pregunta de partido largo pendiente, el cronómetro quedó
+  // congelado en ese momento — cualquier cierre debe capear ahí, no en "now".
+  final askedMs = (a['confirmAskedAtMillis'] as num?)?.toInt();
+  if (askedMs != null && askedMs < endMs) endMs = askedMs;
   final seconds = ((endMs - startMillis) / 1000).round();
 
   await prefs.remove(activeKey);
   await cancelBatteryWatch(); // el partido cerró: no seguimos vigilando
+  // El partido cerró: la pregunta de partido largo (y sus alarmas) ya no
+  // tienen sentido, en cualquier estado en que hayan quedado.
+  await cancelConfirmAlarm();
+  await cancelConfirmTimeoutAlarm();
+  await cancelHardEndAlarm();
   await _setNotionPresence(prefs, playing: false, courtId: '', sinceIso: '');
   await NotificationsService.instance.init();
+  await NotificationsService.instance.cancelContinueCheck();
 
   if (seconds >= _kMinMatchSeconds) {
     // Partido válido → pendiente de resultado (mismo formato que PlaySession).
@@ -669,11 +899,15 @@ Future<void> _closeActiveToPending(
       }),
     );
     await NotificationsService.instance.show(
-      lowBattery ? 'Partido terminado por batería baja' : 'Terminó tu partido',
-      lowBattery
-          ? 'Cerramos tu partido para proteger tu información. Abrí 1of1 para '
-              'registrar el resultado.'
-          : 'Abrí 1of1 para registrar el resultado.',
+      notifTitle ??
+          (lowBattery
+              ? 'Partido terminado por batería baja'
+              : 'Terminó tu partido'),
+      notifBody ??
+          (lowBattery
+              ? 'Cerramos tu partido para proteger tu información. Abrí 1of1 '
+                  'para registrar el resultado.'
+              : 'Abrí 1of1 para registrar el resultado.'),
     );
   }
   await NotificationsService.instance.cancelSession();

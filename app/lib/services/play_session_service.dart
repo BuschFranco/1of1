@@ -58,8 +58,17 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   static const Duration multiplierCap = Duration(minutes: 90);
   static const double maxMultiplier = 1.8;
   // El tiempo deja de sumar puntos a partir de acá (~2h, un partido
-  // profesional). Cap silencioso: no se muestra en la UI.
+  // profesional). Cap silencioso: no se muestra en la UI. Es TAMBIÉN el
+  // umbral de la pregunta de partido largo ("¿Seguís jugando?"): mismo
+  // trigger, un solo número.
   static const Duration pointsTimeCap = Duration(hours: 2);
+  // Pregunta de partido largo: al llegar a [pointsTimeCap] de juego neto se
+  // pausa el cronómetro y se pregunta si el partido sigue. Sin respuesta en
+  // [confirmTimeout] se cancela POR COMPLETO (sin puntos ni historial); con
+  // "SÍ" hay [overtimeMax] extra y a las 3h netas se cierra y guarda solo.
+  // GEMELAS: session_alarms._kConfirmAfter / _kConfirmTimeout.
+  static const Duration confirmTimeout = Duration(minutes: 20);
+  static const Duration overtimeMax = Duration(hours: 1);
   // Con la batería en este nivel (o menos) y sin cargar, cerramos el partido en
   // curso para proteger la información antes de que el SO mate la app.
   static const int batteryEndPercent = 5;
@@ -118,6 +127,17 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Se descartó un partido por durar menos de [minMatch]: no se registró nada.
   void Function(String courtName, int seconds)? onMatchDiscarded;
+
+  /// Mostrar la pregunta "¿Seguís jugando?" del partido largo (2h). La cablea
+  /// SyncCoordinator a NotificationsService.showContinueCheck.
+  void Function(String courtName)? onConfirmNotif;
+
+  /// Quitar la pregunta (respondida, vencida o reconciliada).
+  VoidCallback? onCancelConfirmNotif;
+
+  /// Aviso visible genérico (título + cuerpo) para los desenlaces del partido
+  /// largo: "llegaste al tiempo límite" y "cancelado por no responder".
+  void Function(String title, String body)? onNoticeNotif;
 
   // ── Notificación de sesión (cronómetro persistente con la app minimizada) ──
   // La capa de notificaciones implementa el "cómo"; acá solo decidimos el qué y
@@ -221,6 +241,12 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   // Pausa del cronómetro (como play/pause de YouTube/Spotify).
   DateTime? _pausedAt; // != null mientras está pausado
   int _pausedSeconds = 0; // total de segundos pausados (se excluyen del elapsed)
+  // Pregunta de partido largo (2h): desde cuándo esperamos la respuesta de
+  // "¿Seguís jugando?" (mientras esté seteado, _pausedAt apunta al mismo
+  // momento: congela cronómetro y detección) y si el usuario ya confirmó su
+  // hora extra (no se re-pregunta; el próximo tope es el cierre duro a 3h).
+  DateTime? _confirmAskedAt;
+  bool _confirmedOnce = false;
 
   // Tiempo jugado acumulado por cancha (persistido local).
   final Map<String, _CourtPlay> _totals = {};
@@ -437,6 +463,11 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
 
   bool get isPlaying => _startedAt != null;
   String? get courtName => _courtName;
+
+  /// Id de la cancha del partido en curso (null si no estás jugando). Lo usa
+  /// el detalle de cancha para mostrarte "jugando acá" con el estado LOCAL,
+  /// sin esperar el round-trip de presencia a Notion.
+  String? get courtId => isPlaying ? _courtId : null;
   int get elapsedSeconds => _elapsed;
 
   /// Multiplicador de puntos por duración para [seconds] de partido: x1.0 al
@@ -468,6 +499,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// radio se congela (no se cierra solo). Al reanudar, sigue desde donde quedó.
   void togglePause() {
     if (!isPlaying) return;
+    // Con la pregunta de partido largo pendiente manda la pregunta: se
+    // responde con SÍ/NO (notif o banner), no con el botón de pausa.
+    if (awaitingConfirm) return;
     if (_pausedAt == null) {
       _pausedAt = DateTime.now();
     } else {
@@ -476,10 +510,132 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       _pausedAt = null;
       // Volvemos a evaluar la salida del radio desde cero.
       _outsideSince = null;
+      // La pausa corre el umbral de la pregunta/tope (son de juego NETO):
+      // re-programamos la alarma para el nuevo momento en tiempo de reloj.
+      _rescheduleConfirmAlarm();
     }
     _persistActive();
     _renderSessionNotif();
     notifyListeners();
+  }
+
+  // ── Pregunta de partido largo ("¿Seguís jugando?") ────────────────────────
+
+  /// True mientras esperamos que el usuario responda la pregunta de las 2h.
+  bool get awaitingConfirm => isPlaying && _confirmAskedAt != null;
+
+  /// (Re)programa la alarma del próximo hito del partido largo en tiempo de
+  /// reloj: la pregunta a [pointsTimeCap] de juego neto, o el cierre duro a
+  /// [pointsTimeCap]+[overtimeMax] si ya confirmó. Con la marca ya pasada no
+  /// programa nada (el ticker la dispara al toque con la app viva).
+  void _rescheduleConfirmAlarm() {
+    if (!isPlaying || _startedAt == null) return;
+    final paused = Duration(seconds: _pausedSeconds);
+    if (_confirmedOnce) {
+      final at = _startedAt!.add(pointsTimeCap + overtimeMax + paused);
+      if (at.isAfter(DateTime.now())) unawaited(scheduleHardEndAlarm(at: at));
+      return;
+    }
+    final at = _startedAt!.add(pointsTimeCap + paused);
+    if (at.isAfter(DateTime.now())) unawaited(scheduleConfirmAlarm(at: at));
+  }
+
+  /// Corre en cada tick con partido en curso: dispara la pregunta a las 2h,
+  /// vigila su timeout y aplica el tope duro de la hora extra.
+  void _checkLongMatch() {
+    if (awaitingConfirm) {
+      // Esperando respuesta: solo vigilamos el timeout (la alarma de
+      // background es el respaldo con el proceso muerto).
+      if (DateTime.now().difference(_confirmAskedAt!) >= confirmTimeout) {
+        discardOnTimeout();
+      }
+      return;
+    }
+    if (_pausedAt != null) return; // pausa manual: el umbral es juego neto
+    if (_outsideSince != null) return; // gracia en curso: ya se está cerrando
+    if (!_confirmedOnce && _elapsed >= pointsTimeCap.inSeconds) {
+      _beginConfirm();
+    } else if (_confirmedOnce &&
+        _elapsed >= (pointsTimeCap + overtimeMax).inSeconds) {
+      // Tope duro de la hora extra: cerrar y GUARDAR, avisando el límite.
+      // Snooze de la cancha (mismo flujo que "No juego"): seguís parado ahí y
+      // sin esto arrancaría otra cuenta regresiva al instante; queda el botón
+      // "Iniciar partido" manual en el mapa.
+      unawaited(cancelHardEndAlarm());
+      final id = _courtId;
+      if (id != null) unawaited(_setSnooze(id));
+      onNoticeNotif?.call('Llegaste al tiempo límite',
+          'Guardamos tu partido de 3 horas. Registrá el resultado.');
+      _endSession();
+    }
+  }
+
+  /// Pausa el partido y muestra la pregunta. Idempotente (la alarma de
+  /// background pudo haberse adelantado vía reconcileFromPrefs).
+  void _beginConfirm() {
+    if (!isPlaying || _confirmAskedAt != null) return;
+    _confirmAskedAt = DateTime.now();
+    _pausedAt = _confirmAskedAt; // congela cronómetro y detección (pausa)
+    unawaited(cancelConfirmAlarm()); // la vía por alarma ya no hace falta
+    unawaited(
+        scheduleConfirmTimeoutAlarm(at: _confirmAskedAt!.add(confirmTimeout)));
+    onConfirmNotif?.call(_courtName ?? '');
+    unawaited(_persistActive());
+    _renderSessionNotif();
+    notifyListeners();
+  }
+
+  /// "SÍ, SIGO": reanuda el partido con [overtimeMax] de tope. El tiempo de
+  /// espera no cuenta como jugado (misma aritmética que el resume de pausa).
+  Future<void> confirmContinue() async {
+    if (!awaitingConfirm) {
+      // El botón de la notif pudo llegar antes que la reconciliación (la
+      // pregunta la hizo la alarma con la app minimizada/cerrada): adoptamos
+      // el estado persistido y reintentamos.
+      await reconcileFromPrefs();
+      if (!awaitingConfirm) return;
+    }
+    _pausedSeconds += DateTime.now().difference(_pausedAt!).inSeconds;
+    _pausedAt = null;
+    _confirmAskedAt = null;
+    _confirmedOnce = true;
+    // Igual que el resume de togglePause: la salida del radio se re-evalúa
+    // desde cero.
+    _outsideSince = null;
+    unawaited(cancelConfirmTimeoutAlarm());
+    onCancelConfirmNotif?.call();
+    _rescheduleConfirmAlarm(); // programa el cierre duro (3h netas)
+    unawaited(_persistActive());
+    _renderSessionNotif();
+    notifyListeners();
+  }
+
+  /// "NO, TERMINÉ": cierra normal con el tiempo congelado en la pregunta —
+  /// queda pendiente de "¿Cómo te fue?" y suma como cualquier partido. Snooze
+  /// de la cancha: seguís parado ahí y sin esto arrancaría otra cuenta
+  /// regresiva al instante.
+  Future<void> confirmStop() async {
+    if (!awaitingConfirm) {
+      await reconcileFromPrefs();
+      if (!awaitingConfirm) return;
+    }
+    onCancelConfirmNotif?.call();
+    unawaited(cancelConfirmTimeoutAlarm());
+    final id = _courtId;
+    if (id != null) unawaited(_setSnooze(id));
+    _endSession();
+  }
+
+  /// Venció el timeout sin respuesta: cancela el partido POR COMPLETO — no
+  /// queda pendiente, no suma puntos, ni tiempo, ni jugadas, ni historial.
+  void discardOnTimeout() {
+    if (!awaitingConfirm) return;
+    onCancelConfirmNotif?.call();
+    final id = _courtId;
+    if (id != null) unawaited(_setSnooze(id));
+    onNoticeNotif?.call('Partido cancelado',
+        'No respondiste si seguías jugando, así que no lo guardamos.');
+    _resetLiveSession();
   }
 
   /// True cuando estamos acumulando permanencia en una cancha cercana pero el
@@ -552,6 +708,28 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
           if (_background) unawaited(_startStream());
           _renderSessionNotif();
           notifyListeners();
+        }
+      } catch (_) {}
+    }
+
+    // 1.b) Pregunta de partido largo hecha por la alarma en background:
+    // adoptar la espera (o descartar si venció y su timeout no llegó a correr),
+    // para que SÍ/NO de la notificación operen sobre el estado real. Cubre
+    // tanto la sesión recién adoptada arriba como una que ya teníamos.
+    if (isPlaying && activeRaw != null) {
+      try {
+        final j = jsonDecode(activeRaw) as Map<String, dynamic>;
+        _confirmedOnce = _confirmedOnce || j['confirmedOnce'] == true;
+        final askedMillis = (j['confirmAskedAtMillis'] as num?)?.toInt();
+        if (askedMillis != null && _confirmAskedAt == null) {
+          _confirmAskedAt = DateTime.fromMillisecondsSinceEpoch(askedMillis);
+          _pausedAt ??= _confirmAskedAt;
+          if (DateTime.now().difference(_confirmAskedAt!) >= confirmTimeout) {
+            discardOnTimeout();
+          } else {
+            _renderSessionNotif();
+            notifyListeners();
+          }
         }
       } catch (_) {}
     }
@@ -1201,6 +1379,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
 
   void _tick() {
     if (isPlaying && _startedAt != null) {
+      // Partido largo: pregunta a las 2h, timeout de respuesta y tope de 3h.
+      _checkLongMatch();
+      if (!isPlaying) return; // _checkLongMatch pudo cerrar/cancelar el partido
       // Pausado: el tiempo queda congelado (no avanza el elapsed).
       if (_pausedAt == null) {
         _elapsed =
@@ -1452,11 +1633,16 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _pausedSeconds = 0;
     _outsideSince = null;
     _endNotifShown = false;
+    _confirmAskedAt = null;
+    _confirmedOnce = false;
     // Ya arrancó: cancelamos la alarma de arranque (si estaba pendiente) y
     // arrancamos la vigilancia periódica de batería (red de seguridad en
-    // background por si el SO mata el proceso).
+    // background por si el SO mata el proceso). También programamos la
+    // pregunta de partido largo (la alarma cubre el proceso muerto; con la
+    // app viva el ticker se adelanta).
     unawaited(cancelStartAlarm());
     unawaited(scheduleBatteryWatch());
+    unawaited(scheduleConfirmAlarm(at: _startedAt!.add(pointsTimeCap)));
     // No registramos nada todavía: jugada, cancha, tiempo, puntos, racha e
     // historial se computan recién al resolver el resultado (resolvePending),
     // con el partido ya terminado y validado por duración. Acá solo persistimos
@@ -1530,6 +1716,8 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _outsideSince = null;
     _insideSince = null;
     _endNotifShown = false;
+    _confirmAskedAt = null;
+    _confirmedOnce = false;
     // Reseteamos también la permanencia: al terminar un partido (manual o por
     // salir del radio) NO queremos arrancar otro al instante con el dwell viejo
     // ya vencido. Así, si seguís dentro de la cancha, empieza de nuevo la cuenta
@@ -1537,11 +1725,14 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _dwellCourtId = null;
     _dwellSince = null;
     _dwellOutsideSince = null;
-    // Cancelamos cualquier alarma pendiente (arranque/cierre/batería): el estado
-    // quedó resuelto acá.
+    // Cancelamos cualquier alarma pendiente (arranque/cierre/batería/partido
+    // largo): el estado quedó resuelto acá.
     unawaited(cancelStartAlarm());
     unawaited(cancelEndAlarm());
     unawaited(cancelBatteryWatch());
+    unawaited(cancelConfirmAlarm());
+    unawaited(cancelConfirmTimeoutAlarm());
+    unawaited(cancelHardEndAlarm());
     // El partido cerró: soltamos el foreground service para no drenar batería.
     // Si seguís dentro de otra cancha, el _beginDwell posterior lo reactiva.
     _stopStream();
@@ -1756,6 +1947,12 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         // de gracia). Sirve para reconstruir la duración correcta (tope = fin de
         // gracia, no el momento en que reabrís la app). null = sin salida.
         'endsAtMillis': _outsideSince?.add(exitGrace).millisecondsSinceEpoch,
+        // Pregunta de partido largo: pendiente desde (null = sin pregunta) y si
+        // ya confirmó su hora extra. Los leen los isolates de background (radar
+        // no siembra gracia mientras espera; el timeout descarta) y la
+        // reconciliación al reabrir.
+        'confirmAskedAtMillis': _confirmAskedAt?.millisecondsSinceEpoch,
+        'confirmedOnce': _confirmedOnce,
       }),
     );
   }
@@ -2011,6 +2208,14 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         final endsAt = endsAtMillis != null
             ? DateTime.fromMillisecondsSinceEpoch(endsAtMillis)
             : null;
+        // Pregunta de partido largo pendiente al morir el proceso. Va ANTES de
+        // la regla del gap de latidos: durante la espera el partido está
+        // pausado y los latidos se frenan — sin este orden, el gap lo cerraría
+        // con el tiempo del último latido en vez de aplicar la pregunta.
+        final askedMillis = (j['confirmAskedAtMillis'] as num?)?.toInt();
+        final askedAt = askedMillis != null
+            ? DateTime.fromMillisecondsSinceEpoch(askedMillis)
+            : null;
         final now = DateTime.now();
 
         if (now.difference(start) > const Duration(hours: 6)) {
@@ -2034,6 +2239,35 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
           unawaited(cancelStartAlarm());
           unawaited(cancelEndAlarm());
           unawaited(cancelBatteryWatch());
+        } else if (askedAt != null &&
+            now.difference(askedAt) >= confirmTimeout) {
+          // La pregunta venció sin respuesta y su alarma de timeout no llegó a
+          // correr: descartamos POR COMPLETO (sin pendiente, sin puntos) —
+          // misma regla que el timeout en background.
+          if (courtId != null && courtId.isNotEmpty) {
+            unawaited(_setSnooze(courtId));
+          }
+          await _clearActive();
+          unawaited(cancelStartAlarm());
+          unawaited(cancelEndAlarm());
+          unawaited(cancelBatteryWatch());
+          unawaited(cancelConfirmAlarm());
+          unawaited(cancelConfirmTimeoutAlarm());
+          unawaited(cancelHardEndAlarm());
+          onCancelConfirmNotif?.call();
+        } else if (askedAt != null) {
+          // Pregunta todavía vigente: adoptamos el partido PAUSADO esperando
+          // la respuesta (el cronómetro quedó congelado en el momento de la
+          // pregunta). El timeout sigue corriendo (alarma + ticker).
+          _courtId = courtId;
+          _courtName = courtName;
+          _startedAt = start;
+          _elapsed = askedAt.difference(start).inSeconds;
+          _lastSavedAt = _elapsed;
+          _accrued = 0;
+          _confirmAskedAt = askedAt;
+          _pausedAt = askedAt;
+          _confirmedOnce = j['confirmedOnce'] == true;
         } else if (hasHeartbeat && now.difference(lastSeen) > resumeGapMax) {
           // El proceso estuvo caído (apagado / kill) mientras jugabas: el
           // partido se jugó hasta [lastSeen]. Lo GUARDAMOS con ese tiempo (no
@@ -2065,6 +2299,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
           // vuelca al resolver). Lo dejamos como pendiente para que el
           // cronómetro y el tiempo en vivo lo muestren completo.
           _accrued = 0;
+          // Si ya había confirmado su hora extra, no se re-pregunta: el
+          // próximo hito es el cierre duro de las 3h.
+          _confirmedOnce = j['confirmedOnce'] == true;
           // Si había una gracia de salida en curso (no vencida), la restauramos
           // para que la cuenta regresiva de cierre siga desde donde iba.
           if (endsAt != null) _outsideSince = endsAt.subtract(exitGrace);

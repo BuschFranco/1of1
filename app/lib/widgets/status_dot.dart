@@ -10,7 +10,6 @@ class StatusDot extends StatelessWidget {
   Widget build(BuildContext context) {
     final (color, label) = switch (status) {
       CourtStatus.open => (AppColors.open, 'ABIERTA'),
-      CourtStatus.busy => (AppColors.busy, 'OCUPADA'),
       CourtStatus.closed => (AppColors.closed, 'CERRADA'),
     };
     return Row(

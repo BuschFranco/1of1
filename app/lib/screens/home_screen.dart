@@ -117,6 +117,9 @@ class _HomeScreenState extends State<HomeScreen>
 
   // Stream de ubicación para mover el punto azul en vivo (como otras apps).
   StreamSubscription<Position>? _posStream;
+  // Para escuchar fixes publicados por otros (el modal de permisos al conceder
+  // ubicación) y reaccionar centrando el mapa sin esperar el botón.
+  LocationService? _locSvc;
 
   // Filtros rápidos activos (chips debajo del buscador). "Cerca" ordena por
   // cercanía a la ubicación del usuario; el resto filtra la lista.
@@ -325,6 +328,10 @@ class _HomeScreenState extends State<HomeScreen>
     _rebuildMarkers();
     _loadInitialPosition();
     _startLocationUpdates();
+    // El mapa reacciona a que el permiso de ubicación se conceda en caliente
+    // (el modal publica el primer fix en LocationService): centra y levanta el
+    // stream sin que el usuario tenga que tocar "mi ubicación".
+    _locSvc = context.read<LocationService>()..addListener(_onLocationFix);
     // La detección de partidos (presencia, batch, sembrado y canchas) la cablea
     // SyncCoordinator al arrancar la app; HomeScreen ya no orquesta nada de eso.
     WidgetsBinding.instance.addObserver(this);
@@ -375,7 +382,34 @@ class _HomeScreenState extends State<HomeScreen>
     if (_permOpen || !mounted) return;
     _permOpen = true;
     await PermissionsModal.showOnceIfNeeded(context);
-    if (mounted) _permOpen = false;
+    if (!mounted) return;
+    _permOpen = false;
+    // Red de seguridad: si la ubicación se concedió dentro del modal y el
+    // stream todavía no corre, lo levantamos acá (su primer fix centra el
+    // mapa). El camino principal es _onLocationFix; esto cubre el caso de que
+    // el fix del modal haya fallado.
+    if (_posStream == null) unawaited(_startLocationUpdates());
+  }
+
+  /// LocationService notificó un fix nuevo. El caso que nos importa: el modal
+  /// de permisos publicó el PRIMER fix tras conceder ubicación — centramos el
+  /// mapa y levantamos el stream en vivo, sin esperar el botón "mi ubicación".
+  /// Con el stream ya corriendo (o en modo prueba) es un no-op.
+  void _onLocationFix() {
+    if (!mounted || _mockMode) return;
+    final pos = _locSvc?.last;
+    if (pos == null) return;
+    if (_posStream == null) unawaited(_startLocationUpdates());
+    if (_userPos == null) {
+      _userPos = pos;
+      _updateUserScreenPos();
+      _mapCtrl?.animateCamera(
+        CameraUpdate.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 15),
+      );
+      // Igual que el primer fix del stream: aplicar el orden "Cerca" una vez.
+      setState(_applyFilters);
+      _syncPageToIndex();
+    }
   }
 
   /// Sigue la ubicación en vivo para mover el punto azul a medida que el usuario
@@ -491,6 +525,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _locSvc?.removeListener(_onLocationFix);
     _posStream?.cancel();
     _pulseCtrl.dispose();
     _mapCtrl?.dispose();
@@ -998,6 +1033,9 @@ class _HomeScreenState extends State<HomeScreen>
     // del mismo banner (sin swaps bruscos de color/layout).
     final ending = ps.isEndingSoon;
     final paused = ps.isPaused;
+    // Pregunta de partido largo (2h): el banner cambia a modo pregunta con
+    // SÍ/NO (espejo de la notificación, que al tocarla abre la app acá).
+    final awaiting = ps.awaitingConfirm;
     final secs = ps.elapsedSeconds;
     final mm = (secs ~/ 60).toString().padLeft(2, '0');
     final ss = (secs % 60).toString().padLeft(2, '0');
@@ -1097,6 +1135,16 @@ class _HomeScreenState extends State<HomeScreen>
                                 color: amber)),
                       ],
                     )
+                  else if (awaiting)
+                    Text(
+                      '¿Seguís jugando? Si no respondés, se cancela',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.grotesk(
+                          size: 10,
+                          weight: FontWeight.w700,
+                          color: amber),
+                    )
                   else
                     Text(
                       paused ? 'Pausado' : 'Jugando en ${ps.courtName ?? ''}',
@@ -1133,47 +1181,99 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ),
             const SizedBox(width: 10),
-            // Botón pausa/reanudar (siempre visible: el banner es el mismo, jugues
-            // o estés saliendo del radio).
-            PressableWidget(
-              onTap: () => context.read<PlaySessionService>().togglePause(),
-              child: Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: AppColors.white(0.08),
-                  borderRadius: BorderRadius.circular(AppShape.rBtn),
-                ),
-                child: Icon(
-                  paused ? Icons.play_arrow : Icons.pause,
-                  size: 18,
-                  color: AppColors.ink,
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            PressableWidget(
-              onTap: () => context.read<PlaySessionService>().stopNow(),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.accent,
-                  borderRadius: BorderRadius.circular(AppShape.rBtn),
-                ),
-                child: Text(
-                  'DETENER',
-                  style: AppText.archivo(
-                    size: 10,
-                    weight: FontWeight.w800,
-                    letterSpacing: 0.04,
-                    color: Colors.white,
+            if (awaiting) ...[
+              // Modo pregunta: responder acá equivale a los botones de la
+              // notificación (el partido sigue pausado hasta responder).
+              PressableWidget(
+                onTap: () => unawaited(
+                    context.read<PlaySessionService>().confirmContinue()),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.open,
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                  ),
+                  child: Text(
+                    'SÍ, SIGO',
+                    style: AppText.archivo(
+                      size: 10,
+                      weight: FontWeight.w800,
+                      letterSpacing: 0.04,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
-            ),
+              const SizedBox(width: 6),
+              PressableWidget(
+                onTap: () => unawaited(
+                    context.read<PlaySessionService>().confirmStop()),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent,
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                  ),
+                  child: Text(
+                    'NO, TERMINÉ',
+                    style: AppText.archivo(
+                      size: 10,
+                      weight: FontWeight.w800,
+                      letterSpacing: 0.04,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ] else ...[
+              // Botón pausa/reanudar (siempre visible: el banner es el mismo,
+              // jugues o estés saliendo del radio).
+              PressableWidget(
+                onTap: () => context.read<PlaySessionService>().togglePause(),
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: AppColors.white(0.08),
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                  ),
+                  child: Icon(
+                    paused ? Icons.play_arrow : Icons.pause,
+                    size: 18,
+                    color: AppColors.ink,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              PressableWidget(
+                onTap: () => context.read<PlaySessionService>().stopNow(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent,
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                  ),
+                  child: Text(
+                    'DETENER',
+                    style: AppText.archivo(
+                      size: 10,
+                      weight: FontWeight.w800,
+                      letterSpacing: 0.04,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

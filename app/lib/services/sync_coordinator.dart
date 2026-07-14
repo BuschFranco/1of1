@@ -141,12 +141,24 @@ class SyncCoordinator {
         NotificationsService.instance.showPaused(court, elapsed);
     _play.onClearSessionNotif = () =>
         NotificationsService.instance.cancelSession();
+    // Pregunta de partido largo (2h): mostrar/quitar la notif y avisos de sus
+    // desenlaces (tiempo límite / cancelado por no responder).
+    _play.onConfirmNotif = (court) =>
+        NotificationsService.instance.showContinueCheck(court);
+    _play.onCancelConfirmNotif = () =>
+        NotificationsService.instance.cancelContinueCheck();
+    _play.onNoticeNotif = (title, body) =>
+        NotificationsService.instance.show(title, body);
     // Botones de la notificación → arrancan/detienen/pausan el partido (vivo).
     NotificationsService.instance.onStartNowAction = () => _play.startNow();
     NotificationsService.instance.onStopAction = () => _play.stopNow();
     NotificationsService.instance.onPauseAction = () => _play.togglePause();
     NotificationsService.instance.onDeclineAction =
         () => unawaited(_play.declineDwell());
+    NotificationsService.instance.onConfirmYesAction =
+        () => unawaited(_play.confirmContinue());
+    NotificationsService.instance.onConfirmNoAction =
+        () => unawaited(_play.confirmStop());
 
     // Batch: cuando el service lo pide (cada 2 min / al pausar / cerrar),
     // stageamos las stats actuales y subimos TODO el perfil en una sola

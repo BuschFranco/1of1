@@ -17,6 +17,40 @@ class OnboardingScreen extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           const PopBackground(color: AppColors.bg),
+          // Imagen hero en el espacio superior (el contenido queda anclado
+          // abajo por el Spacer): foto local + scrim de 2 stops que la funde
+          // con el fondo para que no pelee con el headline (mismo patrón que
+          // el hero del detalle de cancha).
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: MediaQuery.of(context).size.height * 0.58,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset(
+                  'assets/images/onboarding_hero.jpg',
+                  fit: BoxFit.cover,
+                  alignment: Alignment.topCenter,
+                ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        AppColors.black(0.25),
+                        Colors.transparent,
+                        AppColors.bg,
+                      ],
+                      stops: const [0, 0.45, 1],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           SafeArea(
             child: Column(
               children: [

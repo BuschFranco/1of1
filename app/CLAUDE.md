@@ -37,7 +37,7 @@ dart run build_runner build --delete-conflicting-outputs   # regenerar freezed/j
   ```
 
   Si da `INSTALL_FAILED_UPDATE_INCOMPATIBLE` (firma distinta), desinstalá primero:
-  `adb uninstall com.example.triplesapp` (se pierden datos locales; las stats se
+  `adb uninstall com.buschfranco.oneofone` (se pierden datos locales; las stats se
   recuperan de Notion al loguear).
 
 ### Reglas de commits / push
@@ -206,6 +206,9 @@ datos sabe que existe Notion**.
 
 ### Background / notificaciones (leer antes de tocar)
 
+- **Referencia completa del sistema de detección** (estados, capas de
+  background, reconciliación, gotchas, cómo verificarlo en la calle):
+  [`docs/deteccion-partidos.md`](docs/deteccion-partidos.md).
 - Samsung y otros fabricantes **matan** el proceso y el foreground-service. El
   arranque/cierre automático del partido con la app cerrada se hace con
   **alarmas exactas del SO** (`android_alarm_manager_plus`) en
@@ -284,14 +287,15 @@ El string `"1of1"` aparece como marca en varios lugares. Al renombrar, cambiá
 
 ### 5.3 Package / applicationId (alto riesgo — cambia identidad de instalación)
 
-Hoy es `com.example.triplesapp` (histórico; el proyecto se llamaba TriplesApp).
-Cambiarlo es opcional y **rompe la actualización in-place** (hay que desinstalar).
+Hoy es `com.buschfranco.oneofone` (el histórico `com.example.triplesapp` se
+migró para cumplir requisitos de las tiendas). Cambiarlo de nuevo es opcional y
+**rompe la actualización in-place** (hay que desinstalar).
 Si lo hacés, cambiá **de forma consistente**:
 
 - `android/app/build.gradle` → `namespace` y `applicationId`.
 - Carpeta del `MainActivity.kt`:
-  `android/app/src/main/kotlin/com/example/triplesapp/MainActivity.kt` (mover a la
-  ruta del package nuevo y actualizar el `package` del archivo).
+  `android/app/src/main/kotlin/com/buschfranco/oneofone/MainActivity.kt` (mover a
+  la ruta del package nuevo y actualizar el `package` del archivo).
 - iOS: `PRODUCT_BUNDLE_IDENTIFIER` en `ios/Runner.xcodeproj/project.pbxproj`.
 - El `name:` de `pubspec.yaml` (`triplesapp`) afecta los imports
   `package:triplesapp/...`; si lo cambiás, hay que actualizar **todos** los imports.

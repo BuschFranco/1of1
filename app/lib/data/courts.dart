@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import '../services/notion_service.dart';
 
-enum CourtStatus { open, busy, closed }
+enum CourtStatus { open, closed }
 
+// El estado "busy" (override manual) se eliminó: el estado efectivo sale del
+// horario real (isOpenNow). Un 'busy' legacy en Notion se lee como 'open'.
 CourtStatus _statusFromString(String s) => switch (s) {
-      'busy' => CourtStatus.busy,
       'closed' => CourtStatus.closed,
       _ => CourtStatus.open,
     };
@@ -115,7 +116,6 @@ class Court {
   });
 
   String get _rawStatusName => switch (rawStatus) {
-        CourtStatus.busy => 'busy',
         CourtStatus.closed => 'closed',
         CourtStatus.open => 'open',
       };
@@ -149,11 +149,10 @@ class Court {
     return nowMin >= oMin || nowMin < cMin; // cruza medianoche
   }
 
-  /// Estado efectivo: respeta el `busy` manual de Notion; si no, se computa del
-  /// horario (abierta/cerrada); si no hay horario, cae al estado crudo. Todos
-  /// los consumidores usan `court.status`, así que ven el valor ya computado.
+  /// Estado efectivo: se computa del horario real (abierta/cerrada); si no hay
+  /// horario parseable, cae al estado crudo de Notion. Todos los consumidores
+  /// usan `court.status`, así que ven el valor ya computado.
   CourtStatus get status {
-    if (rawStatus == CourtStatus.busy) return CourtStatus.busy;
     final open = isOpenNow;
     if (open == null) return rawStatus;
     return open ? CourtStatus.open : CourtStatus.closed;
