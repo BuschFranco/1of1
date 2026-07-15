@@ -102,7 +102,10 @@ Future<void> _ensureNotionSchema() async {
         'CreatedByEmail': 'rich_text',
         'OpenTime': 'rich_text',
         'CloseTime': 'rich_text',
-        'Aprobacion': 'select',
+        // OJO: NO declarar 'Aprobacion' (select) acá. ensureProperties hace un
+        // PATCH que resetea las opciones del select existente y borra el valor
+        // "Aprobado" de las canchas → el mapa queda vacío. La columna se crea a
+        // mano en Notion.
       },
     );
     await notion.ensureProperties(

@@ -79,13 +79,17 @@ class _MainShellState extends State<MainShell> {
         backgroundColor: AppColors.bgElev,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppShape.rCard)),
-        title: Text('¡Gracias por sumarte! 🏀',
+        title: Text('¡Gracias por sumarte!',
             style: AppText.archivo(size: 19, weight: FontWeight.w900)),
         content: Text(
           'Gracias por instalar 1of1. La app está en una fase temprana, así que '
           'todavía falta un mundo de opciones y mejoras para que la experiencia '
           'sea completa. Aun así, ya es una versión estable y nos entusiasma '
-          'mejorarla junto a la comunidad.',
+          'mejorarla junto a la comunidad.\n\n'
+          'La desarrollamos con el propósito de unir y seguir fortaleciendo la '
+          'comunidad del básquet. Por eso nos importa mucho tu feedback: contanos '
+          'qué funciona mal, qué podría funcionar mejor y qué características '
+          'nuevas te gustaría ver.',
           style: AppText.grotesk(
               size: 14, color: AppColors.white(0.8), height: 1.55),
         ),

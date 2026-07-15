@@ -56,6 +56,7 @@ Todos protegidos con `Authorization: Bearer <jwt>` salvo los de `/auth`.
 | Endpoint | Body / Query | Devuelve |
 | --- | --- | --- |
 | `GET /courts` | — | `Court[]` (solo `Aprobacion == "Aprobado"`) |
+| `GET /courts/mine` | — | `Court[]` propias (TODOS los estados; el cliente detecta aprobación/rechazo comparando `approval`) |
 | `POST /courts` | `ProposeCourtDto` (autor sale del token; entra "Sin definir") | `Court` |
 | `GET /courts/:courtId/reviews` | — | `Review[]` |
 | `POST /courts/:courtId/reviews` | `{rating (1-5), comment}` (email+handle del token) | `Review` |
@@ -75,8 +76,9 @@ Todos protegidos con `Authorization: Bearer <jwt>` salvo los de `/auth`.
 | Endpoint | Body | Devuelve |
 | --- | --- | --- |
 | `GET /pickups` | — | `Pickup[]` míos (creador O miembro de un equipo) |
-| `POST /pickups` | `{title, courtId, dateTime?, maxPlayers?, vibe?, notes?, teamSize?, teamA/BName?, teamA/BColor?, teamA/BMembers?, targetScore?, accepted/declinedMembers?}` | `Pickup` |
-| `PATCH /pickups/:pageId` | mismos campos opcionales (update completo; solo creador/miembro) | `Pickup` |
+| `POST /pickups` | `{title, courtId, dateTime?, maxPlayers?, vibe?, notes?, teamSize?, teamA/BName?, teamA/BColor?, teamA/BMembers?, targetScore?, accepted/declinedMembers?}` — el `inviteCode` de 5 dígitos lo genera el server | `Pickup` |
+| `POST /pickups/join` | `{code}` (5 dígitos) — entra al equipo con espacio (menos miembros primero) como aceptado | `Pickup` (404 código inválido / 403 propio, lleno, ya unido o expirado) |
+| `PATCH /pickups/:pageId` | mismos campos opcionales (update parcial; solo creador/miembro) — cubre aceptar/rechazar/mover/quitar/abandonar/reenviar | `Pickup` |
 | `DELETE /pickups/:pageId` | — (solo el creador) | `{ok}` — archiva pickup + chat asociado |
 | `POST /chats` | `{name, pickupId, date?, teamA/BName?, teamA/BColor?, lastMessage?}` | `CrewChat` (503 si `NOTION_DB_CHATS` no está configurada) |
 
@@ -93,11 +95,16 @@ solo la metadata (ficha del chat de crew).
 ## Notion
 
 - `notion/notion.service.ts` es el único cliente (portado del NotionService de
-  la app: mismos builders/parsers/filtros + `queryDatabaseAll` paginado).
-- `notion/schema.service.ts` corre al arrancar y crea (idempotente) las
-  columnas de las 6 bases — espejo del `_ensureNotionSchema` de la app.
+  la app: mismos builders/parsers/filtros + `queryDatabaseAll` paginado y los
+  filtros `filterOr/filterAnd/filterTextContains/filterDateOnOrAfter`).
+- `ProfilesService.onModuleInit()` corre al arrancar y asegura (idempotente) las
+  columnas de las bases — espejo del `_ensureNotionSchema` de la app. **Nunca
+  declara columnas `select` existentes** (`Aprobacion`, `Status`, `Result`):
+  el PATCH de Notion las dejaría sin opciones y borraría los valores.
 - Bases (env `NOTION_DB_*`, defaults embebidos): users, profiles, courts,
   reviews, pickups, friends, matches, chats (vacío = feature off).
+- Google sign-in: `POST /auth/google` verifica el idToken server-side con
+  `google-auth-library`; `GOOGLE_CLIENT_IDS` (CSV) restringe el `aud`.
 
 ## Pendiente
 

@@ -28,4 +28,14 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  birthdate?: string;
+}
+
+export class GoogleDto {
+  @IsString()
+  @MinLength(1)
+  idToken!: string;
 }

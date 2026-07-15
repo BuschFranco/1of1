@@ -7,6 +7,7 @@ export interface JwtPayload {
   sub: string; // pageId del usuario (base Usuarios)
   email: string;
   profileId: string;
+  isAdmin: boolean;
 }
 
 /** Usuario autenticado, disponible como req.user (y vía @CurrentUser()). */

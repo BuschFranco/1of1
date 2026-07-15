@@ -6,6 +6,7 @@ export interface AppUser {
   email: string;
   passwordHash: string;
   profileId: string;
+  isAdmin: boolean;
 }
 
 export function appUserFromNotion(page: any): AppUser {
@@ -15,6 +16,7 @@ export function appUserFromNotion(page: any): AppUser {
     email: N.readTitle(p, 'Email'),
     passwordHash: N.readText(p, 'PasswordHash'),
     profileId: N.readText(p, 'ProfileId'),
+    isAdmin: N.readCheckbox(p, 'Adm'),
   };
 }
 
@@ -36,6 +38,7 @@ export interface Profile {
   points: number;
   rating: number;
   userEmail: string;
+  birthdate: string;
   clan: string;
   avatarColor: string;
   clanTextColor: string;
@@ -78,6 +81,7 @@ export function profileFromNotion(page: any): Profile {
     points: N.readInt(p, 'Points'),
     rating: N.readNumber(p, 'Rating'),
     userEmail: N.readText(p, 'UserEmail'),
+    birthdate: N.readDate(p, 'Birthdate') ?? '',
     clan: N.readText(p, 'Clan'),
     avatarColor: N.readText(p, 'AvatarColor'),
     clanTextColor: N.readText(p, 'ClanTextColor'),
@@ -122,6 +126,7 @@ export function profileToNotionProps(pr: Partial<Profile>): Record<string, any> 
   set('Points', pr.points !== undefined ? N.number(pr.points) : undefined);
   set('Rating', pr.rating !== undefined ? N.number(pr.rating) : undefined);
   set('UserEmail', pr.userEmail !== undefined ? N.richText(pr.userEmail) : undefined);
+  set('Birthdate', pr.birthdate !== undefined ? N.date(pr.birthdate || null) : undefined);
   set('Clan', pr.clan !== undefined ? N.richText(pr.clan) : undefined);
   set('AvatarColor', pr.avatarColor !== undefined ? N.richText(pr.avatarColor) : undefined);
   set('ClanTextColor', pr.clanTextColor !== undefined ? N.richText(pr.clanTextColor) : undefined);

@@ -1,6 +1,8 @@
 import {
   Body,
   Controller,
+  Delete,
+  ForbiddenException,
   Get,
   Param,
   Post,
@@ -26,6 +28,12 @@ export class CourtsController {
     return this.courts.listApproved();
   }
 
+  /** Canchas propuestas por mí (todos los estados) para detectar aprobación/rechazo. */
+  @Get('courts/mine')
+  mine(@CurrentUser() user: AuthUser) {
+    return this.courts.listMine(user.email);
+  }
+
   @Post('courts')
   async propose(@CurrentUser() user: AuthUser, @Body() dto: ProposeCourtDto) {
     // El autor (handle/clan/email) se toma del perfil autenticado, no del body.
@@ -37,17 +45,41 @@ export class CourtsController {
     });
   }
 
+  @Delete('courts/:courtId')
+  async remove(@CurrentUser() user: AuthUser, @Param('courtId') courtId: string) {
+    if (!user.isAdmin) throw new ForbiddenException('Solo un admin puede eliminar canchas.');
+    await this.courts.remove(courtId);
+    return { ok: true };
+  }
+
   @Get('courts/:courtId/reviews')
   reviews(@Param('courtId') courtId: string) {
     return this.courts.listReviews(courtId);
   }
 
   @Post('courts/:courtId/reviews')
-  addReview(
+  async addReview(
     @CurrentUser() user: AuthUser,
     @Param('courtId') courtId: string,
     @Body() dto: AddReviewDto,
   ) {
-    return this.courts.addReview(courtId, user.email, dto.rating, dto.comment);
+    const me = await this.profiles.getById(user.profileId);
+    return this.courts.addReview(
+      courtId,
+      user.email,
+      me.handle,
+      dto.rating,
+      dto.comment,
+    );
+  }
+
+  @Delete('reviews/:pageId')
+  async removeReview(
+    @CurrentUser() user: AuthUser,
+    @Param('pageId') pageId: string,
+  ) {
+    if (!user.isAdmin) throw new ForbiddenException('Solo un admin puede eliminar reseñas.');
+    await this.courts.removeReview(pageId);
+    return { ok: true };
   }
 }

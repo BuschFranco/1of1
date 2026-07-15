@@ -58,6 +58,37 @@ export class NotionService {
     }
   }
 
+  /** Como queryDatabase pero sigue la paginación (`next_cursor`) hasta agotar
+   * la base o llegar a [maxPages]. Necesario cuando el resultado puede superar
+   * las 100 filas (pickups del usuario, ranking, borrado de cuenta). */
+  async queryDatabaseAll(
+    databaseId: string,
+    opts: { filter?: any; sorts?: any[]; maxPages?: number } = {},
+  ): Promise<any[]> {
+    const out: any[] = [];
+    let cursor: string | undefined;
+    const maxPages = opts.maxPages ?? 20;
+    try {
+      for (let i = 0; i < maxPages; i++) {
+        const body: Props = { page_size: 100 };
+        if (opts.filter) body.filter = opts.filter;
+        if (opts.sorts) body.sorts = opts.sorts;
+        if (cursor) body.start_cursor = cursor;
+        const res = await this.http.post(
+          `/databases/${databaseId}/query`,
+          body,
+        );
+        out.push(...((res.data.results ?? []) as any[]));
+        if (!res.data.has_more) break;
+        cursor = res.data.next_cursor as string | undefined;
+        if (!cursor) break;
+      }
+      return out;
+    } catch (e) {
+      this.fail('queryDatabaseAll', e);
+    }
+  }
+
   async createPage(databaseId: string, properties: Props): Promise<any> {
     try {
       const res = await this.http.post('/pages', {
@@ -193,4 +224,14 @@ export class NotionService {
     property,
     select: { equals: value },
   });
+  static filterTextContains = (property: string, value: string) => ({
+    property,
+    rich_text: { contains: value },
+  });
+  static filterDateOnOrAfter = (property: string, isoDate: string) => ({
+    property,
+    date: { on_or_after: isoDate },
+  });
+  static filterOr = (filters: any[]) => ({ or: filters });
+  static filterAnd = (filters: any[]) => ({ and: filters });
 }

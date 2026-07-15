@@ -180,10 +180,6 @@ class DetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 24),
                     _ReviewsSection(courtId: court.id),
-                    const SizedBox(height: 24),
-                    const SectionTitle(
-                        title: 'Actividad semanal', right: 'Hoy'),
-                    _activityChart(),
                     if (context.read<Session>().isAdmin) ...[
                       const SizedBox(height: 24),
                       _adminDeleteCourt(context, court),
@@ -516,51 +512,6 @@ class DetailScreen extends StatelessWidget {
         color: AppColors.white(0.08),
         margin: const EdgeInsets.symmetric(horizontal: 12),
       );
-
-  Widget _activityChart() {
-    const days = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
-    const vals = [30, 55, 70, 85, 90, 100, 75];
-    return Container(
-      padding: const EdgeInsets.all(18),
-      height: 160,
-      // Card plana: fill sin borde (lenguaje editorial).
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(AppShape.rCard),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          for (var i = 0; i < 7; i++)
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Container(
-                    width: 14,
-                    height: vals[i].toDouble(),
-                    decoration: BoxDecoration(
-                      // Barra destacada en acento plano, sin glow.
-                      color: i == 3 ? AppColors.accent : AppColors.white(0.12),
-                      borderRadius: BorderRadius.circular(AppShape.rChip),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    days[i],
-                    style: AppText.grotesk(
-                      size: 11,
-                      weight: FontWeight.w600,
-                      color: i == 3 ? AppColors.accent : AppColors.white(0.45),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 
   Widget _iconBtn(IconData icon,
       {VoidCallback? onTap, Color color = AppColors.ink}) {

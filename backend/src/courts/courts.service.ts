@@ -22,6 +22,37 @@ export class CourtsService {
     return rows.map(courtFromNotion);
   }
 
+  /** Canchas propuestas por el usuario, en CUALQUIER estado de aprobación.
+   * El cliente compara `approval` contra su último estado conocido para avisar
+   * aprobaciones/rechazos (no hay push entre usuarios). */
+  async listMine(email: string): Promise<Court[]> {
+    const rows = await this.notion.queryDatabaseAll(this.notion.cfg.db.courts, {
+      filter: NotionService.filterText('CreatedByEmail', email.trim().toLowerCase()),
+    });
+    return rows.map(courtFromNotion);
+  }
+
+  /** Borra (archiva) una cancha y todas sus reseñas. Calca deleteCourt de la app. */
+  async remove(courtId: string): Promise<void> {
+    try {
+      const reviews = await this.notion.queryDatabaseAll(
+        this.notion.cfg.db.reviews,
+        { filter: NotionService.filterText('CourtId', courtId) },
+      );
+      for (const r of reviews) {
+        const id = r.id?.toString();
+        if (id) await this.notion.archivePage(id);
+      }
+    } catch {
+      // best-effort: igual archivamos la cancha.
+    }
+    await this.notion.archivePage(courtId);
+  }
+
+  async removeReview(pageId: string): Promise<void> {
+    await this.notion.archivePage(pageId);
+  }
+
   /** Propone una cancha nueva (queda pendiente de moderación). */
   async propose(
     court: Partial<Court>,
@@ -44,6 +75,7 @@ export class CourtsService {
   async addReview(
     courtId: string,
     userEmail: string,
+    userHandle: string,
     rating: number,
     comment: string,
   ): Promise<Review> {
@@ -52,6 +84,7 @@ export class CourtsService {
       reviewToNotionProps({
         courtId,
         userEmail,
+        userHandle,
         rating,
         comment,
         createdAt: new Date().toISOString(),

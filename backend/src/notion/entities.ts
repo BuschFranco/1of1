@@ -38,6 +38,8 @@ export interface Court {
   proposedBy: string;
   proposedByClan: string;
   proposedByEmail: string;
+  /** Estado de moderación (select "Aprobacion"). Vacío si no está seteado. */
+  approval: string;
 }
 
 function statusFromString(s: string): Court['status'] {
@@ -70,6 +72,7 @@ export function courtFromNotion(page: any): Court {
     proposedBy: N.readText(p, 'CreatedBy'),
     proposedByClan: N.readText(p, 'CreatedByClan'),
     proposedByEmail: N.readText(p, 'CreatedByEmail'),
+    approval: N.readSelect(p, 'Aprobacion', ''),
   };
 }
 
@@ -112,6 +115,7 @@ export interface Review {
   pageId: string;
   courtId: string;
   userEmail: string;
+  userHandle: string;
   rating: number;
   comment: string;
   createdAt: string | null;
@@ -123,6 +127,7 @@ export function reviewFromNotion(page: any): Review {
     pageId: page.id?.toString() ?? '',
     courtId: N.readText(p, 'CourtId'),
     userEmail: N.readText(p, 'UserEmail'),
+    userHandle: N.readText(p, 'UserHandle'),
     rating: N.readNumber(p, 'Rating'),
     comment: N.readText(p, 'Comment'),
     createdAt: N.readDate(p, 'CreatedAt'),
@@ -134,6 +139,7 @@ export function reviewToNotionProps(r: Omit<Review, 'pageId'>): Record<string, a
     Title: N.title(`${r.userEmail} → ${r.courtId}`),
     CourtId: N.richText(r.courtId),
     UserEmail: N.richText(r.userEmail),
+    UserHandle: N.richText(r.userHandle),
     Rating: N.number(r.rating),
     Comment: N.richText(r.comment),
     CreatedAt: N.date(r.createdAt ?? new Date().toISOString()),
@@ -151,10 +157,30 @@ export interface Pickup {
   maxPlayers: number;
   vibe: string;
   notes: string;
+  teamSize: number;
+  teamAName: string;
+  teamBName: string;
+  teamAColor: string;
+  teamBColor: string;
+  teamAMembers: string[];
+  teamBMembers: string[];
+  targetScore: number;
+  acceptedMembers: string[];
+  declinedMembers: string[];
+  inviteCode: string;
+}
+
+/** Lista de emails guardada como CSV en un rich_text (mismo formato que la app). */
+function csvToList(raw: string): string[] {
+  return raw.length === 0 ? [] : raw.split(',').filter((e) => e.length > 0);
 }
 
 export function pickupFromNotion(page: any): Pickup {
   const p = page.properties;
+  const aName = N.readText(p, 'TeamAName');
+  const bName = N.readText(p, 'TeamBName');
+  const aColor = N.readText(p, 'TeamAColor');
+  const bColor = N.readText(p, 'TeamBColor');
   return {
     pageId: page.id?.toString() ?? '',
     title: N.readTitle(p, 'Title'),
@@ -164,6 +190,17 @@ export function pickupFromNotion(page: any): Pickup {
     maxPlayers: N.readInt(p, 'MaxPlayers', 10),
     vibe: N.readSelect(p, 'Vibe', 'Casual'),
     notes: N.readText(p, 'Notes'),
+    teamSize: N.readInt(p, 'TeamSize', 3),
+    teamAName: aName.length ? aName : 'Equipo A',
+    teamBName: bName.length ? bName : 'Equipo B',
+    teamAColor: aColor.length ? aColor : '#FF6B1A',
+    teamBColor: bColor.length ? bColor : '#3B82F6',
+    teamAMembers: csvToList(N.readText(p, 'TeamAMembers')),
+    teamBMembers: csvToList(N.readText(p, 'TeamBMembers')),
+    targetScore: N.readInt(p, 'TargetScore', 21),
+    acceptedMembers: csvToList(N.readText(p, 'AcceptedMembers')),
+    declinedMembers: csvToList(N.readText(p, 'DeclinedMembers')),
+    inviteCode: N.readText(p, 'InviteCode'),
   };
 }
 
@@ -176,6 +213,62 @@ export function pickupToNotionProps(p: Omit<Pickup, 'pageId'>): Record<string, a
     MaxPlayers: N.number(p.maxPlayers),
     Vibe: N.select(p.vibe),
     Notes: N.richText(p.notes),
+    TeamSize: N.number(p.teamSize),
+    TeamAName: N.richText(p.teamAName),
+    TeamBName: N.richText(p.teamBName),
+    TeamAColor: N.richText(p.teamAColor),
+    TeamBColor: N.richText(p.teamBColor),
+    TeamAMembers: N.richText(p.teamAMembers.join(',')),
+    TeamBMembers: N.richText(p.teamBMembers.join(',')),
+    TargetScore: N.number(p.targetScore),
+    AcceptedMembers: N.richText(p.acceptedMembers.join(',')),
+    DeclinedMembers: N.richText(p.declinedMembers.join(',')),
+    InviteCode: N.richText(p.inviteCode),
+  };
+}
+
+// ── CrewChat (base Chats, opcional) ─────────────────────────────────────────
+
+export interface CrewChat {
+  pageId: string;
+  name: string;
+  pickupId: string;
+  createdBy: string;
+  date: string | null;
+  teamAName: string;
+  teamBName: string;
+  teamAColor: string;
+  teamBColor: string;
+  lastMessage: string;
+}
+
+export function chatFromNotion(page: any): CrewChat {
+  const p = page.properties;
+  return {
+    pageId: page.id?.toString() ?? '',
+    name: N.readTitle(p, 'Name'),
+    pickupId: N.readText(p, 'PickupId'),
+    createdBy: N.readText(p, 'CreatedBy'),
+    date: N.readDate(p, 'Date'),
+    teamAName: N.readText(p, 'TeamAName'),
+    teamBName: N.readText(p, 'TeamBName'),
+    teamAColor: N.readText(p, 'TeamAColor'),
+    teamBColor: N.readText(p, 'TeamBColor'),
+    lastMessage: N.readText(p, 'LastMessage'),
+  };
+}
+
+export function chatToNotionProps(c: Omit<CrewChat, 'pageId'>): Record<string, any> {
+  return {
+    Name: N.title(c.name),
+    PickupId: N.richText(c.pickupId),
+    CreatedBy: N.richText(c.createdBy),
+    Date: N.date(c.date),
+    TeamAName: N.richText(c.teamAName),
+    TeamBName: N.richText(c.teamBName),
+    TeamAColor: N.richText(c.teamAColor),
+    TeamBColor: N.richText(c.teamBColor),
+    LastMessage: N.richText(c.lastMessage),
   };
 }
 

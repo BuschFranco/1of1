@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Patch,
@@ -55,6 +56,12 @@ export class MeController {
       dto.courtId ?? '',
       dto.since ?? null,
     );
+  }
+
+  /** Borra la cuenta y sus datos (requisito de las tiendas). */
+  @Delete()
+  remove(@CurrentUser() user: AuthUser) {
+    return this.profiles.deleteAccount(user.email, user.profileId, user.sub);
   }
 }
 

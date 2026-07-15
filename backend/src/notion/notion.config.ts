@@ -17,6 +17,10 @@ export const notionConfig = () => ({
       process.env.NOTION_DB_PICKUPS ?? 'e4e76d276ec34012be0b36ba1f5ed133',
     friends:
       process.env.NOTION_DB_FRIENDS ?? 'a83f5d37fae54973ae106698c83545fa',
+    matches:
+      process.env.NOTION_DB_MATCHES ?? '39952fcd7ece81408da4f331c0979c77',
+    // Vacío = feature de chat de crew apagada (igual que en la app).
+    chats: process.env.NOTION_DB_CHATS ?? '',
   },
 });
 
