@@ -7,6 +7,7 @@ import '../services/profiles_provider.dart';
 import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
+import '../widgets/app_logo.dart';
 import '../widgets/court_image.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/rating_badge.dart';
@@ -263,22 +264,32 @@ class _CourtListItem extends StatelessWidget {
                         const SizedBox(width: 5),
                       ],
                       const Spacer(),
-                      if (proposer.handle.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                          // Autor sobre la foto: fondo oscuro plano, el acento
-                          // vive en el texto (sin borde).
-                          decoration: BoxDecoration(
-                            color: AppColors.black(0.55),
-                            borderRadius:
-                                BorderRadius.circular(AppShape.rChip),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.add_location_alt_outlined,
-                                  size: 10, color: AppColors.accent),
-                              const SizedBox(width: 4),
+                      // Crédito de autoría: "Compartida por: [usuario]" o el
+                      // logo de 1of1 si la cancha es del sistema (sin autor).
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        // Autor sobre la foto: fondo oscuro plano, el acento
+                        // vive en el texto (sin borde).
+                        decoration: BoxDecoration(
+                          color: AppColors.black(0.55),
+                          borderRadius: BorderRadius.circular(AppShape.rChip),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.add_location_alt_outlined,
+                                size: 10, color: AppColors.accent),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Compartida por: ',
+                              style: AppText.grotesk(
+                                size: 10,
+                                color: AppColors.white(0.7),
+                              ),
+                            ),
+                            if (court.proposedByEmail.trim().isEmpty)
+                              const AppLogo(height: 11)
+                            else ...[
                               if (proposer.clan.isNotEmpty) ...[
                                 Text(
                                   '[${proposer.clan}]',
@@ -291,7 +302,9 @@ class _CourtListItem extends StatelessWidget {
                                 const SizedBox(width: 3),
                               ],
                               Text(
-                                proposer.handle,
+                                proposer.handle.isNotEmpty
+                                    ? proposer.handle
+                                    : 'Alguien',
                                 style: AppText.grotesk(
                                   size: 10,
                                   weight: FontWeight.w700,
@@ -299,8 +312,9 @@ class _CourtListItem extends StatelessWidget {
                                 ),
                               ),
                             ],
-                          ),
+                          ],
                         ),
+                      ),
                     ],
                   ),
                 ),

@@ -63,6 +63,44 @@ class _MainShellState extends State<MainShell> {
     });
     _loadCrewActivity();
     crewActivityNotifier.addListener(_onCrewActivityChanged);
+    // Mensaje de bienvenida tras un login/registro explícito (una sola vez).
+    if (context.read<Session>().consumeJustAuthenticated()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showWelcome());
+    }
+  }
+
+  /// Agradecimiento de bienvenida (fase temprana pero estable). Se muestra una
+  /// vez, justo después de que el usuario entra por login o registro.
+  void _showWelcome() {
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bgElev,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppShape.rCard)),
+        title: Text('¡Gracias por sumarte! 🏀',
+            style: AppText.archivo(size: 19, weight: FontWeight.w900)),
+        content: Text(
+          'Gracias por instalar 1of1. La app está en una fase temprana, así que '
+          'todavía falta un mundo de opciones y mejoras para que la experiencia '
+          'sea completa. Aun así, ya es una versión estable y nos entusiasma '
+          'mejorarla junto a la comunidad.',
+          style: AppText.grotesk(
+              size: 14, color: AppColors.white(0.8), height: 1.55),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('¡A jugar!',
+                style: AppText.archivo(
+                    size: 13,
+                    weight: FontWeight.w900,
+                    color: AppColors.accent)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

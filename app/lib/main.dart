@@ -102,6 +102,7 @@ Future<void> _ensureNotionSchema() async {
         'CreatedByEmail': 'rich_text',
         'OpenTime': 'rich_text',
         'CloseTime': 'rich_text',
+        'Aprobacion': 'select',
       },
     );
     await notion.ensureProperties(

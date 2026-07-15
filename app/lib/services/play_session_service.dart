@@ -354,6 +354,14 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _emit(RewardEvent.chatCreated(chatName));
   }
 
+  /// Notifica la decisión de moderación sobre una cancha propia (aprobada o
+  /// rechazada). Va al historial in-app y, vía onReward, al push del sistema.
+  void addCourtDecision(String courtName, bool approved) {
+    _emit(approved
+        ? RewardEvent.courtApproved(courtName)
+        : RewardEvent.courtRejected(courtName));
+  }
+
   Future<void> _persistNotifs() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
@@ -2589,7 +2597,7 @@ class PlaySession {
 }
 
 /// Tipo de recompensa que dispara una notificación in-app.
-enum RewardKind { achievement, title, levelUp, chatCreated }
+enum RewardKind { achievement, title, levelUp, chatCreated, courtApproved, courtRejected }
 
 /// Un evento de recompensa a mostrar como banner: logro o título desbloqueado,
 /// o subida de nivel. Lleva ya resuelto el texto, el ícono y el color a mostrar.
@@ -2650,6 +2658,24 @@ class RewardEvent {
         color: AppColors.accent,
       );
 
+  factory RewardEvent.courtApproved(String courtName) => RewardEvent(
+        kind: RewardKind.courtApproved,
+        refId: courtName,
+        headline: 'Tu cancha fue aprobada 🎉',
+        name: courtName,
+        icon: Icons.check_circle_outline,
+        color: AppColors.open,
+      );
+
+  factory RewardEvent.courtRejected(String courtName) => RewardEvent(
+        kind: RewardKind.courtRejected,
+        refId: courtName,
+        headline: 'Tu cancha no fue aprobada',
+        name: courtName,
+        icon: Icons.cancel_outlined,
+        color: AppColors.busy,
+      );
+
   /// Reconstruye el evento a partir de su tipo y [refId] (al cargar el historial
   /// persistido), re-resolviendo ícono/color/textos desde el catálogo.
   factory RewardEvent.restore(RewardKind kind, String refId) {
@@ -2664,6 +2690,10 @@ class RewardEvent {
         return RewardEvent.levelUp(int.tryParse(refId) ?? 1);
       case RewardKind.chatCreated:
         return RewardEvent.chatCreated(refId);
+      case RewardKind.courtApproved:
+        return RewardEvent.courtApproved(refId);
+      case RewardKind.courtRejected:
+        return RewardEvent.courtRejected(refId);
     }
     // Catálogo cambió y ya no existe: fallback neutro.
     return RewardEvent(

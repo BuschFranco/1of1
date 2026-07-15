@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
+import '../widgets/beta_tag.dart';
 import '../widgets/pop_background.dart';
 import '../widgets/pop_button.dart';
 
@@ -63,6 +64,16 @@ class OnboardingScreen extends StatelessWidget {
                 _cta(onStart, onLogin),
                 const SizedBox(height: 28),
               ],
+            ),
+          ),
+          // Marca de versión: chiquita y gris en una esquina.
+          const SafeArea(
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(0, 22, 24, 0),
+                child: BetaTag(),
+              ),
             ),
           ),
         ],

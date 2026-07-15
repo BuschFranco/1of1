@@ -87,6 +87,11 @@ class Court {
   /// Perfiles, así los cambios posteriores se reflejan en las miniaturas.
   final String proposedByEmail;
 
+  /// Estado de moderación (select "Aprobacion": ver [CourtApproval]). Vacío si
+  /// la columna no está seteada. Las canchas del mapa son siempre "Aprobado"
+  /// (el provider filtra); se lee para detectar la decisión sobre las propias.
+  final String approval;
+
   const Court({
     required this.id,
     required this.name,
@@ -113,6 +118,7 @@ class Court {
     this.proposedBy = '',
     this.proposedByClan = '',
     this.proposedByEmail = '',
+    this.approval = '',
   });
 
   String get _rawStatusName => switch (rawStatus) {
@@ -216,6 +222,7 @@ class Court {
       proposedBy: NotionService.readText(p, 'CreatedBy'),
       proposedByClan: NotionService.readText(p, 'CreatedByClan'),
       proposedByEmail: NotionService.readText(p, 'CreatedByEmail'),
+      approval: NotionService.readSelect(p, 'Aprobacion', fallback: ''),
     );
   }
 

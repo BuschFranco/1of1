@@ -23,6 +23,7 @@ import '../services/session.dart';
 import '../services/session_alarms.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
+import '../widgets/app_logo.dart';
 import '../widgets/court_image.dart';
 import '../widgets/court_marker_icon.dart';
 import '../widgets/permissions_modal.dart';
@@ -2451,16 +2452,26 @@ class _CourtSwipeCard extends StatelessWidget {
                     color: AppColors.white(0.55),
                   ),
                 ),
-                // Quién propuso la cancha: handle completo (clan opcional).
-                if (proposer.handle.isNotEmpty)
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.add_location_alt_outlined,
-                        size: 11,
-                        color: AppColors.accent,
+                // Crédito de autoría: "Compartida por: [usuario]" o, si la
+                // cancha es del sistema (sin autor), el logo de 1of1.
+                Row(
+                  children: [
+                    Icon(
+                      Icons.add_location_alt_outlined,
+                      size: 11,
+                      color: AppColors.accent,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Compartida por: ',
+                      style: AppText.grotesk(
+                        size: 10,
+                        color: AppColors.white(0.55),
                       ),
-                      const SizedBox(width: 4),
+                    ),
+                    if (court.proposedByEmail.trim().isEmpty)
+                      const AppLogo(height: 12)
+                    else ...[
                       if (proposer.clan.isNotEmpty) ...[
                         Text(
                           '[${proposer.clan}]',
@@ -2474,7 +2485,7 @@ class _CourtSwipeCard extends StatelessWidget {
                       ],
                       Flexible(
                         child: Text(
-                          proposer.handle,
+                          proposer.handle.isNotEmpty ? proposer.handle : 'Alguien',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppText.grotesk(
@@ -2485,7 +2496,8 @@ class _CourtSwipeCard extends StatelessWidget {
                         ),
                       ),
                     ],
-                  ),
+                  ],
+                ),
                 // Acciones: dos botones parejos, radio fijo (rBtn es pill y los
                 // deformaba). El carrusel se navega deslizando (hay puntitos).
                 Row(

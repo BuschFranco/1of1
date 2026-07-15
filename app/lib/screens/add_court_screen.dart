@@ -243,14 +243,37 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
         createdByEmail: email,
       );
       if (!mounted) return;
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('¡Cancha enviada para revisión!',
-              style: AppText.grotesk(size: 13)),
-          backgroundColor: AppColors.accent,
+      // Mensaje claro del flujo de revisión (un diálogo, no un snackbar fugaz).
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.bgElev,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppShape.rCard)),
+          title: Text('¡Solicitud enviada! 🏀',
+              style: AppText.archivo(size: 18, weight: FontWeight.w900)),
+          content: Text(
+            'Tu cancha se envió a revisión. Un admin la va a revisar y, si se '
+            'aprueba, va a aparecer en el mapa. Te vamos a avisar con una '
+            'notificación cuando haya novedades.',
+            style: AppText.grotesk(
+                size: 14, color: AppColors.white(0.75), height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text('Entendido',
+                  style: AppText.archivo(
+                      size: 13,
+                      weight: FontWeight.w900,
+                      color: AppColors.accent)),
+            ),
+          ],
         ),
       );
+      if (!mounted) return;
+      Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
       setState(() => _submitted = false);
@@ -286,10 +309,10 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _sectionTitle('Nombre'),
+                    _sectionTitleHelp('Nombre', _showNameHelp),
                     _glassField(
                       controller: _nameCtrl,
-                      hint: 'Ej. Cancha de Palermo Chico',
+                      hint: 'Es tu descubrimiento, ponle nombre',
                     ),
                     const SizedBox(height: 24),
                     _sectionTitle('Foto'),
@@ -381,6 +404,63 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
           color: AppColors.white(0.45),
           letterSpacing: 0.08,
         ),
+      ),
+    );
+  }
+
+  /// Título de sección con un botón "(?)" al lado que abre una ayuda.
+  Widget _sectionTitleHelp(String text, VoidCallback onHelp) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Text(
+            text.toUpperCase(),
+            style: AppText.grotesk(
+              size: 11,
+              weight: FontWeight.w700,
+              color: AppColors.white(0.45),
+              letterSpacing: 0.08,
+            ),
+          ),
+          const SizedBox(width: 6),
+          GestureDetector(
+            onTap: onHelp,
+            behavior: HitTestBehavior.opaque,
+            child: Icon(Icons.help_outline,
+                size: 15, color: AppColors.white(0.4)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showNameHelp() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bgElev,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppShape.rCard)),
+        title: Text('Ponele nombre a tu cancha',
+            style: AppText.archivo(size: 18, weight: FontWeight.w900)),
+        content: Text(
+          'Podés ponerle el nombre que quieras: animate a ser creativo y dejá '
+          'tu huella en el mapa 🏀\n\nEso sí: no se toleran insultos, '
+          'indirectas ni burlas de ningún tipo. Cada cancha pasa por revisión '
+          'antes de aparecer.',
+          style: AppText.grotesk(size: 14, color: AppColors.white(0.75), height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('Entendido',
+                style: AppText.archivo(
+                    size: 13,
+                    weight: FontWeight.w900,
+                    color: AppColors.accent)),
+          ),
+        ],
       ),
     );
   }

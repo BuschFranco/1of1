@@ -318,6 +318,20 @@ class SyncCoordinator {
       seedTotalsJson: p.playTimeByCourt,
     );
     unawaited(_syncGeofences());
+    // Avisar decisiones de moderación sobre las canchas que propuso el usuario
+    // (se aprobaron/rechazaron desde la última vez que abrió la app).
+    unawaited(_checkCourtDecisions(userKey));
+  }
+
+  /// Compara el estado de las canchas propias contra el último conocido y, por
+  /// cada aprobación/rechazo nuevo, emite la notificación (in-app + push).
+  Future<void> _checkCourtDecisions(String email) async {
+    try {
+      final decisions = await _courts.pollMyCourtDecisions(email);
+      for (final d in decisions) {
+        _play.addCourtDecision(d.name, d.approved);
+      }
+    } catch (_) {/* best-effort: no rompe el arranque */}
   }
 
   void dispose() {

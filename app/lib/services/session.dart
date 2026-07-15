@@ -40,6 +40,15 @@ class Session extends ChangeNotifier {
   // Evita flushes concurrentes (timer + lifecycle pueden disparar a la vez).
   bool _flushing = false;
 
+  // True una sola vez tras un login/registro EXPLÍCITO (no en el restore de
+  // sesión). La UI lo consume para mostrar el mensaje de bienvenida una vez.
+  bool _justAuthenticated = false;
+  bool consumeJustAuthenticated() {
+    if (!_justAuthenticated) return false;
+    _justAuthenticated = false;
+    return true;
+  }
+
   Profile? get profile => _profile;
   String? get email => _email;
   /// Posición de juego elegida (local, cosmética). '' si no eligió ninguna.
@@ -137,6 +146,7 @@ class Session extends ChangeNotifier {
       await _persist(email, Profile.fromNotion(profilePage).copyWith(isAdmin: user.isAdmin));
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_kPersist, persist);
+      _justAuthenticated = true;
       return null;
     } on NotionException catch (e) {
       return 'Error conectando con Notion (${e.statusCode}).';
@@ -194,6 +204,7 @@ class Session extends ChangeNotifier {
       await _persist(email, Profile.fromNotion(profilePage));
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_kPersist, true);
+      _justAuthenticated = true;
       return null;
     } on NotionException catch (e) {
       return 'Error conectando con Notion (${e.statusCode}).';
@@ -230,6 +241,7 @@ class Session extends ChangeNotifier {
         await _persist(cleanEmail, Profile.fromNotion(profilePage).copyWith(isAdmin: user.isAdmin));
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool(_kPersist, true);
+        _justAuthenticated = true;
         return null;
       }
 
@@ -258,6 +270,7 @@ class Session extends ChangeNotifier {
       await _persist(cleanEmail, Profile.fromNotion(profilePage));
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_kPersist, true);
+      _justAuthenticated = true;
       return null;
     } on NotionException catch (e) {
       return 'Error conectando con Notion (${e.statusCode}).';

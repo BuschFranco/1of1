@@ -954,6 +954,22 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
   Future<void> _openReviewDialog(BuildContext context) async {
     final session = context.read<Session>();
     if (session.email == null) return;
+    // Solo puede reseñar quien jugó al menos una vez en la cancha (evita
+    // reseñas de gente que nunca pisó el lugar).
+    final played =
+        context.read<PlaySessionService>().secondsForCourt(widget.courtId) > 0;
+    if (!played) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Jugá al menos una vez en esta cancha para dejar una reseña.',
+            style: AppText.grotesk(size: 13),
+          ),
+          backgroundColor: AppColors.bgElev,
+        ),
+      );
+      return;
+    }
     int rating = 5;
     final commentCtrl = TextEditingController();
     bool saving = false;

@@ -11,6 +11,7 @@ import '../services/geocoding_service.dart';
 import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
+import '../widgets/beta_tag.dart';
 import '../widgets/pop_background.dart';
 import '../widgets/pressable_widget.dart';
 import 'legal_screen.dart';
@@ -260,6 +261,16 @@ class _AuthScreenState extends State<AuthScreen> {
       body: Stack(
         children: [
           const Positioned.fill(child: PopBackground(color: AppColors.bg)),
+          // Marca de versión: chiquita y gris en una esquina.
+          const SafeArea(
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(0, 26, 24, 0),
+                child: BetaTag(),
+              ),
+            ),
+          ),
           SafeArea(
             // Swipe horizontal en toda la pantalla para alternar login/registro
             // (el scroll es vertical, así que no compite con este gesto).
