@@ -22,6 +22,12 @@ const String kConfirmYesAction = 'confirm_yes';
 /// partido con el tiempo congelado en el momento de la pregunta.
 const String kConfirmNoAction = 'confirm_no';
 
+/// Id de la acción "Ir al chat" de las notificaciones de pickup (crear/unirse).
+const String kOpenPickupChatAction = 'open_pickup_chat';
+
+/// Prefijo del payload que lleva el id del pickup para enrutar al chat.
+const String kPickupChatPayload = 'pickup_chat:';
+
 /// Handler de respuestas que corre en un ISOLATE DE BACKGROUND (app cerrada).
 /// No puede tocar el estado vivo del partido, así que es un no-op: la acción
 /// "EMPEZAR YA" solo arranca el partido con el proceso vivo (app minimizada).
@@ -75,6 +81,24 @@ class NotificationsService {
   /// llamar a `PlaySessionService.confirmStop()`.
   VoidCallback? onConfirmNoAction;
 
+  /// Se invoca al tocar una notificación de pickup (o su botón "Ir al chat").
+  /// Lo cablea main.dart para navegar al chat del pickup por su id. Al asignarlo
+  /// se drena cualquier pickup pendiente (app abierta desde la notificación).
+  void Function(String pickupId)? get onOpenPickupChat => _onOpenPickupChat;
+  void Function(String pickupId)? _onOpenPickupChat;
+  set onOpenPickupChat(void Function(String pickupId)? cb) {
+    _onOpenPickupChat = cb;
+    final pending = _pendingChatPickupId;
+    if (cb != null && pending != null) {
+      _pendingChatPickupId = null;
+      cb(pending);
+    }
+  }
+
+  /// Id de pickup capturado del lanzamiento de la app desde una notificación
+  /// (app cerrada). Se drena cuando se cablea [onOpenPickupChat].
+  String? _pendingChatPickupId;
+
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'rewards',
     'Recompensas',
@@ -99,6 +123,23 @@ class NotificationsService {
     if (response.actionId == kDeclineAction) onDeclineAction?.call();
     if (response.actionId == kConfirmYesAction) onConfirmYesAction?.call();
     if (response.actionId == kConfirmNoAction) onConfirmNoAction?.call();
+    // Pickup: tap del cuerpo (actionId null) o botón "Ir al chat".
+    final payload = response.payload;
+    if (payload != null &&
+        payload.startsWith(kPickupChatPayload) &&
+        (response.actionId == null ||
+            response.actionId == kOpenPickupChatAction)) {
+      final id = payload.substring(kPickupChatPayload.length);
+      if (id.isNotEmpty) {
+        final cb = _onOpenPickupChat;
+        // Sin listener aún (app recién abierta): lo dejamos pendiente.
+        if (cb != null) {
+          cb(id);
+        } else {
+          _pendingChatPickupId = id;
+        }
+      }
+    }
   }
 
   /// Inicializa el plugin y crea el canal Android. Idempotente. Best-effort:
@@ -123,6 +164,18 @@ class NotificationsService {
       await android?.createNotificationChannel(_channel);
       await android?.createNotificationChannel(_sessionChannel);
       _ready = true;
+      // App abierta desde una notificación de pickup (proceso estaba muerto):
+      // capturamos el id para enrutar al chat en cuanto se cablee el listener.
+      try {
+        final launch = await _plugin.getNotificationAppLaunchDetails();
+        final payload = launch?.notificationResponse?.payload;
+        if (launch?.didNotificationLaunchApp == true &&
+            payload != null &&
+            payload.startsWith(kPickupChatPayload)) {
+          final id = payload.substring(kPickupChatPayload.length);
+          if (id.isNotEmpty) _pendingChatPickupId = id;
+        }
+      } catch (_) {/* ignorar */}
     } catch (_) {/* sin push: la app sigue con el banner in-app */}
   }
 
@@ -174,6 +227,38 @@ class NotificationsService {
         iOS: DarwinNotificationDetails(),
       );
       await _plugin.show(_nextId++, title, body, details);
+    } catch (_) {/* ignorar */}
+  }
+
+  /// Notificación de pickup (crear/unirse) con botón "Ir al chat" que abre el
+  /// chat del pickup [pickupId]. El payload permite enrutar tanto desde el botón
+  /// como al tocar el cuerpo de la notificación.
+  Future<void> showPickupChat(
+      String title, String body, String pickupId) async {
+    if (!_ready) await init();
+    if (!_ready || pickupId.isEmpty) return;
+    try {
+      const details = NotificationDetails(
+        android: AndroidNotificationDetails(
+          'rewards',
+          'Recompensas',
+          channelDescription: 'Logros, títulos y subidas de nivel',
+          importance: Importance.high,
+          priority: Priority.high,
+          actions: <AndroidNotificationAction>[
+            AndroidNotificationAction(kOpenPickupChatAction, 'Ir al chat',
+                showsUserInterface: true, cancelNotification: true),
+          ],
+        ),
+        iOS: DarwinNotificationDetails(),
+      );
+      await _plugin.show(
+        _nextId++,
+        title,
+        body,
+        details,
+        payload: '$kPickupChatPayload$pickupId',
+      );
     } catch (_) {/* ignorar */}
   }
 

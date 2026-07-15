@@ -1113,6 +1113,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     // El foreground service (con su notificación) ya NO arranca acá: ahora lo
     // gobierna el geofencing (enter de una cancha → enterCourtArea). Con la app
     // abierta, el ticker de arriba ya detecta sin servicio en primer plano.
+
+    // Completar partidos recientes cuyo reloj sincronizó calorías/distancia
+    // DESPUÉS de resolverse (no bloquea el arranque).
+    unawaited(refreshRecentIncomplete());
   }
 
   /// Llamado al ENTRAR a la zona de una cancha (geofence). Arranca el foreground
@@ -1278,6 +1282,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       // Re-evaluamos ya: si la permanencia venció mientras estábamos en segundo
       // plano, arranca el partido al instante en vez de esperar la próxima muestra.
       if (isDwelling) _sample();
+      // El reloj pudo sincronizar salud mientras estábamos afuera: completar
+      // los partidos recientes que quedaron con calorías/distancia en 0.
+      unawaited(refreshRecentIncomplete());
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached ||
         state == AppLifecycleState.hidden) {
@@ -1844,6 +1851,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         steps: hm?.steps ?? 0,
         distance: hm?.distance ?? 0,
         calorieRecord: newCalorieRecord,
+        fromWorkout: hm?.fromWorkout ?? false,
       ),
     );
     if (_log.length > 100) _log = _log.sublist(0, 100);
@@ -2026,28 +2034,86 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// datos): devuelve un resumen legible de las últimas horas.
   Future<String> diagnoseHealth() => _health.diagnose();
 
-  /// Re-lee las métricas de salud de un partido del historial que quedó SIN
-  /// datos: el reloj suele sincronizar Health Connect DESPUÉS de resolverse el
-  /// resultado, y ese 0 quedaba persistido para siempre. Se llama al abrir el
-  /// detalle de un partido; si ahora hay datos, actualiza el historial (los
-  /// puntos y el récord no cambian: es registro visual retroactivo).
+  /// Tras esta espera, si el origen sigue sin escribir calorías/distancia
+  /// (pero sí hay pasos), se estiman: la ventana real de sincronización del
+  /// reloj ya pasó y esperar más no trae datos nuevos.
+  static const _healthEstimateAfter = Duration(hours: 3);
+
+  /// Re-lee las métricas de salud de un partido del historial al que le
+  /// FALTAN calorías o distancia: el reloj sincroniza Health Connect DESPUÉS
+  /// de resolverse el resultado, y por partes (puede llegar primero el pulso o
+  /// los pasos). Reintenta mientras falte algo, fusionando sin pisar lo que ya
+  /// está; los puntos y el récord no cambian (registro visual retroactivo).
+  /// Última red: si pasaron >3 h y el origen no escribió calorías/distancia
+  /// pero sí pasos, se estiman para que el partido no quede en 0/0.
   Future<void> refreshHealthFor(PlaySession s) async {
-    if (!_healthEnabled || s.hasHealth || s.seconds <= 0) return;
+    if (!_healthEnabled || !s.healthIncomplete) return;
     final end = DateTime.fromMillisecondsSinceEpoch(s.endedAtMillis);
     final start = end.subtract(Duration(seconds: s.seconds));
     HealthMetrics? hm;
     try {
       hm = await _health.metricsFor(start, end);
     } catch (_) {
-      return;
+      hm = null;
     }
-    if (hm == null || !hm.hasData) return;
     final idx = _log.indexWhere(
         (e) => e.endedAtMillis == s.endedAtMillis && e.courtId == s.courtId);
     if (idx < 0) return;
-    _log[idx] = _log[idx].withHealth(hm);
+    var changed = false;
+    if (hm != null && hm.hasData) {
+      final merged = _log[idx].mergeHealth(hm);
+      if (merged.calories != _log[idx].calories ||
+          merged.distance != _log[idx].distance ||
+          merged.steps != _log[idx].steps ||
+          merged.avgHr != _log[idx].avgHr) {
+        _log[idx] = merged;
+        changed = true;
+      }
+    }
+    // Estimación de último recurso (elegida por producto): solo con evidencia
+    // de actividad (pasos > 0) y cuando la ventana de sync ya venció.
+    final cur = _log[idx];
+    final expired = DateTime.now().difference(end) > _healthEstimateAfter;
+    if (cur.healthIncomplete && expired && cur.steps > 0) {
+      _log[idx] = cur.withEstimates(
+        // Zancada media ~0.76 m por paso.
+        distance: cur.distance > 0 ? null : cur.steps * 0.76,
+        // Gasto por MET: básquet recreativo ≈ 6.5 MET × 70 kg × horas.
+        calories:
+            cur.calories > 0 ? null : 6.5 * 70 * (cur.seconds / 3600),
+      );
+      changed = true;
+    }
+    if (!changed) return;
     await _persistLog();
     notifyListeners();
+  }
+
+  // Throttle de la pasada de re-lectura del historial (una cada 5 min basta:
+  // el reloj no sincroniza más seguido y cada pasada son varias lecturas).
+  DateTime? _lastHealthSweep;
+
+  /// Re-lee TODOS los partidos recientes (48 h) que quedaron con calorías o
+  /// distancia en 0. Se dispara al abrir la app y al volver del background,
+  /// así el historial se completa solo cuando el reloj sincroniza, sin que el
+  /// usuario tenga que abrir cada detalle.
+  Future<void> refreshRecentIncomplete() async {
+    if (!_healthEnabled) return;
+    final now = DateTime.now();
+    if (_lastHealthSweep != null &&
+        now.difference(_lastHealthSweep!) < const Duration(minutes: 5)) {
+      return;
+    }
+    _lastHealthSweep = now;
+    final cutoff =
+        now.subtract(const Duration(hours: 48)).millisecondsSinceEpoch;
+    // Copia: refreshHealthFor muta _log por índice mientras iteramos.
+    final targets = _log
+        .where((e) => e.healthIncomplete && e.endedAtMillis >= cutoff)
+        .toList();
+    for (final s in targets) {
+      await refreshHealthFor(s);
+    }
   }
 
   /// Siembra el récord de calorías desde el perfil (Notion) al iniciar sesión,
@@ -2393,6 +2459,10 @@ class PlaySession {
   /// ¿Este partido marcó un récord personal de calorías? (para destacarlo).
   final bool calorieRecord;
 
+  /// True si las calorías/distancia vinieron de una sesión de entrenamiento
+  /// registrada en el reloj (se destaca en el detalle).
+  final bool fromWorkout;
+
   const PlaySession({
     required this.courtId,
     required this.courtName,
@@ -2406,10 +2476,18 @@ class PlaySession {
     this.steps = 0,
     this.distance = 0,
     this.calorieRecord = false,
+    this.fromWorkout = false,
   });
 
   bool get hasHealth =>
       calories > 0 || steps > 0 || avgHr != null || distance > 0;
+
+  /// ¿Faltan las métricas principales? El wearable sincroniza Health Connect
+  /// por partes: puede haber pasos/pulso ya escritos y calorías/distancia aún
+  /// no. Mientras falten, la re-lectura diferida sigue reintentando (gatear
+  /// con [hasHealth] dejaba 0 kcal / 0 m para siempre ante datos parciales).
+  bool get healthIncomplete =>
+      seconds > 0 && (calories <= 0 || distance <= 0);
 
   PlaySession withResult(
     PlayResult r, {
@@ -2420,6 +2498,7 @@ class PlaySession {
     int steps = 0,
     double distance = 0,
     bool calorieRecord = false,
+    bool fromWorkout = false,
   }) =>
       PlaySession(
         courtId: courtId,
@@ -2434,24 +2513,46 @@ class PlaySession {
         steps: steps,
         distance: distance,
         calorieRecord: calorieRecord,
+        fromWorkout: fromWorkout,
       );
 
-  /// Copia con datos de salud llegados tarde (el wearable sincroniza Health
-  /// Connect después de resolver el partido). No toca puntos ni récord: es
-  /// solo registro visual retroactivo.
-  PlaySession withHealth(HealthMetrics hm) => PlaySession(
+  /// Fusiona datos de salud llegados tarde (el wearable sincroniza Health
+  /// Connect después de resolver el partido). Solo RELLENA lo que falta: lo
+  /// que ya estaba (p.ej. pulso o pasos de la primera lectura) se conserva —
+  /// pisarlo con una lectura nueva podía degradar datos ya buenos. No toca
+  /// puntos ni récord: es registro visual retroactivo.
+  PlaySession mergeHealth(HealthMetrics hm) => PlaySession(
         courtId: courtId,
         courtName: courtName,
         seconds: seconds,
         endedAtMillis: endedAtMillis,
         result: result,
         points: points,
-        calories: hm.calories,
-        avgHr: hm.avgHr,
-        maxHr: hm.maxHr,
-        steps: hm.steps,
-        distance: hm.distance,
+        calories: calories > 0 ? calories : hm.calories,
+        avgHr: avgHr ?? hm.avgHr,
+        maxHr: maxHr ?? hm.maxHr,
+        steps: steps > 0 ? steps : hm.steps,
+        distance: distance > 0 ? distance : hm.distance,
         calorieRecord: calorieRecord,
+        fromWorkout: fromWorkout || hm.fromWorkout,
+      );
+
+  /// Copia con calorías/distancia puntuales (estimación de último recurso).
+  PlaySession withEstimates({double? calories, double? distance}) =>
+      PlaySession(
+        courtId: courtId,
+        courtName: courtName,
+        seconds: seconds,
+        endedAtMillis: endedAtMillis,
+        result: result,
+        points: points,
+        calories: calories ?? this.calories,
+        avgHr: avgHr,
+        maxHr: maxHr,
+        steps: steps,
+        distance: distance ?? this.distance,
+        calorieRecord: calorieRecord,
+        fromWorkout: fromWorkout,
       );
 
   Map<String, dynamic> toJson() => {
@@ -2467,6 +2568,7 @@ class PlaySession {
         'steps': steps,
         'distance': distance,
         'calorieRecord': calorieRecord,
+        'fromWorkout': fromWorkout,
       };
 
   factory PlaySession.fromJson(Map<String, dynamic> j) => PlaySession(
@@ -2482,6 +2584,7 @@ class PlaySession {
         steps: (j['steps'] as num?)?.toInt() ?? 0,
         distance: (j['distance'] as num?)?.toDouble() ?? 0,
         calorieRecord: (j['calorieRecord'] as bool?) ?? false,
+        fromWorkout: (j['fromWorkout'] as bool?) ?? false,
       );
 }
 

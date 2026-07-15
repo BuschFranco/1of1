@@ -11,12 +11,21 @@ class HealthMetrics {
   /// Distancia recorrida durante el partido, en metros.
   final double distance;
 
+  /// True si las calorías/distancia vinieron de una SESIÓN de entrenamiento
+  /// registrada en el reloj (más precisa que sumar muestras sueltas).
+  final bool fromWorkout;
+
+  /// Actividad de la sesión de entrenamiento (p.ej. "BASKETBALL"), si la hubo.
+  final String? workoutActivity;
+
   const HealthMetrics({
     this.calories = 0,
     this.avgHr,
     this.maxHr,
     this.steps = 0,
     this.distance = 0,
+    this.fromWorkout = false,
+    this.workoutActivity,
   });
 
   /// ¿Hay algo que valga la pena registrar? (sin wearable suele venir todo en 0)
@@ -41,12 +50,16 @@ class HealthService {
   /// TOTAL_CALORIES es el fallback de calorías: muchos orígenes (Samsung
   /// Health, sobre todo) solo escriben totales, no activas — sin él, calorías
   /// daba 0 para siempre en esos equipos.
+  /// WORKOUT es la sesión de ejercicio del reloj (básquet, etc.): sus totales
+  /// (calorías, distancia) son los que muestra Samsung y cubren la duración
+  /// real de la sesión, así que enriquecen el partido cuando existe.
   static const List<HealthDataType> _types = [
     HealthDataType.HEART_RATE,
     HealthDataType.ACTIVE_ENERGY_BURNED,
     HealthDataType.TOTAL_CALORIES_BURNED,
     HealthDataType.STEPS,
     HealthDataType.DISTANCE_DELTA,
+    HealthDataType.WORKOUT,
   ];
 
   static final List<HealthDataAccess> _perms =
@@ -119,8 +132,20 @@ class HealthService {
 
     final end = DateTime.now();
     final start = end.subtract(back);
-    // Un renglón por tipo: cantidad de muestras y agregado, o el error puntual.
+    // Un renglón por tipo: permiso individual, muestras y agregado, o el error.
+    // El permiso por tipo es lo que más importa: Health Connect concede de a
+    // uno, así que Calorías/Distancia pueden estar denegadas aunque HR ande.
     for (final t in _types) {
+      // Estado del permiso de ESTE tipo (en Android puede venir null = oculto).
+      String permLabel;
+      try {
+        final p = await _health.hasPermissions([t], permissions: [
+          HealthDataAccess.READ,
+        ]);
+        permLabel = p == true ? 'permiso: sí' : (p == false ? 'permiso: NO' : 'permiso: ?');
+      } catch (_) {
+        permLabel = 'permiso: ?';
+      }
       try {
         final points = await _health.getHealthDataFromTypes(
           startTime: start,
@@ -128,6 +153,23 @@ class HealthService {
           types: [t],
         );
         final clean = _health.removeDuplicates(points);
+        // WORKOUT: cada punto es una sesión de ejercicio (no un número). Se
+        // reporta actividad + totales para poder verificar el enriquecimiento.
+        if (t == HealthDataType.WORKOUT) {
+          final sesiones = clean
+              .where((p) => p.value is WorkoutHealthValue)
+              .map((p) {
+            final w = p.value as WorkoutHealthValue;
+            final kcal = w.totalEnergyBurned;
+            final m = w.totalDistance;
+            return '${w.workoutActivityType.name}'
+                '${kcal != null ? ' · $kcal kcal' : ''}'
+                '${m != null ? ' · $m m' : ''}';
+          }).toList();
+          final detalle = sesiones.isEmpty ? '' : ' · ${sesiones.join(' | ')}';
+          sb.writeln('${t.name} ($permLabel): ${clean.length} sesiones$detalle');
+          continue;
+        }
         double sum = 0;
         for (final p in clean) {
           final v = p.value;
@@ -140,11 +182,15 @@ class HealthService {
           HealthDataType.DISTANCE_DELTA => ' · ${sum.round()} m',
           _ => '',
         };
-        sb.writeln('${t.name}: ${clean.length} muestras$agg');
+        sb.writeln('${t.name} ($permLabel): ${clean.length} muestras$agg');
       } catch (e) {
-        sb.writeln('${t.name}: ERROR → $e');
+        sb.writeln('${t.name} ($permLabel): ERROR → $e');
       }
     }
+    sb.writeln('');
+    sb.writeln('Si calorías o distancia dan 0 con permiso OK: en Samsung '
+        'Health → Ajustes → Health Connect, confirmá que "Actividad" '
+        '(calorías, distancia) esté compartida.');
     return sb.toString();
   }
 
@@ -158,19 +204,64 @@ class HealthService {
     } catch (_) {
       return null;
     }
-    // Leemos CADA tipo por separado: si uno falla (permiso/soporte), no anula
-    // la lectura de los demás. En Android no se puede verificar el permiso de
-    // LECTURA (Health Connect lo oculta), así que intentamos leer directo.
+
+    // 1) Buscar una SESIÓN de entrenamiento que se solape con el partido. El
+    //    reloj pudo arrancar la sesión antes de que el GPS detectara el partido,
+    //    así que buscamos con holgura (±30 min) y elegimos la de mayor solape.
+    WorkoutHealthValue? workout;
+    DateTime winStart = start;
+    DateTime winEnd = end;
+    try {
+      final wpoints = await _health.getHealthDataFromTypes(
+        startTime: start.subtract(const Duration(minutes: 30)),
+        endTime: end.add(const Duration(minutes: 30)),
+        types: [HealthDataType.WORKOUT],
+      );
+      HealthDataPoint? best;
+      double bestOverlap = 0;
+      for (final p in wpoints) {
+        if (p.value is! WorkoutHealthValue) continue;
+        // Solape (en ms) entre la sesión y la ventana del partido.
+        final os = p.dateFrom.isAfter(start) ? p.dateFrom : start;
+        final oe = p.dateTo.isBefore(end) ? p.dateTo : end;
+        final overlap = oe.difference(os).inMilliseconds.toDouble();
+        if (overlap <= 0) continue;
+        final act = (p.value as WorkoutHealthValue).workoutActivityType;
+        // Preferimos BÁSQUET y OTRO (las dos opciones que el usuario elegiría
+        // en el reloj para un partido): a igualdad de solape, ganan sobre un
+        // deporte no relacionado que pudiera solapar por casualidad.
+        final relevante = act == HealthWorkoutActivityType.BASKETBALL ||
+            act == HealthWorkoutActivityType.OTHER;
+        final score = overlap + (relevante ? 1 : 0);
+        if (best == null || score > bestOverlap) {
+          best = p;
+          bestOverlap = score;
+        }
+      }
+      if (best != null) {
+        workout = best.value as WorkoutHealthValue;
+        // Ampliamos la ventana de lectura a la unión con la sesión: así el
+        // pulso/pasos cubren todo lo que el reloj grabó.
+        if (best.dateFrom.isBefore(winStart)) winStart = best.dateFrom;
+        if (best.dateTo.isAfter(winEnd)) winEnd = best.dateTo;
+      }
+    } catch (_) {/* sin sesión: seguimos con la agregación por tipo */}
+
+    // 2) Agregación por tipo sobre la ventana (ampliada si hubo sesión).
+    //    Leemos CADA tipo por separado: si uno falla (permiso/soporte), no
+    //    anula la lectura de los demás. En Android no se puede verificar el
+    //    permiso de LECTURA (Health Connect lo oculta): intentamos leer directo.
     double activeCal = 0;
     double totalCal = 0;
     int steps = 0;
     double distance = 0;
     final hrs = <double>[];
     for (final t in _types) {
+      if (t == HealthDataType.WORKOUT) continue; // se maneja aparte (arriba)
       try {
         final points = await _health.getHealthDataFromTypes(
-          startTime: start,
-          endTime: end,
+          startTime: winStart,
+          endTime: winEnd,
           types: [t],
         );
         final clean = _health.removeDuplicates(points);
@@ -207,14 +298,21 @@ class HealthService {
       maxHr = hrs.reduce((a, b) => a > b ? a : b).round();
     }
 
+    // 3) La sesión manda para calorías/distancia (coincide con lo que muestra
+    //    el reloj). Si no la trae, caemos a la agregación por tipo: calorías
+    //    ACTIVAS y, si el origen no las escribe, TOTALES (nunca se suman).
+    final workoutCal = (workout?.totalEnergyBurned ?? 0).toDouble();
+    final workoutDist = (workout?.totalDistance ?? 0).toDouble();
     return HealthMetrics(
-      // Preferimos calorías ACTIVAS; si el origen no las escribe, caemos a las
-      // totales. Nunca se suman (sería doble conteo: total incluye activas).
-      calories: activeCal > 0 ? activeCal : totalCal,
+      calories: workoutCal > 0
+          ? workoutCal
+          : (activeCal > 0 ? activeCal : totalCal),
       avgHr: avgHr,
       maxHr: maxHr,
       steps: steps,
-      distance: distance,
+      distance: workoutDist > 0 ? workoutDist : distance,
+      fromWorkout: workout != null,
+      workoutActivity: workout?.workoutActivityType.name,
     );
   }
 }

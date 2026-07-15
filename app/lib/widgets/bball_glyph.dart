@@ -4,36 +4,48 @@ class BBallGlyph extends StatelessWidget {
   final double size;
   final Color color;
 
-  const BBallGlyph({super.key, this.size = 20, this.color = Colors.white});
+  /// Modo contorno: sin relleno, el círculo y las costuras se trazan en [color]
+  /// sólido (para íconos sobre fondos de color, como el botón "+").
+  final bool outline;
+
+  const BBallGlyph(
+      {super.key, this.size = 20, this.color = Colors.white, this.outline = false});
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size.square(size),
-      painter: _BBallPainter(color: color),
+      painter: _BBallPainter(color: color, outline: outline),
     );
   }
 }
 
 class _BBallPainter extends CustomPainter {
   final Color color;
-  _BBallPainter({required this.color});
+  final bool outline;
+  _BBallPainter({required this.color, this.outline = false});
 
   @override
   void paint(Canvas canvas, Size size) {
     final r = size.width / 2;
     final center = Offset(r, r);
 
-    final fill = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, r, fill);
-
     final stroke = Paint()
-      ..color = Colors.white.withAlpha(80)
-      ..strokeWidth = size.width * 0.06
+      ..color = outline ? color : Colors.white.withAlpha(80)
+      ..strokeWidth = size.width * (outline ? 0.09 : 0.06)
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
+
+    if (outline) {
+      // Contorno del balón (el trazo se dibuja centrado en el radio, así que
+      // achicamos medio grosor para que no se recorte en el borde).
+      canvas.drawCircle(center, r - stroke.strokeWidth / 2, stroke);
+    } else {
+      final fill = Paint()
+        ..color = color
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(center, r, fill);
+    }
 
     // Vertical
     canvas.drawLine(Offset(r, 0), Offset(r, size.height), stroke);

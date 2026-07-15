@@ -11,6 +11,7 @@ import 'screens/auth_screen.dart';
 import 'screens/handle_setup_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/pickup_chat_screen.dart';
 import 'notion/notion_config.dart';
 import 'services/app_loading_state.dart';
 import 'services/blocked_provider.dart';
@@ -28,6 +29,10 @@ import 'services/session.dart';
 import 'services/sync_coordinator.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_logo.dart';
+
+/// Navegador raíz: permite navegar desde fuera del árbol de widgets (p.ej. al
+/// tocar una notificación de pickup para ir a su chat).
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -192,6 +197,7 @@ class OneOfOneApp extends StatelessWidget {
       child: MaterialApp(
         title: '1of1',
         debugShowCheckedModeBanner: false,
+        navigatorKey: navigatorKey,
         theme: buildAppTheme(),
         // Blindaje: íconos de la barra de estado SIEMPRE claros (tema dark).
         // Sin esto, cualquier pantalla que pise el estilo lo deja pegado.
@@ -228,6 +234,16 @@ class _RootState extends State<_Root> {
   void initState() {
     super.initState();
     _bootstrap();
+    // Enrutar al chat del pickup al tocar su notificación (o el botón "Ir al
+    // chat"). Al asignarlo se drena un pickup pendiente si la app se abrió
+    // desde la notificación con el proceso muerto.
+    NotificationsService.instance.onOpenPickupChat = (pickupId) {
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (_) => PickupChatScreen(pickupId: pickupId),
+        ),
+      );
+    };
   }
 
   Future<void> _bootstrap() async {

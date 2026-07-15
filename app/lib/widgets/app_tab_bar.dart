@@ -122,9 +122,10 @@ class _AppTabBarState extends State<AppTabBar>
 
   IconData _iconFor(AppTab t, bool isActive) => switch (t) {
         AppTab.home => isActive ? Icons.map : Icons.map_outlined,
-        AppTab.list =>
-          isActive ? Icons.sports_basketball : Icons.sports_basketball_outlined,
-        AppTab.plus => Icons.add,
+        // Canchas: un estadio/cancha (la pelota se mudó al botón principal).
+        AppTab.list => isActive ? Icons.stadium : Icons.stadium_outlined,
+        // Botón principal: la pelota de básquet (el ícono que tenía Canchas).
+        AppTab.plus => Icons.sports_basketball,
         AppTab.chat =>
           isActive ? Icons.chat_bubble : Icons.chat_bubble_outline,
         AppTab.profile => isActive ? Icons.person : Icons.person_outline,
@@ -270,6 +271,9 @@ class _AppTabBarState extends State<AppTabBar>
                                         ),
                                       ),
                                     Center(
+                                      // El botón principal usa la pelota de
+                                      // básquet de Material (blanca, tamaño 24)
+                                      // sobre el disco ámbar.
                                       child: Icon(
                                         _iconFor(
                                             _slots[i],

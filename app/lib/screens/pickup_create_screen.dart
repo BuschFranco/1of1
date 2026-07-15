@@ -9,6 +9,7 @@ import '../notion/notion_config.dart';
 import '../services/courts_provider.dart';
 import '../services/friends_service.dart';
 import '../services/local_chat_service.dart';
+import '../services/notifications_service.dart';
 import '../services/notion_service.dart';
 import '../services/pickups_provider.dart';
 import '../services/play_session_service.dart';
@@ -144,6 +145,14 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
       // Notificar al usuario que se creó el chat.
       if (mounted) {
         context.read<PlaySessionService>().addChatNotification(chat.name);
+        // Notificación del sistema con botón "Ir al chat".
+        final createdId = pickupPage['id'] ?? '';
+        if (createdId.isNotEmpty) {
+          unawaited(NotificationsService.instance.showPickupChat(
+              'Pickup creado 🏀',
+              'Tocá para ir al chat y pasar el código.',
+              createdId));
+        }
         // Marcar activity en el tab de crew (via ValueNotifier global).
         crewActivityNotifier.value = true;
         SharedPreferences.getInstance().then((p) => p.setBool('crew_activity', true));

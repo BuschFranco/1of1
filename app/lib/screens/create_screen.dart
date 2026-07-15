@@ -71,9 +71,11 @@ class CreateScreen extends StatelessWidget {
               });
               return;
             }
-            // Dentro: avisar y caer directo en el chat del pickup.
-            unawaited(NotificationsService.instance.show(
-                '¡Estás dentro! 🏀', 'Te uniste al pickup. Ya estás en el chat.'));
+            // Dentro: avisar (con botón "Ir al chat") y caer directo en el chat.
+            unawaited(NotificationsService.instance.showPickupChat(
+                '¡Estás dentro! 🏀',
+                'Tocá para ir al chat del pickup.',
+                res.pickupId!));
             crewActivityNotifier.value = true;
             Navigator.of(dialogCtx).pop();
             Navigator.of(context).push(
@@ -184,7 +186,7 @@ class CreateScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 56, 20, 160),
             children: [
               Text(
-                'Nuevo',
+                'Juego',
                 style: AppText.archivo(
                   size: 34,
                   weight: FontWeight.w900,

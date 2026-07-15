@@ -322,6 +322,30 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                     weight: FontWeight.w700,
                     color: AppColors.white(0.5),
                     letterSpacing: 0.12)),
+            if (s.fromWorkout) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withAlpha(38),
+                  borderRadius: BorderRadius.circular(AppShape.rChip),
+                  border: Border.all(color: AppColors.accent),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.sports_basketball,
+                        size: 11, color: AppColors.accent),
+                    const SizedBox(width: 3),
+                    Text('DE TU RELOJ',
+                        style: AppText.grotesk(
+                            size: 8.5,
+                            weight: FontWeight.w800,
+                            color: AppColors.accent)),
+                  ],
+                ),
+              ),
+            ],
             if (s.calorieRecord) ...[
               const Spacer(),
               Container(
