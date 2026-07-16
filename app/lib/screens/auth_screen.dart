@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -110,7 +109,10 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   static final _google = GoogleSignIn(
-    clientId: '823840378752-4bpuv40b9iro06enve2alnblfrlqhpqn.apps.googleusercontent.com',
+    // Client OAuth de tipo Web: en Android `clientId` se ignora; hace falta
+    // `serverClientId` para que Google devuelva el idToken.
+    serverClientId:
+        '823840378752-4rmlor8ivgmgkjsle7irmhu23cbtbabl.apps.googleusercontent.com',
     scopes: ['email', 'profile'],
   );
 
@@ -740,13 +742,11 @@ class _AuthScreenState extends State<AuthScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Ícono de Google (G multicolor simplificado).
-            SizedBox(
+            // Logo "G" oficial de Google (asset de branding, no dibujado).
+            Image.asset(
+              'assets/images/google_g.png',
               width: 20,
               height: 20,
-              child: CustomPaint(
-                painter: _GoogleLogoPainter(),
-              ),
             ),
             const SizedBox(width: 12),
             Text(
@@ -903,92 +903,4 @@ class _GlowFieldState extends State<_GlowField> {
       ),
     );
   }
-}
-
-/// Pintor custom del logo "G" de Google (forma correcta).
-class _GoogleLogoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final s = size.width;
-    final center = Offset(s / 2, s / 2);
-    final r = s / 2;
-
-    // Fondo blanco circular.
-    final bgPaint = Paint()..color = Colors.white;
-    canvas.drawCircle(center, r, bgPaint);
-
-    // Grosor de los arcos.
-    final sw = s * 0.18;
-
-    // Arco rojo (top-right, de ~12h a ~3h → ángulo 0 a π/2).
-    final redPaint = Paint()
-      ..color = const Color(0xFFEA4335)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = sw
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: r * 0.58),
-      -math.pi / 2,
-      math.pi * 0.45,
-      false,
-      redPaint,
-    );
-
-    // Arco amarillo (top-left, de ~9h a ~12h → ángulo π a 3π/2).
-    final yellowPaint = Paint()
-      ..color = const Color(0xFFFBBC05)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = sw
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: r * 0.58),
-      math.pi,
-      math.pi * 0.45,
-      false,
-      yellowPaint,
-    );
-
-    // Arco verde (bottom-left, de ~6h a ~9h → ángulo π/2 a π).
-    final greenPaint = Paint()
-      ..color = const Color(0xFF34A853)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = sw
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: r * 0.58),
-      math.pi * 0.5,
-      math.pi * 0.45,
-      false,
-      greenPaint,
-    );
-
-    // Arco azul (bottom-right, de ~3h a ~6h → ángulo 0 a π/2).
-    final bluePaint = Paint()
-      ..color = const Color(0xFF4285F4)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = sw
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: r * 0.58),
-      0,
-      math.pi * 0.5,
-      false,
-      bluePaint,
-    );
-
-    // Línea azul horizontal (del borde derecho al centro).
-    final blueLinePaint = Paint()
-      ..color = const Color(0xFF4285F4)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = sw
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(
-      Offset(center.dx + r * 0.58, center.dy),
-      Offset(center.dx, center.dy),
-      blueLinePaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
