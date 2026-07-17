@@ -287,6 +287,15 @@ class ApiClient {
   ) =>
       _map(_send('POST', '/matches', body: {'matches': matches}));
 
+  /// Fechas de fin (ISO) de mis partidos ya registrados en la DB Partidos:
+  /// {endedAt: [...]}. Para dedupear el backfill del log local.
+  Future<Map<String, dynamic>> myMatches() => _map(_send('GET', '/matches/mine'));
+
+  /// Mis puntos acumulados en una cancha, sumados server-side desde la DB
+  /// Partidos: {points, matches}. El email sale del token.
+  Future<Map<String, dynamic>> courtPoints(String courtId) =>
+      _map(_send('GET', '/matches/court-points', query: {'courtId': courtId}));
+
   /// Puntos agrupados por email desde `since` (ISO). `emails` máx 100.
   Future<List<Map<String, dynamic>>> ranking({
     required String since,
@@ -296,6 +305,29 @@ class ApiClient {
         'since': since,
         'emails': emails.join(','),
       }));
+
+  // ── Clanes (agrupación por insignia del perfil, server-side) ────────────
+
+  /// Ranking global de clanes. Sin [since] = modo Total (Points del perfil);
+  /// con [since] (ISO) suma los partidos del período. [{clan, points, members}]
+  Future<List<Map<String, dynamic>>> clanRanking({String? since}) =>
+      _list(_send('GET', '/clans/ranking', query: {
+        if (since != null && since.isNotEmpty) 'since': since,
+      }));
+
+  /// Ranking global del período: {players: top50, clans: top50, me: {...}}.
+  /// [since] ISO obligatorio (semana/mes/temporada).
+  Future<Map<String, dynamic>> globalRanking(String since) =>
+      _map(_send('GET', '/rankings/global', query: {'since': since}));
+
+  /// Clan con más puntos en la cancha esta temporada: {owner: {...} | null}.
+  Future<Map<String, dynamic>> clanCourtOwner(String courtId) =>
+      _map(_send('GET', '/clans/court-owner', query: {'courtId': courtId}));
+
+  /// Jugador con más puntos en la cancha esta temporada ("rey de la cancha"):
+  /// {king: {name, handle, points} | null}.
+  Future<Map<String, dynamic>> courtKing(String courtId) =>
+      _map(_send('GET', '/matches/court-king', query: {'courtId': courtId}));
 }
 
 class ApiException implements Exception {

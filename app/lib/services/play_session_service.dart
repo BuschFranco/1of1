@@ -325,6 +325,13 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// Borra UNA notificación del historial (swipe para descartar).
+  void removeNotification(AppNotification n) {
+    if (!_notifs.remove(n)) return;
+    _persistNotifs();
+    notifyListeners();
+  }
+
   /// Borra el historial de notificaciones.
   void clearNotifications() {
     if (_notifs.isEmpty) return;
@@ -450,6 +457,14 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   static DateTime seasonStart([DateTime? now]) {
     final n = now ?? DateTime.now();
     return DateTime(n.year, n.month <= 6 ? 1 : 7, 1);
+  }
+
+  /// Fin EXCLUSIVO de la temporada actual: el 1 de julio (para la 1ra mitad) o
+  /// el 1 de enero del año siguiente (para la 2da). La UI muestra el día
+  /// anterior (30 jun / 31 dic) como último día jugable.
+  static DateTime seasonEnd([DateTime? now]) {
+    final n = now ?? DateTime.now();
+    return n.month <= 6 ? DateTime(n.year, 7, 1) : DateTime(n.year + 1, 1, 1);
   }
 
   /// Puntos de la temporada actual (semestre de calendario, ver [seasonStart]).
@@ -1798,12 +1813,14 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     final timePoints = ((scoredSecs ~/ 60) * multiplierFor(scoredSecs)).round();
 
     // Bonus por resultado: PORCENTAJE de los puntos por tiempo (no un valor
-    // fijo), así el peso del resultado escala con lo que jugaste.
+    // fijo), así el peso del resultado escala con lo que jugaste. Victoria y
+    // derrota valen IGUAL a propósito: el resultado es autorreportado y no
+    // queremos incentivo a mentir; ganar sigue rindiendo vía racha y logros.
     final resultPct = switch (result) {
       PlayResult.win => 0.30,
+      PlayResult.loss => 0.30,
       PlayResult.tie => 0.20,
       PlayResult.training => 0.15,
-      PlayResult.loss => 0.10,
       PlayResult.notCounted => 0.0,
     };
     final resultBonus = (timePoints * resultPct).round();

@@ -316,7 +316,7 @@ class SyncCoordinator {
     // Lista local de usuarios bloqueados de esta cuenta.
     unawaited(_blocked.loadForUser(userKey));
     // Sembrar desde Notion para no perder progreso tras reinstalar.
-    _play.startTracking(
+    final tracking = _play.startTracking(
       userKey: userKey,
       seedPoints: p.points,
       seedPlays: p.games,
@@ -325,9 +325,72 @@ class SyncCoordinator {
       seedTotalsJson: p.playTimeByCourt,
     );
     unawaited(_syncGeofences());
+    // Subir una única vez el historial local que quedó sin registrar en la DB
+    // Partidos (partidos anteriores a la migración al backend). Recién cuando
+    // el tracking terminó de restaurar (el log local ya está cargado).
+    unawaited(tracking.then((_) => _backfillMatchLog(userKey)));
     // Avisar decisiones de moderación sobre las canchas que propuso el usuario
     // (se aprobaron/rechazaron desde la última vez que abrió la app).
     unawaited(_checkCourtDecisions(userKey));
+  }
+
+  /// Backfill one-time del log local a la DB Partidos: los rankings por
+  /// período leen esa DB, que existe recién desde la migración al backend —
+  /// sin esto, lo jugado antes no aparece en semana/mes/temporada ni cuenta
+  /// para el clan. Dedup contra lo ya registrado comparando endedAt al minuto
+  /// (Notion puede normalizar el ISO). El flag se marca solo si todo subió OK.
+  Future<void> _backfillMatchLog(String userKey) async {
+    final api = ApiClient();
+    if (!api.isConfigured || !api.hasToken || userKey.isEmpty) return;
+    final flag = 'log_backfill_done::$userKey';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(flag) ?? false) return;
+
+      // Dedup por RELOJ DE PARED al minuto ("yyyy-MM-ddTHH:mm"): la app sube
+      // hora local sin offset y Notion la devuelve con "+00:00" — comparar por
+      // epoch correría 3 h y duplicaría. Los componentes de fecha/hora, en
+      // cambio, se conservan tal cual.
+      String wallMinute(String iso) =>
+          iso.length >= 16 ? iso.substring(0, 16) : iso;
+      final mine = await api.myMatches();
+      final known = <String>{
+        for (final s in (mine['endedAt'] as List? ?? const []))
+          wallMinute(s.toString()),
+      };
+      // También evitar duplicar lo que espera en el buffer pendiente.
+      for (final m in await _play.readPendingMatches()) {
+        known.add(wallMinute((m['endedAt'] ?? '').toString()));
+      }
+
+      final missing = [
+        for (final s in _play.log)
+          if (s.points > 0 &&
+              !known.contains(wallMinute(
+                  DateTime.fromMillisecondsSinceEpoch(s.endedAtMillis)
+                      .toIso8601String())))
+            {
+              'points': s.points,
+              'endedAt': DateTime.fromMillisecondsSinceEpoch(s.endedAtMillis)
+                  .toIso8601String(),
+              'courtId': s.courtId,
+              'courtName': s.courtName,
+              if (s.result != null) 'result': s.result!.name,
+              'seconds': s.seconds,
+            },
+      ];
+
+      if (missing.isNotEmpty) {
+        final res = await api.postMatches(missing);
+        final results = (res['results'] as List?) ?? const [];
+        final allOk = results.length == missing.length &&
+            results.every((r) => (r as Map)['ok'] == true);
+        if (!allOk) return; // reintento en el próximo arranque
+      }
+      await prefs.setBool(flag, true);
+    } catch (_) {
+      // Sin red / error: se reintenta en el próximo inicio de sesión.
+    }
   }
 
   /// Compara el estado de las canchas propias contra el último conocido y, por

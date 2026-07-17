@@ -75,6 +75,9 @@ export class ProfilesService implements OnModuleInit {
           EndedAt: 'date',
           CourtId: 'rich_text',
           CourtName: 'rich_text',
+          // Clan del autor AL MOMENTO de jugar: congela el historial en el
+          // clan donde se ganaron los puntos (cambiar de clan no los muda).
+          Clan: 'rich_text',
         });
       }
       if (this.notion.cfg.db.chats) {

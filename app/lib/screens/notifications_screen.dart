@@ -96,7 +96,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final notifs = context.watch<PlaySessionService>().notifications;
     final invites = context.watch<PickupsProvider>().pendingInvitesFor(_myEmail);
 
-    return Scaffold(
+    return GestureDetector(
+      // Deslizar a la derecha (fuera de las tarjetas) vuelve a la pantalla
+      // anterior, como en el resto de las pestañas. Sobre una tarjeta el
+      // gesto lo captura su Dismissible (descartar).
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragEnd: (d) {
+        if ((d.primaryVelocity ?? 0) > 0) Navigator.pop(context);
+      },
+      child: Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
         child: Column(
@@ -130,7 +138,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           _sectionLabel('INVITACIONES A PICKUP'),
                           const SizedBox(height: 10),
                           for (final p in invites) ...[
-                            _inviteCard(p),
+                            _dismissibleInvite(p),
                             const SizedBox(height: 10),
                           ],
                           const SizedBox(height: 6),
@@ -141,7 +149,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             const SizedBox(height: 10),
                           ],
                           for (final n in notifs) ...[
-                            _row(n),
+                            _dismissibleRow(n),
                             const SizedBox(height: 10),
                           ],
                         ],
@@ -151,6 +159,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ],
         ),
       ),
+      ),
+    );
+  }
+
+  // Rojo destructivo (descartar). Local: AppColors no tiene token de peligro.
+  static const Color _danger = Color(0xFFEF4444);
+
+  /// Fondo que se revela al arrastrar una tarjeta a la derecha (mismo lenguaje
+  /// que las notificaciones de Android): superficie sutil + tacho.
+  Widget _dismissBg() {
+    return Container(
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.only(left: 20),
+      decoration: BoxDecoration(
+        color: _danger.withAlpha(22),
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+      ),
+      child: const Icon(Icons.delete_outline, size: 22, color: _danger),
     );
   }
 
@@ -164,100 +190,180 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ),
       );
 
+  /// Invitación deslizable: descartarla equivale a RECHAZAR (el usuario
+  /// desestimó la notificación). Se resuelve dentro de confirmDismiss y se
+  /// devuelve false: la tarjeta desaparece sola cuando el provider la saca de
+  /// las pendientes (evita el error de Dismissible aún montado), y si falla
+  /// la red vuelve a su lugar.
+  Widget _dismissibleInvite(Pickup p) {
+    return Dismissible(
+      key: ValueKey('invite-${p.pageId}'),
+      direction: DismissDirection.startToEnd,
+      background: _dismissBg(),
+      confirmDismiss: (_) async {
+        await _respond(p, false);
+        return false;
+      },
+      child: _inviteCard(p),
+    );
+  }
+
+  /// Notificación del historial deslizable: descartar la borra (como las
+  /// notificaciones de Android).
+  Widget _dismissibleRow(AppNotification n) {
+    return Dismissible(
+      key: ValueKey('notif-${n.kind.name}-${n.refId}-${n.atMillis}'),
+      direction: DismissDirection.startToEnd,
+      background: _dismissBg(),
+      onDismissed: (_) =>
+          context.read<PlaySessionService>().removeNotification(n),
+      child: _row(n),
+    );
+  }
+
   Widget _inviteCard(Pickup p) {
     final busy = _working.contains(p.pageId);
     return Container(
-      padding: const EdgeInsets.all(14),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(AppShape.rCard),
-        border: Border.all(color: AppColors.accent, width: 1.5),
+        border: Border.all(color: AppColors.line, width: 1),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.accent.withAlpha(32),
-                  borderRadius: BorderRadius.circular(AppShape.rBtn),
-                  border: Border.all(color: AppColors.accent, width: 1.5),
-                ),
-                child: Icon(Icons.mail_outline, size: 20, color: AppColors.accent),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Riel acento: es la única invitación "viva" del listado.
+            Container(width: 3, color: AppColors.accent),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Te invitaron a un pickup',
-                        style: AppText.grotesk(
-                            size: 11,
-                            weight: FontWeight.w600,
-                            color: AppColors.white(0.55))),
-                    const SizedBox(height: 2),
-                    Text(p.title,
+                    Row(
+                      children: [
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withAlpha(26),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.sports_basketball,
+                              size: 18, color: AppColors.accent),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('TE INVITARON A UN PICKUP',
+                                  style: AppText.grotesk(
+                                      size: 10,
+                                      weight: FontWeight.w700,
+                                      letterSpacing: 0.08,
+                                      color: AppColors.white(0.45))),
+                              const SizedBox(height: 3),
+                              Text(p.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppText.archivo(
+                                      size: 15,
+                                      weight: FontWeight.w800,
+                                      color: Colors.white)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Meta (cancha · fecha) alineada con el texto, no al ícono.
+                    Padding(
+                      padding: const EdgeInsets.only(left: 50),
+                      child: Text(
+                        '${_courtName(p.courtId)} · ${_dateLabel(p.dateTime)}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppText.archivo(
-                            size: 15,
-                            weight: FontWeight.w800,
-                            color: Colors.white)),
-                    const SizedBox(height: 2),
-                    Text('${_courtName(p.courtId)} · ${_dateLabel(p.dateTime)}',
                         style: AppText.grotesk(
-                            size: 12, color: AppColors.white(0.5))),
+                            size: 12, color: AppColors.white(0.5)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ghostBtn(
+                              'Rechazar', busy, () => _respond(p, false)),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _solidBtn(
+                              'Aceptar', busy, () => _respond(p, true)),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _respondBtn(
-                    'RECHAZAR', AppColors.closed, busy, () => _respond(p, false)),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _respondBtn(
-                    'ACEPTAR', AppColors.accent, busy, () => _respond(p, true)),
-              ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _respondBtn(
-      String label, Color color, bool busy, VoidCallback onTap) {
+  /// Acción primaria: pill llena en acento (jerarquía clara sobre el ghost).
+  Widget _solidBtn(String label, bool busy, VoidCallback onTap) {
     return PressableWidget(
       onTap: busy ? null : onTap,
       child: Container(
-        height: 44,
+        height: 42,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: color.withAlpha(30),
+          color: AppColors.accent,
           borderRadius: BorderRadius.circular(AppShape.rBtn),
-          border: Border.all(color: color, width: 1.5),
+        ),
+        child: busy
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.black),
+              )
+            : Text(label,
+                style: AppText.archivo(
+                    size: 13.5,
+                    weight: FontWeight.w800,
+                    color: Colors.black)),
+      ),
+    );
+  }
+
+  /// Acción secundaria: pill fantasma neutra (no compite con la primaria).
+  Widget _ghostBtn(String label, bool busy, VoidCallback onTap) {
+    return PressableWidget(
+      onTap: busy ? null : onTap,
+      child: Container(
+        height: 42,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+          border: Border.all(color: AppColors.white(0.22), width: 1),
         ),
         child: busy
             ? SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: color),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: AppColors.white(0.5)),
               )
             : Text(label,
                 style: AppText.archivo(
-                    size: 13,
-                    weight: FontWeight.w900,
-                    letterSpacing: 0.04,
-                    color: color)),
+                    size: 13.5,
+                    weight: FontWeight.w700,
+                    color: AppColors.white(0.75))),
       ),
     );
   }
@@ -304,59 +410,83 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget _row(AppNotification n) {
     final e = n.event;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      // El color del evento vive en el riel izquierdo y el ícono; el resto de
+      // la tarjeta queda neutro (hairline) para que respire.
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(AppShape.rCard),
-        // Borde pleno del color del evento (estado franco).
-        border: Border.all(color: e.color, width: 1),
+        border: Border.all(color: AppColors.line, width: 1),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: e.color.withAlpha(32),
-              borderRadius: BorderRadius.circular(AppShape.rBtn),
-              border: Border.all(color: e.color, width: 1.5),
-            ),
-            child: Icon(e.icon, size: 20, color: e.color),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  e.headline,
-                  style: AppText.grotesk(
-                    size: 11,
-                    weight: FontWeight.w600,
-                    color: AppColors.white(0.55),
-                  ),
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            // Riel de color: la firma del evento, sin encerrar la tarjeta.
+            Container(width: 3, color: e.color),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: e.color.withAlpha(26),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(e.icon, size: 18, color: e.color),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  e.headline.toUpperCase(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppText.grotesk(
+                                    size: 10,
+                                    weight: FontWeight.w700,
+                                    letterSpacing: 0.08,
+                                    color: AppColors.white(0.45),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _ago(n.atMillis),
+                                style: AppText.grotesk(
+                                    size: 10.5,
+                                    color: AppColors.white(0.35)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            e.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppText.archivo(
+                              size: 15,
+                              weight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  e.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppText.archivo(
-                    size: 15,
-                    weight: FontWeight.w800,
-                    color: e.color,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            _ago(n.atMillis),
-            style: AppText.grotesk(size: 11, color: AppColors.white(0.4)),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

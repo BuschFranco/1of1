@@ -33,6 +33,7 @@ import '../widgets/pop_background.dart';
 import '../widgets/pop_panel.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/rating_badge.dart';
+import '../widgets/season_banner.dart';
 import '../widgets/reveal_on_scroll.dart';
 import '../widgets/section_title.dart';
 
@@ -81,6 +82,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // Ancla de la sección "Últimos partidos" para hacer scroll hacia ella al
   // tocar el mazo de puntos que va debajo del nivel.
   final GlobalKey _historyKey = GlobalKey();
+
+  // Amigos cargados una vez al entrar al perfil: alimentan la POSICIÓN del
+  // botón Ranking y la hoja se abre sin recargar. `_rankBusy` evita abrir
+  // varios modales si el usuario toca el botón repetidamente.
+  List<_RankFriend> _rankFriends = const [];
+  bool _rankFriendsLoaded = false;
+  bool _rankBusy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadRankFriends());
+  }
+
+  /// Carga los amigos (con sus puntos de perfil) para calcular mi posición en
+  /// el ranking entre amigos y para abrir la hoja al instante.
+  Future<void> _loadRankFriends() async {
+    final session = context.read<Session>();
+    final friendsService = FriendsService();
+    if (session.email == null || !friendsService.isConfigured) {
+      if (mounted) setState(() => _rankFriendsLoaded = true);
+      return;
+    }
+    try {
+      final friends = await friendsService.listFriends(session.email!);
+      if (!mounted) return;
+      final profiles = context.read<ProfilesProvider>();
+      final data = <_RankFriend>[
+        for (final f in friends)
+          _RankFriend(
+            name: f.friendName.isNotEmpty ? f.friendName : f.friendHandle,
+            handle: f.friendHandle,
+            email: f.friendEmail.trim().toLowerCase(),
+            totalPoints: profiles.byEmail(f.friendEmail)?.points ?? 0,
+          ),
+      ];
+      setState(() {
+        _rankFriends = data;
+        _rankFriendsLoaded = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _rankFriendsLoaded = true);
+    }
+  }
+
+  /// Mi puesto (1-based) entre amigos por puntos totales.
+  int _friendRank(int myPoints) {
+    var rank = 1;
+    for (final f in _rankFriends) {
+      if (f.totalPoints > myPoints) rank++;
+    }
+    return rank;
+  }
+
+  /// Abre la hoja de ranking con guard: ignora taps mientras ya está abriendo.
+  Future<void> _openRanking(BuildContext context) async {
+    if (_rankBusy) return;
+    setState(() => _rankBusy = true);
+    try {
+      await _showRanking(context);
+    } finally {
+      if (mounted) setState(() => _rankBusy = false);
+    }
+  }
 
   void _scrollToHistory() {
     final ctx = _historyKey.currentContext;
@@ -864,7 +929,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final ps = context.watch<PlaySessionService>();
 
     Widget cell(String label, String value, IconData icon,
-        {bool accent = false, VoidCallback? onTap}) {
+        {bool accent = false, VoidCallback? onTap, bool loading = false}) {
       final content = Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Column(
@@ -891,12 +956,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
             const SizedBox(height: 6),
-            Text(value,
-                style: AppText.archivo(
-                    size: 22,
-                    weight: FontWeight.w900,
-                    height: 1.0,
-                    color: accent ? AppColors.accent : AppColors.ink)),
+            // Mientras carga (abriendo la hoja) muestra un spinner en vez del
+            // valor: evita que el usuario toque de nuevo y abra varios modales.
+            loading
+                ? SizedBox(
+                    height: 22,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.accent),
+                      ),
+                    ),
+                  )
+                : Text(value,
+                    style: AppText.archivo(
+                        size: 22,
+                        weight: FontWeight.w900,
+                        height: 1.0,
+                        color: accent ? AppColors.accent : AppColors.ink)),
           ],
         ),
       );
@@ -938,8 +1018,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         accent: true, onTap: () => _showStreaks(context))),
                 vDiv(),
                 Expanded(
-                    child: cell('Rating', '${ps.points}', Icons.star_rounded,
-                        onTap: () => _showRanking(context))),
+                    child: cell(
+                        'Ranking',
+                        _rankFriendsLoaded
+                            ? '#${_friendRank(ps.points)}'
+                            : '—',
+                        Icons.leaderboard_rounded,
+                        loading: _rankBusy,
+                        onTap: () => _openRanking(context))),
               ],
             ),
           ),
@@ -1617,28 +1703,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _showRanking(BuildContext context) async {
     final session = context.read<Session>();
     final ps = context.read<PlaySessionService>();
-    final friendsService = FriendsService();
-    final profiles = context.read<ProfilesProvider>();
 
-    // Cargar amigos.
-    List<Friend> friends = [];
-    if (session.email != null && friendsService.isConfigured) {
-      try {
-        friends = await friendsService.listFriends(session.email!);
-      } catch (_) {}
-    }
-
-    // Datos de amigos (nombre/handle/email + total de perfil para el modo Total).
-    final friendData = <_RankFriend>[
-      for (final f in friends)
-        _RankFriend(
-          name: f.friendName.isNotEmpty ? f.friendName : f.friendHandle,
-          handle: f.friendHandle,
-          email: f.friendEmail.trim().toLowerCase(),
-          totalPoints: profiles.byEmail(f.friendEmail)?.points ?? 0,
-        ),
-    ];
-
+    // Reusar los amigos ya cargados; si aún no están, cargarlos ahora (una
+    // sola vez, protegido por el guard de _openRanking).
+    if (!_rankFriendsLoaded) await _loadRankFriends();
     if (!context.mounted) return;
 
     await showModalBottomSheet<void>(
@@ -1652,7 +1720,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         myHandle: session.profile?.handle ?? '',
         myTotalPoints: ps.points,
         play: ps,
-        friends: friendData,
+        friends: _rankFriends,
       ),
     );
   }
@@ -2078,9 +2146,19 @@ class _RankingSheet extends StatefulWidget {
 }
 
 class _RankingSheetState extends State<_RankingSheet> {
-  _RankPeriod _period = _RankPeriod.total;
-  bool _loading = false;
-  List<_RankEntry> _entries = const [];
+  // Orden de las páginas del swipe (mismo orden que los chips).
+  static const _order = [
+    _RankPeriod.week,
+    _RankPeriod.month,
+    _RankPeriod.total,
+    _RankPeriod.season,
+  ];
+  late final PageController _pageCtrl;
+  int _page = 2; // arranca en Total (posición 2 del orden)
+  // Entradas ya resueltas por período (evita recomputar/re-pegar al swipe).
+  final Map<_RankPeriod, List<_RankEntry>> _cache = {};
+
+  _RankPeriod get _period => _order[_page];
 
   // El ranking por período necesita el historial con fecha en el backend.
   bool get _periodsAvailable => ApiConfig.isConfigured;
@@ -2088,7 +2166,14 @@ class _RankingSheetState extends State<_RankingSheet> {
   @override
   void initState() {
     super.initState();
-    _rebuild();
+    _pageCtrl = PageController(initialPage: _page);
+    _rebuild(_period);
+  }
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
   }
 
   /// Inicio del rango para el período elegido (espejo de los getters locales del
@@ -2116,8 +2201,8 @@ class _RankingSheetState extends State<_RankingSheet> {
         _RankPeriod.total => widget.myTotalPoints,
       };
 
-  Future<void> _rebuild() async {
-    final p = _period;
+  Future<void> _rebuild(_RankPeriod p) async {
+    if (_cache.containsKey(p)) return;
 
     // Modo Total: todo sale de los acumulados, sin red.
     if (p == _RankPeriod.total) {
@@ -2127,16 +2212,13 @@ class _RankingSheetState extends State<_RankingSheet> {
           _RankEntry(f.name, f.handle, f.totalPoints, false),
       ];
       list.sort((a, b) => b.points.compareTo(a.points));
-      setState(() {
-        _entries = list;
-        _loading = false;
-      });
+      if (!mounted) return;
+      setState(() => _cache[p] = list);
       return;
     }
 
     // Modo período: mis puntos de local, los de amigos del backend (que ya
     // agrupa y suma por email server-side).
-    setState(() => _loading = true);
     final byEmail = <String, int>{};
     final emails = widget.friends
         .map((f) => f.email)
@@ -2166,16 +2248,17 @@ class _RankingSheetState extends State<_RankingSheet> {
         _RankEntry(f.name, f.handle, byEmail[f.email] ?? 0, false),
     ];
     list.sort((a, b) => b.points.compareTo(a.points));
-    setState(() {
-      _entries = list;
-      _loading = false;
-    });
+    setState(() => _cache[p] = list);
   }
 
   void _select(_RankPeriod p) {
-    if (p == _period) return;
-    setState(() => _period = p);
-    _rebuild();
+    final target = _order.indexOf(p);
+    if (target == _page) return;
+    _pageCtrl.animateToPage(
+      target,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOut,
+    );
   }
 
   String _subtitle(_RankPeriod p) => switch (p) {
@@ -2215,7 +2298,7 @@ class _RankingSheetState extends State<_RankingSheet> {
                 style: AppText.grotesk(size: 12, color: AppColors.white(0.4))),
             const SizedBox(height: 14),
             // Selector de período (solo si hay historial en Notion).
-            if (_periodsAvailable)
+            if (_periodsAvailable) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
@@ -2225,47 +2308,25 @@ class _RankingSheetState extends State<_RankingSheet> {
                     const SizedBox(width: 8),
                     _periodChip('Mes', _RankPeriod.month),
                     const SizedBox(width: 8),
-                    _periodChip('Temporada', _RankPeriod.season),
-                    const SizedBox(width: 8),
                     _periodChip('Total', _RankPeriod.total),
+                    const SizedBox(width: 8),
+                    _periodChip('Temporada', _RankPeriod.season),
                   ],
                 ),
               ),
-            if (_periodsAvailable) const SizedBox(height: 14),
-            // Lista de ranking.
+              const SizedBox(height: 14),
+            ],
+            // Lista de ranking: una página por período, deslizable.
             Expanded(
-              child: _loading
-                  ? Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: AppColors.accent),
-                      ),
-                    )
-                  // Una sola card con filas planas separadas por hairlines
-                  // (antes cada puesto era un box bordeado).
-                  : Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                      child: Align(
-                        alignment: Alignment.topCenter,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.card,
-                            borderRadius: BorderRadius.circular(AppShape.rCard),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: ListView.separated(
-                            shrinkWrap: true,
-                            padding: EdgeInsets.zero,
-                            itemCount: _entries.length,
-                            separatorBuilder: (_, _) => Container(
-                                height: 1, color: AppColors.white(0.06)),
-                            itemBuilder: (_, i) => _rankRow(i, _entries[i]),
-                          ),
-                        ),
-                      ),
-                    ),
+              child: PageView.builder(
+                controller: _pageCtrl,
+                itemCount: _order.length,
+                onPageChanged: (i) {
+                  setState(() => _page = i);
+                  _rebuild(_order[i]);
+                },
+                itemBuilder: (_, i) => _periodPage(_order[i]),
+              ),
             ),
           ],
         ),
@@ -2273,9 +2334,51 @@ class _RankingSheetState extends State<_RankingSheet> {
     );
   }
 
+  /// Página de un período: banner (solo temporada) + card con las filas.
+  Widget _periodPage(_RankPeriod p) {
+    final entries = _cache[p];
+    if (entries == null) {
+      return Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+              strokeWidth: 2, color: AppColors.accent),
+        ),
+      );
+    }
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Column(
+        children: [
+          if (p == _RankPeriod.season) const SeasonBanner(compact: true),
+          // Una sola card con filas planas separadas por hairlines.
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(AppShape.rCard),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                for (var i = 0; i < entries.length; i++) ...[
+                  if (i > 0)
+                    Container(height: 1, color: AppColors.white(0.06)),
+                  _rankRow(i, entries[i]),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _periodChip(String label, _RankPeriod p) => AppChip(
         label: label,
         active: _period == p,
+        // La temporada lleva trofeo: es el eje competitivo que se reinicia.
+        icon: p == _RankPeriod.season ? '\u{1F3C6}' : null,
         onTap: () => _select(p),
       );
 

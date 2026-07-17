@@ -176,6 +176,9 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
     return GestureDetector(
+      // translucent: sin esto el gesto no se capta sobre el contenido (solo
+      // en zonas vacías), igual que en auth_screen.
+      behavior: HitTestBehavior.translucent,
       onHorizontalDragEnd: (d) {
         if ((d.primaryVelocity ?? 0) > 0) Navigator.pop(context);
       },

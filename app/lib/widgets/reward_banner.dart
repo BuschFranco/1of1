@@ -100,59 +100,75 @@ class _RewardOverlayState extends State<RewardOverlay>
   }
 
   Widget _card(RewardEvent r) {
+    // Mismo lenguaje que las tarjetas de la pestaña Notificaciones: superficie
+    // neutra con hairline, riel de color a la izquierda como firma del evento,
+    // ícono en círculo tintado y título en blanco. La sombra dura queda: el
+    // banner flota sobre el contenido y necesita despegarse.
     return PressableWidget(
       onTap: _dismiss,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: AppColors.bgElev,
           borderRadius: BorderRadius.circular(AppShape.rCard),
-          // Neobrutalismo: borde franco del color del evento + sombra dura.
-          border: Border.all(color: r.color, width: 1),
+          border: Border.all(color: AppColors.line, width: 1),
           boxShadow: AppFx.hardShadow(),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: r.color.withAlpha(36),
-                borderRadius: BorderRadius.circular(AppShape.rChip),
-                border: Border.all(color: r.color, width: 1.5),
-              ),
-              child: Icon(r.icon, size: 22, color: r.color),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    r.headline,
-                    style: AppText.grotesk(
-                      size: 11,
-                      weight: FontWeight.w600,
-                      color: AppColors.white(0.6),
-                      letterSpacing: 0.02,
-                    ),
+        child: IntrinsicHeight(
+          child: Row(
+            children: [
+              Container(width: 3, color: r.color),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: r.color.withAlpha(26),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(r.icon, size: 20, color: r.color),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              r.headline.toUpperCase(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.grotesk(
+                                size: 10,
+                                weight: FontWeight.w700,
+                                letterSpacing: 0.08,
+                                color: AppColors.white(0.5),
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              r.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.archivo(
+                                size: 16,
+                                weight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    r.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppText.archivo(
-                      size: 16,
-                      weight: FontWeight.w800,
-                      color: r.color,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

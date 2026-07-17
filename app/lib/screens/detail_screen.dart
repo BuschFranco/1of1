@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../data/courts.dart';
 import '../data/legal_content.dart';
 import '../data/models.dart';
+import '../services/api/api_client.dart';
+import '../services/api/api_config.dart';
 import '../services/blocked_provider.dart';
 import '../services/court_rating_service.dart';
 import '../services/courts_provider.dart';
@@ -118,43 +120,14 @@ class DetailScreen extends StatelessWidget {
                         },
                       );
                     }),
-                    Builder(builder: (context) {
-                      final secs = context
-                          .watch<PlaySessionService>()
-                          .secondsForCourt(court.id);
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 12),
-                          // Card plana: fill sin borde (lenguaje editorial).
-                          decoration: BoxDecoration(
-                            color: AppColors.card,
-                            borderRadius:
-                                BorderRadius.circular(AppShape.rBtn),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.timer_outlined,
-                                  size: 18, color: AppColors.accent),
-                              const SizedBox(width: 10),
-                              Text('Jugaste acá',
-                                  style: AppText.grotesk(
-                                      size: 13, color: AppColors.white(0.7))),
-                              const Spacer(),
-                              Text(
-                                PlaySessionService.fmt(secs),
-                                style: AppText.archivo(
-                                    size: 15,
-                                    weight: FontWeight.w800,
-                                    color: AppColors.accent),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }),
+                    _CourtOwnerCard(courtId: court.id),
+                    _CourtKingCard(courtId: court.id),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16),
+                      child: _MyCourtStats(courtId: court.id),
+                    ),
                     _playingNow(court),
+                    _MyCourtHistory(courtId: court.id),
                     const SizedBox(height: 22),
                     const SectionTitle(title: 'Amenities'),
                     Wrap(
@@ -997,6 +970,388 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Clan que conquistó la cancha ────────────────────────────────────────────
+
+/// Card con el clan "dueño" de la cancha: el de más puntos históricos
+/// acumulados acá (agregado server-side desde la DB Partidos, agrupando por la
+/// insignia de clan de cada jugador). Sin dueño no se muestra nada; si el
+/// dueño es MI clan, la card se tinta con el acento.
+class _CourtOwnerCard extends StatefulWidget {
+  final String courtId;
+  const _CourtOwnerCard({required this.courtId});
+
+  @override
+  State<_CourtOwnerCard> createState() => _CourtOwnerCardState();
+}
+
+class _CourtOwnerCardState extends State<_CourtOwnerCard> {
+  String? _clan;
+  int _points = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (!ApiConfig.isConfigured || !context.read<Session>().isLoggedIn) return;
+    try {
+      final r = await ApiClient().clanCourtOwner(widget.courtId);
+      final owner = r['owner'];
+      if (!mounted || owner is! Map) return;
+      setState(() {
+        _clan = (owner['clan'] ?? '').toString();
+        _points = (owner['points'] as num?)?.round() ?? 0;
+      });
+    } catch (_) {/* sin red: la card no aparece */}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final clan = _clan;
+    if (clan == null || clan.isEmpty) return const SizedBox.shrink();
+    final myClan =
+        (context.watch<Session>().profile?.clan ?? '').trim().toUpperCase();
+    final isMine = myClan.isNotEmpty && clan == myClan;
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isMine ? AppColors.accent.withAlpha(18) : AppColors.card,
+          borderRadius: BorderRadius.circular(AppShape.rCard),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.emoji_events, size: 18, color: AppColors.accent),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Conquistada esta temporada por',
+                  style:
+                      AppText.grotesk(size: 13, color: AppColors.white(0.7))),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(clan,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.archivo(
+                      size: 15,
+                      weight: FontWeight.w900,
+                      color: AppColors.accent)),
+            ),
+            const SizedBox(width: 8),
+            Text('$_points pts',
+                style:
+                    AppText.grotesk(size: 10, color: AppColors.white(0.35))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Rey de la cancha (jugador con más puntos esta temporada) ─────────────────
+
+/// Card con el jugador que más puntos hizo en esta cancha EN LA TEMPORADA
+/// actual. Se reinicia cada temporada, igual que la conquista de clan. Sin
+/// nadie con puntos, no se muestra.
+class _CourtKingCard extends StatefulWidget {
+  final String courtId;
+  const _CourtKingCard({required this.courtId});
+
+  @override
+  State<_CourtKingCard> createState() => _CourtKingCardState();
+}
+
+class _CourtKingCardState extends State<_CourtKingCard> {
+  String? _name;
+  String _handle = '';
+  int _points = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (!ApiConfig.isConfigured || !context.read<Session>().isLoggedIn) return;
+    try {
+      final r = await ApiClient().courtKing(widget.courtId);
+      final king = r['king'];
+      if (!mounted || king is! Map) return;
+      setState(() {
+        _name = (king['name'] ?? '').toString();
+        _handle = (king['handle'] ?? '').toString();
+        _points = (king['points'] as num?)?.round() ?? 0;
+      });
+    } catch (_) {/* sin red: la card no aparece */}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = _name;
+    if (name == null || name.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(AppShape.rCard),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.workspace_premium, size: 18, color: AppColors.accent),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Rey de la cancha esta temporada',
+                      style: AppText.grotesk(
+                          size: 13, color: AppColors.white(0.7))),
+                  if (_handle.isNotEmpty)
+                    Text(_handle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.grotesk(
+                            size: 10, color: AppColors.white(0.4))),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.archivo(
+                      size: 15,
+                      weight: FontWeight.w900,
+                      color: AppColors.accent)),
+            ),
+            const SizedBox(width: 8),
+            Text('$_points pts',
+                style:
+                    AppText.grotesk(size: 10, color: AppColors.white(0.35))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Mis stats en esta cancha ────────────────────────────────────────────────
+
+/// Card con el tiempo jugado y los puntos acumulados en ESTA cancha. El tiempo
+/// es local (en vivo, incluye la sesión en curso); los puntos vienen de la DB
+/// Partidos del backend (sobreviven reinstalaciones y no están capados a los
+/// últimos 100 partidos del log). Se muestran DOS totales: el de la temporada
+/// actual (lo que compite) y el histórico de por vida. Mientras la DB no
+/// respondió —o si lo local supera lo subido (partidos pendientes de sync)— se
+/// usa la suma local.
+class _MyCourtStats extends StatefulWidget {
+  final String courtId;
+  const _MyCourtStats({required this.courtId});
+
+  @override
+  State<_MyCourtStats> createState() => _MyCourtStatsState();
+}
+
+class _MyCourtStatsState extends State<_MyCourtStats> {
+  int? _dbPoints;
+  int? _dbSeasonPoints;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (!ApiConfig.isConfigured || !context.read<Session>().isLoggedIn) return;
+    try {
+      final r = await ApiClient().courtPoints(widget.courtId);
+      if (!mounted) return;
+      setState(() {
+        _dbPoints = (r['points'] as num?)?.toInt() ?? 0;
+        _dbSeasonPoints = (r['seasonPoints'] as num?)?.toInt() ?? 0;
+      });
+    } catch (_) {/* sin red: queda el estimado local */}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final play = context.watch<PlaySessionService>();
+    final secs = play.secondsForCourt(widget.courtId);
+    final mine = play.log.where((e) => e.courtId == widget.courtId);
+    final localPts = mine.fold(0, (a, e) => a + e.points);
+    // Suma local de la temporada actual (fallback si la DB no respondió).
+    final seasonStartMs =
+        PlaySessionService.seasonStart().millisecondsSinceEpoch;
+    final localSeasonPts = mine
+        .where((e) => e.endedAtMillis >= seasonStartMs)
+        .fold(0, (a, e) => a + e.points);
+    final pts =
+        _dbPoints == null || localPts > _dbPoints! ? localPts : _dbPoints!;
+    final seasonPts = _dbSeasonPoints == null || localSeasonPts > _dbSeasonPoints!
+        ? localSeasonPts
+        : _dbSeasonPoints!;
+
+    Widget row(IconData icon, String label, String value) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: AppColors.accent),
+              const SizedBox(width: 10),
+              Text(label,
+                  style:
+                      AppText.grotesk(size: 13, color: AppColors.white(0.7))),
+              const Spacer(),
+              Text(value,
+                  style: AppText.archivo(
+                      size: 15,
+                      weight: FontWeight.w800,
+                      color: AppColors.accent)),
+            ],
+          ),
+        );
+
+    Widget divider() => Container(height: 1, color: AppColors.white(0.06));
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      // Card plana: fill sin borde (lenguaje editorial).
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+      ),
+      child: Column(
+        children: [
+          row(Icons.timer_outlined, 'Jugaste acá',
+              PlaySessionService.fmt(secs)),
+          divider(),
+          row(Icons.military_tech, 'Puntos esta temporada', '$seasonPts pts'),
+          divider(),
+          row(Icons.star_rounded, 'Puntos históricos', '$pts pts'),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Historial de partidos en esta cancha ────────────────────────────────────
+
+/// Últimos partidos jugados en ESTA cancha, desde el log local del dispositivo
+/// (mismo lenguaje que el historial del perfil). Sin partidos acá no se
+/// muestra nada.
+class _MyCourtHistory extends StatelessWidget {
+  final String courtId;
+  const _MyCourtHistory({required this.courtId});
+
+  static const int _maxRows = 10;
+
+  (Color, String) _resultStyle(PlayResult? r) {
+    switch (r) {
+      case PlayResult.win:
+        return (AppColors.open, 'VICTORIA');
+      case PlayResult.loss:
+        return (AppColors.accentDark, 'DERROTA');
+      case PlayResult.tie:
+        return (AppColors.white(0.7), 'EMPATE');
+      case PlayResult.training:
+        return (AppColors.accent, 'ENTREN.');
+      case PlayResult.notCounted:
+      case null:
+        return (AppColors.white(0.45), 'S/INFO');
+    }
+  }
+
+  String _fmtDate(int millis) {
+    final d = DateTime.fromMillisecondsSinceEpoch(millis);
+    return '${d.day}/${d.month}/${d.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final matches = context
+        .watch<PlaySessionService>()
+        .log
+        .where((e) => e.courtId == courtId)
+        .toList();
+    if (matches.isEmpty) return const SizedBox.shrink();
+
+    final rows = <Widget>[];
+    for (var i = 0; i < matches.length && i < _maxRows; i++) {
+      if (i > 0) rows.add(Container(height: 1, color: AppColors.white(0.06)));
+      rows.add(_row(matches[i]));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 22),
+        const SectionTitle(title: 'Tus partidos acá'),
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(AppShape.rCard),
+          ),
+          child: Column(children: rows),
+        ),
+      ],
+    );
+  }
+
+  Widget _row(PlaySession s) {
+    final (color, label) = _resultStyle(s.result);
+    // Fila plana: dot+etiqueta de color, duración · fecha y puntos a la
+    // derecha (sin nombre de cancha: ya estamos en su detalle).
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(label,
+              style: AppText.grotesk(
+                  size: 10,
+                  weight: FontWeight.w800,
+                  color: color,
+                  letterSpacing: 0.06)),
+          Expanded(
+            child: Text(
+              '  ·  ${PlaySessionService.fmt(s.seconds)}  ·  ${_fmtDate(s.endedAtMillis)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.grotesk(size: 11, color: AppColors.white(0.45)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (s.points > 0) ...[
+            Text('+${s.points}',
+                style: AppText.archivo(
+                    size: 14,
+                    weight: FontWeight.w900,
+                    color: AppColors.accent)),
+            const SizedBox(width: 1),
+            Text('pts',
+                style:
+                    AppText.grotesk(size: 10, color: AppColors.white(0.45))),
+          ],
+        ],
       ),
     );
   }

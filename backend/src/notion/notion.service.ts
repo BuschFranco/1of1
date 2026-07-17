@@ -224,6 +224,10 @@ export class NotionService {
     property,
     select: { equals: value },
   });
+  static filterTextNotEmpty = (property: string) => ({
+    property,
+    rich_text: { is_not_empty: true },
+  });
   static filterTextContains = (property: string, value: string) => ({
     property,
     rich_text: { contains: value },

@@ -17,7 +17,9 @@ import '../services/route_service.dart';
 import '../services/notifications_service.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
+import '../services/court_owner_cache.dart';
 import '../services/session.dart';
+import 'ranking_screen.dart';
 import '../services/session_alarms.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
@@ -835,16 +837,18 @@ class _HomeScreenState extends State<HomeScreen>
               // su página y volvía a la primera cancha.
               Positioned(
                 left: 16,
-                bottom: 312,
+                bottom: 322,
                 child: _waypointCourt != null
                     ? _routeChip()
                     : const SizedBox.shrink(),
               ),
               Positioned(
                 right: 16,
-                bottom: 312,
+                bottom: 322,
                 child: Column(
                   children: [
+                    _rankingBtn(),
+                    const SizedBox(height: 10),
                     _reviewToggleBtn(),
                     const SizedBox(height: 10),
                     if (context.read<Session>().isAdmin) ...[
@@ -857,7 +861,7 @@ class _HomeScreenState extends State<HomeScreen>
               ),
               if (_mockMode)
                 Positioned(
-                  bottom: 296,
+                  bottom: 306,
                   left: 0,
                   right: 0,
                   child: Center(
@@ -895,7 +899,7 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 ),
               Positioned(
-                bottom: 148,
+                bottom: 128,
                 left: 0,
                 right: 0,
                 child: _filtered.isEmpty ? _emptyFilterCard() : _bottomSwipe(),
@@ -2159,6 +2163,24 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+  /// Botón flotante del ranking global (top de jugadores y clanes de la app).
+  Widget _rankingBtn() {
+    return PressableWidget(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const RankingScreen()),
+      ),
+      child: _glassContainer(
+        width: 48,
+        height: 48,
+        radius: AppShape.rBtn,
+        child: Center(
+          child: Icon(Icons.emoji_events, color: AppColors.accent, size: 22),
+        ),
+      ),
+    );
+  }
+
   Widget _locateBtn() {
     return PressableWidget(
       onTap: _goToMyLocation,
@@ -2258,7 +2280,8 @@ class _HomeScreenState extends State<HomeScreen>
         // Carrusel: se arrastra con el dedo y hace snap. clipBehavior.none deja
         // ver la sombra del card (queda fuera del alto fijo del PageView).
         SizedBox(
-          height: 138,
+          // 168: base + las líneas "Conquistada por" y "Rey" de la card.
+          height: 168,
           child: PageView.builder(
             controller: _pageCtrl,
             onPageChanged: _onPageChanged,
@@ -2358,8 +2381,14 @@ class _CourtSwipeCard extends StatelessWidget {
       sessionEmail: session.email,
     );
     // Tarjeta plana sobre el mapa (lenguaje editorial): fill sólido sin borde
-    // ni sombra dura; la foto y la tipografía llevan el protagonismo.
-    return Container(
+    // ni sombra dura; la foto y la tipografía llevan el protagonismo. Un tap en
+    // la tarjeta entra al detalle (como "Ver detalle"); los botones internos
+    // (pickup, waypoint) ganan el tap por ser hijos más específicos, y el drag
+    // horizontal sigue yendo al PageView del carrusel.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onSelect,
+      child: Container(
       padding: const EdgeInsets.all(14),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
@@ -2445,6 +2474,86 @@ class _CourtSwipeCard extends StatelessWidget {
                     size: 11,
                     color: AppColors.white(0.55),
                   ),
+                ),
+                // Clan que conquistó la cancha (más puntos históricos acá).
+                // Solo aparece si hay dueño; el dato viene cacheado por cancha.
+                FutureBuilder<String?>(
+                  future: CourtOwnerCache.ownerFor(court.id),
+                  builder: (context, snap) {
+                    final clan = snap.data;
+                    if (clan == null || clan.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    return Row(
+                      children: [
+                        Icon(
+                          Icons.emoji_events,
+                          size: 11,
+                          color: AppColors.accent,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Conquistada por: ',
+                          style: AppText.grotesk(
+                            size: 10,
+                            color: AppColors.white(0.55),
+                          ),
+                        ),
+                        Flexible(
+                          child: Text(
+                            '[$clan]',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppText.grotesk(
+                              size: 10,
+                              weight: FontWeight.w800,
+                              color: AppColors.accent,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                // Rey de la cancha (jugador con más puntos esta temporada).
+                // Solo aparece si hay rey; cacheado por cancha.
+                FutureBuilder<String?>(
+                  future: CourtOwnerCache.kingFor(court.id),
+                  builder: (context, snap) {
+                    final king = snap.data;
+                    if (king == null || king.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    return Row(
+                      children: [
+                        Icon(
+                          Icons.workspace_premium,
+                          size: 11,
+                          color: AppColors.accent,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Rey: ',
+                          style: AppText.grotesk(
+                            size: 10,
+                            color: AppColors.white(0.55),
+                          ),
+                        ),
+                        Flexible(
+                          child: Text(
+                            king,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppText.grotesk(
+                              size: 10,
+                              weight: FontWeight.w800,
+                              color: AppColors.accent,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 // Crédito de autoría: "Compartida por: [usuario]" o, si la
                 // cancha es del sistema (sin autor), el logo de 1of1.
@@ -2545,6 +2654,7 @@ class _CourtSwipeCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }
