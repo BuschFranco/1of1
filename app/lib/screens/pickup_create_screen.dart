@@ -1,16 +1,13 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/courts.dart';
 import '../data/models.dart';
-import '../notion/notion_config.dart';
 import '../services/courts_provider.dart';
 import '../services/friends_service.dart';
 import '../services/local_chat_service.dart';
 import '../services/notifications_service.dart';
-import '../services/notion_service.dart';
 import '../services/pickups_provider.dart';
 import '../services/play_session_service.dart';
 import '../services/session.dart';
@@ -99,38 +96,32 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     if (_selected == null || _saving) return;
     setState(() => _saving = true);
     try {
-      final notion = NotionService();
+      final pickupsProvider = context.read<PickupsProvider>();
       final totalPlayers =
           _teamSize * 2 + _teamAMembers.length + _teamBMembers.length;
-      // Código de invitación de 5 dígitos (10000–99999, sin ceros a la
-      // izquierda). Solo lo ve el creador dentro del chat del pickup.
-      final inviteCode = (Random().nextInt(90000) + 10000).toString();
-
-      final pickupPage = await notion.createPage(
-        NotionConfig.dbPickups,
-        Pickup(
-          title: 'Pickup en ${_selected!.name}',
-          courtId: _selected!.id,
-          createdBy: _userEmail,
-          dateTime: _when?.toIso8601String(),
-          maxPlayers: totalPlayers,
-          vibe: _selected!.vibe,
-          notes: _notesCtrl.text.trim(),
-          teamSize: _teamSize,
-          teamAName: _teamAName,
-          teamBName: _teamBName,
-          teamAColor: _teamAColor,
-          teamBColor: _teamBColor,
-          teamAMembers: _teamAMembers,
-          teamBMembers: _teamBMembers,
-          targetScore: _targetScore,
-          inviteCode: inviteCode,
-        ).toNotionProperties(),
-      );
+      // El código de invitación de 5 dígitos lo genera el SERVER (viene en el
+      // pickup creado). Solo lo ve el creador dentro del chat del pickup.
+      final created = await pickupsProvider.create(Pickup(
+        title: 'Pickup en ${_selected!.name}',
+        courtId: _selected!.id,
+        createdBy: _userEmail,
+        dateTime: _when?.toIso8601String(),
+        maxPlayers: totalPlayers,
+        vibe: _selected!.vibe,
+        notes: _notesCtrl.text.trim(),
+        teamSize: _teamSize,
+        teamAName: _teamAName,
+        teamBName: _teamBName,
+        teamAColor: _teamAColor,
+        teamBColor: _teamBColor,
+        teamAMembers: _teamAMembers,
+        teamBMembers: _teamBMembers,
+        targetScore: _targetScore,
+      ));
 
       final chat = CrewChat(
         name: 'Pickup en ${_selected!.name}',
-        pickupId: pickupPage['id'] ?? '',
+        pickupId: created.pageId,
         createdBy: _userEmail,
         date: _when?.toIso8601String() ?? DateTime.now().toIso8601String(),
         teamAName: _teamAName,
@@ -146,30 +137,25 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
       if (mounted) {
         context.read<PlaySessionService>().addChatNotification(chat.name);
         // Notificación del sistema con botón "Ir al chat".
-        final createdId = pickupPage['id'] ?? '';
-        if (createdId.isNotEmpty) {
+        if (created.pageId.isNotEmpty) {
           unawaited(NotificationsService.instance.showPickupChat(
               'Pickup creado 🏀',
               'Tocá para ir al chat y pasar el código.',
-              createdId));
+              created.pageId));
         }
         // Marcar activity en el tab de crew (via ValueNotifier global).
         crewActivityNotifier.value = true;
         SharedPreferences.getInstance().then((p) => p.setBool('crew_activity', true));
       }
 
-      if (NotionConfig.dbChats.isNotEmpty) {
-        try {
-          await notion.createPage(
-            NotionConfig.dbChats,
-            chat.toNotionProperties(),
-          );
-        } catch (_) {}
-      }
+      // Metadata del chat en la BD (best-effort; null si la feature está off).
+      try {
+        await pickupsProvider.createChat(chat);
+      } catch (_) {}
 
       // Refrescar la lista de pickups para que aparezca al instante en Crew.
       if (mounted) {
-        unawaited(context.read<PickupsProvider>().loadForUser(_userEmail));
+        unawaited(pickupsProvider.loadForUser(_userEmail));
         Navigator.pop(context);
       }
     } catch (_) {

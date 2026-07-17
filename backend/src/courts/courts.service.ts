@@ -49,6 +49,12 @@ export class CourtsService {
     await this.notion.archivePage(courtId);
   }
 
+  /** Recupera una reseña por pageId (para validar propiedad antes de borrar). */
+  async getReview(pageId: string): Promise<Review> {
+    const page = await this.notion.retrievePage(pageId);
+    return reviewFromNotion(page);
+  }
+
   async removeReview(pageId: string): Promise<void> {
     await this.notion.archivePage(pageId);
   }

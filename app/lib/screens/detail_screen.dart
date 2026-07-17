@@ -3,12 +3,11 @@ import 'package:provider/provider.dart';
 import '../data/courts.dart';
 import '../data/legal_content.dart';
 import '../data/models.dart';
-import '../notion/notion_config.dart';
 import '../services/blocked_provider.dart';
 import '../services/court_rating_service.dart';
+import '../services/courts_provider.dart';
 import '../services/favorites_provider.dart';
 import '../services/location_service.dart';
-import '../services/notion_service.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/report_service.dart';
@@ -534,6 +533,8 @@ class DetailScreen extends StatelessWidget {
   Widget _adminDeleteCourt(BuildContext context, Court court) {
     return PressableWidget(
       onTap: () async {
+        // Capturado antes del await (lint use_build_context_synchronously).
+        final courtsProvider = context.read<CourtsProvider>();
         final confirm = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -564,10 +565,8 @@ class DetailScreen extends StatelessWidget {
         );
         if (confirm != true) return;
         try {
-          await NotionService().deleteCourt(
-            court.id,
-            reviewsDbId: NotionConfig.dbReviews,
-          );
+          // El server archiva la cancha y sus reseñas (solo admin).
+          await courtsProvider.deleteCourt(court.id);
           if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -668,7 +667,6 @@ class _ReviewsSection extends StatefulWidget {
 }
 
 class _ReviewsSectionState extends State<_ReviewsSection> {
-  final _notion = NotionService();
   late Future<List<Review>> _future;
 
   @override
@@ -678,13 +676,10 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
   }
 
   Future<List<Review>> _fetch() async {
-    if (!_notion.isConfigured) return [];
     try {
-      final rows = await _notion.queryDatabase(
-        NotionConfig.dbReviews,
-        filter: NotionService.filterText('CourtId', widget.courtId),
-      );
-      return rows.map(Review.fromNotion).toList();
+      return await context
+          .read<CourtRatingService>()
+          .listReviews(widget.courtId);
     } catch (_) {
       return [];
     }
@@ -889,7 +884,10 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
     );
     if (confirm != true || !mounted) return;
     try {
-      await NotionService().archivePage(r.pageId);
+      // El server valida: dueño de la reseña o admin.
+      await context
+          .read<CourtRatingService>()
+          .deleteReview(r.pageId, courtId: widget.courtId);
       if (mounted) {
         _refresh();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -982,17 +980,12 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
                   : () async {
                       setLocal(() => saving = true);
                       try {
-                        await _notion.createPage(
-                          NotionConfig.dbReviews,
-                          Review(
-                            courtId: widget.courtId,
-                            userEmail: session.email!,
-                            userHandle: session.profile?.handle ?? '',
-                            rating: rating.toDouble(),
-                            comment: commentCtrl.text.trim(),
-                            createdAt: DateTime.now().toIso8601String(),
-                          ).toNotionProperties(),
-                        );
+                        // Email y handle salen del token en el server.
+                        await context.read<CourtRatingService>().createReview(
+                              widget.courtId,
+                              rating: rating,
+                              comment: commentCtrl.text.trim(),
+                            );
                         if (ctx.mounted) Navigator.pop(ctx);
                         _refresh();
                       } catch (_) {

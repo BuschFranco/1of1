@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../services/notion_service.dart';
 
 enum CourtStatus { open, closed }
 
@@ -121,11 +120,6 @@ class Court {
     this.approval = '',
   });
 
-  String get _rawStatusName => switch (rawStatus) {
-        CourtStatus.closed => 'closed',
-        CourtStatus.open => 'open',
-      };
-
   /// Horario de apertura efectivo: los campos estructurados y, si están vacíos,
   /// el parseo del texto libre legacy. null si no hay horario conocido.
   TimeOfDay? get openTod =>
@@ -192,80 +186,68 @@ class Court {
     return (open, close);
   }
 
-  /// Construye una Court a partir de una página de la base Canchas de Notion.
-  /// El `id` es el page id de Notion (estable y único).
-  factory Court.fromNotion(Map<String, dynamic> page) {
-    final p = page['properties'] as Map<String, dynamic>;
+  /// Construye una Court desde el JSON plano del backend.
+  factory Court.fromApi(Map<String, dynamic> json) {
+    String str(dynamic v, String fallback) {
+      final s = (v ?? '').toString();
+      return s.isEmpty ? fallback : s;
+    }
+
     return Court(
-      id: page['id']?.toString() ?? '',
-      name: NotionService.readTitle(p, 'Name'),
-      area: NotionService.readText(p, 'Area'),
-      dist: NotionService.readText(p, 'Dist'),
-      img: NotionService.readUrl(p, 'Img'),
-      rating: NotionService.readNumber(p, 'Rating'),
-      reviews: NotionService.readInt(p, 'Reviews'),
-      type: NotionService.readSelect(p, 'Type', fallback: 'Exterior'),
-      free: NotionService.readCheckbox(p, 'Free'),
-      lit: NotionService.readCheckbox(p, 'Lit'),
-      hoops: NotionService.readInt(p, 'Hoops', fallback: 1),
-      surface: NotionService.readSelect(p, 'Surface', fallback: 'Asfalto'),
-      rawStatus: _statusFromString(NotionService.readSelect(p, 'Status', fallback: 'open')),
-      players: NotionService.readInt(p, 'Players'),
-      vibe: NotionService.readSelect(p, 'Vibe', fallback: 'Casual'),
-      hours: NotionService.readText(p, 'Hours'),
-      openTime: NotionService.readText(p, 'OpenTime'),
-      closeTime: NotionService.readText(p, 'CloseTime'),
-      badges: NotionService.readMultiSelect(p, 'Badges'),
-      desc: NotionService.readText(p, 'Desc'),
-      lat: NotionService.readNumber(p, 'Lat'),
-      lng: NotionService.readNumber(p, 'Lng'),
-      proposedBy: NotionService.readText(p, 'CreatedBy'),
-      proposedByClan: NotionService.readText(p, 'CreatedByClan'),
-      proposedByEmail: NotionService.readText(p, 'CreatedByEmail'),
-      approval: NotionService.readSelect(p, 'Aprobacion', fallback: ''),
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      area: json['area'] as String? ?? '',
+      dist: json['dist'] as String? ?? '',
+      img: json['img'] as String? ?? '',
+      rating: (json['rating'] as num?)?.toDouble() ?? 0,
+      reviews: (json['reviews'] as num?)?.toInt() ?? 0,
+      type: str(json['type'], 'Exterior'),
+      free: json['free'] == true,
+      lit: json['lit'] == true,
+      hoops: (json['hoops'] as num?)?.toInt() ?? 1,
+      surface: str(json['surface'], 'Asfalto'),
+      rawStatus: _statusFromString(str(json['status'], 'open')),
+      players: (json['players'] as num?)?.toInt() ?? 0,
+      vibe: str(json['vibe'], 'Casual'),
+      hours: json['hours'] as String? ?? '',
+      openTime: json['openTime'] as String? ?? '',
+      closeTime: json['closeTime'] as String? ?? '',
+      badges: (json['badges'] as List?)?.map((e) => e.toString()).toList() ??
+          const [],
+      desc: json['desc'] as String? ?? '',
+      lat: (json['lat'] as num?)?.toDouble() ?? 0,
+      lng: (json['lng'] as num?)?.toDouble() ?? 0,
+      proposedBy: json['proposedBy'] as String? ?? '',
+      proposedByClan: json['proposedByClan'] as String? ?? '',
+      proposedByEmail: json['proposedByEmail'] as String? ?? '',
+      approval: json['approval'] as String? ?? '',
     );
   }
 
-  /// Serializa a propiedades de Notion para crear/actualizar la cancha.
-  /// Por defecto entra como "Sin definir" (pendiente de moderación).
-  Map<String, dynamic> toNotionProperties({
-    String? createdBy,
-    String? createdByClan,
-    String? createdByEmail,
-    String approval = CourtApproval.pending,
-  }) {
+  /// Payload para POST /courts. El autor (handle/clan/email) y la moderación
+  /// los pone el server a partir del token; acá van solo los datos de la cancha.
+  Map<String, dynamic> toApiJson() {
     return {
-      'Name': NotionService.title(name),
-      'Area': NotionService.richText(area),
-      'Dist': NotionService.richText(dist),
-      'Img': NotionService.url(img),
-      'Rating': NotionService.number(rating),
-      'Reviews': NotionService.number(reviews),
-      'Type': NotionService.select(type),
-      'Free': NotionService.checkbox(free),
-      'Lit': NotionService.checkbox(lit),
-      'Hoops': NotionService.number(hoops),
-      'Surface': NotionService.select(surface),
-      'Status': NotionService.select(_rawStatusName),
-      'Players': NotionService.number(players),
-      'Vibe': NotionService.select(vibe),
-      // Hours legible autogenerado (compat con canchas viejas y con quien lea
-      // Notion a mano); OpenTime/CloseTime son la fuente estructurada.
-      'Hours': NotionService.richText(hoursLabel),
-      'OpenTime': NotionService.richText(openTime),
-      'CloseTime': NotionService.richText(closeTime),
-      'Badges': NotionService.multiSelect(
-        badges.where(kAllowedBadges.contains).toList(),
-      ),
-      'Desc': NotionService.richText(desc),
-      'Lat': NotionService.number(lat),
-      'Lng': NotionService.number(lng),
-      if (createdBy != null) 'CreatedBy': NotionService.richText(createdBy),
-      if (createdByClan != null)
-        'CreatedByClan': NotionService.richText(createdByClan),
-      if (createdByEmail != null)
-        'CreatedByEmail': NotionService.richText(createdByEmail),
-      'Aprobacion': NotionService.select(approval),
+      'name': name,
+      'area': area,
+      'dist': dist,
+      'img': img,
+      'type': type,
+      'free': free,
+      'lit': lit,
+      'hoops': hoops,
+      'surface': surface,
+      'vibe': vibe,
+      // Hours legible autogenerado; OpenTime/CloseTime son la fuente
+      // estructurada (mismo criterio que toNotionProperties).
+      'hours': hoursLabel,
+      'openTime': openTime,
+      'closeTime': closeTime,
+      'badges': badges.where(kAllowedBadges.contains).toList(),
+      'desc': desc,
+      'lat': lat,
+      'lng': lng,
     };
   }
+
 }

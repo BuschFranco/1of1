@@ -2,15 +2,14 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/courts.dart';
-import '../notion/notion_config.dart';
-import 'notion_service.dart';
+import 'api/api_client.dart';
 
-/// Fuente de canchas para la app. Carga desde Notion.
-/// Si no hay token o falla, la lista queda vacía.
+/// Fuente de canchas para la app. Carga desde el backend.
+/// Si no hay API configurada o falla, la lista queda vacía.
 class CourtsProvider extends ChangeNotifier {
-  CourtsProvider({NotionService? notion}) : _notion = notion ?? NotionService();
+  CourtsProvider({ApiClient? api}) : _api = api ?? ApiClient();
 
-  final NotionService _notion;
+  final ApiClient _api;
 
   List<Court> _courts = [];
   bool _loading = false;
@@ -18,10 +17,11 @@ class CourtsProvider extends ChangeNotifier {
 
   List<Court> get courts => _courts;
   bool get loading => _loading;
+  /// True si la lista viene de la BD real (no del fallback vacío).
   bool get fromNotion => _fromNotion;
 
   Future<void> load() async {
-    if (!_notion.isConfigured) {
+    if (!_api.isConfigured || !_api.hasToken) {
       _courts = [];
       _fromNotion = false;
       notifyListeners();
@@ -30,11 +30,9 @@ class CourtsProvider extends ChangeNotifier {
     _loading = true;
     notifyListeners();
     try {
-      final rows = await _notion.queryDatabase(
-        NotionConfig.dbCourts,
-        filter: NotionService.filterSelect('Aprobacion', CourtApproval.approved),
-      );
-      _courts = rows.map(Court.fromNotion).toList();
+      // GET /courts ya devuelve solo las aprobadas.
+      final rows = await _api.courts();
+      _courts = rows.map(Court.fromApi).toList();
       _fromNotion = true;
     } catch (_) {
       _courts = [];
@@ -44,33 +42,34 @@ class CourtsProvider extends ChangeNotifier {
     }
   }
 
-  /// Crea una cancha en Notion en estado "Sin definir" (pendiente de
-  /// moderación). No aparece en la app hasta que se apruebe en Notion.
+  /// Propone una cancha nueva (entra "Sin definir", pendiente de moderación).
+  /// No aparece en la app hasta que un admin la apruebe. El autor sale del
+  /// token en el server; [createdByEmail] se usa solo para sembrar el estado
+  /// local de notificaciones.
   Future<void> addCourt(
     Court court, {
     String? createdBy,
     String? createdByClan,
     String? createdByEmail,
   }) async {
-    final page = await _notion.createPage(
-      NotionConfig.dbCourts,
-      court.toNotionProperties(
-        createdBy: createdBy,
-        createdByClan: createdByClan,
-        createdByEmail: createdByEmail,
-        approval: CourtApproval.pending,
-      ),
-    );
+    final created = await _api.proposeCourt(court.toApiJson());
     // Sembramos el estado "pendiente" en el mapa persistido para no perder la
     // PRIMERA aprobación: si no registráramos el pendiente, al detectarla luego
     // se tomaría como "primera observación" y no dispararía la notificación.
-    final id = page['id']?.toString() ?? '';
+    final id = created['id']?.toString() ?? '';
     final email = (createdByEmail ?? '').trim().toLowerCase();
     if (id.isNotEmpty && email.isNotEmpty) {
       final states = await _readCourtStates(email);
       states[id] = CourtApproval.pending;
       await _writeCourtStates(email, states);
     }
+    await load();
+  }
+
+  /// Elimina una cancha (y sus reseñas, server-side). Solo admin: el backend
+  /// devuelve 403 si el token no lo es.
+  Future<void> deleteCourt(String courtId) async {
+    await _api.deleteCourt(courtId);
     await load();
   }
 
@@ -108,14 +107,12 @@ class CourtsProvider extends ChangeNotifier {
   Future<List<({String name, bool approved})>> pollMyCourtDecisions(
       String email) async {
     final e = email.trim().toLowerCase();
-    if (e.isEmpty || !_notion.isConfigured) return const [];
+    if (e.isEmpty || !_api.isConfigured || !_api.hasToken) return const [];
     List<Court> mine;
     try {
-      final rows = await _notion.queryDatabase(
-        NotionConfig.dbCourts,
-        filter: NotionService.filterText('CreatedByEmail', e),
-      );
-      mine = rows.map(Court.fromNotion).toList();
+      // GET /courts/mine trae las propias en TODOS los estados.
+      final rows = await _api.myCourts();
+      mine = rows.map(Court.fromApi).toList();
     } catch (_) {
       return const [];
     }

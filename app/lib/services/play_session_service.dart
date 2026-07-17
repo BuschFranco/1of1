@@ -9,7 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/achievements.dart';
 import '../data/courts.dart';
-import '../notion/notion_config.dart';
+import 'api/api_config.dart';
 import '../theme/app_theme.dart';
 import 'health_service.dart';
 import 'session_alarms.dart';
@@ -1867,7 +1867,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     // Encolar para el ranking por período (semana/mes/temporada) de amigos.
     // Solo partidos que suman puntos (los "sin información" no aportan al
     // ranking). Se sube en lote en el flush; acá solo persiste local.
-    if (gained > 0 && NotionConfig.dbMatches.isNotEmpty && _userKey.isNotEmpty) {
+    if (gained > 0 && ApiConfig.isConfigured && _userKey.isNotEmpty) {
       await _enqueuePendingMatch(
         points: gained,
         endedAtMillis: p.endedAtMillis,

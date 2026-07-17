@@ -231,24 +231,18 @@ class _AuthScreenState extends State<AuthScreen> {
         return;
       }
       final auth = await account.authentication;
-      if (auth.idToken == null) {
+      final idToken = auth.idToken;
+      if (idToken == null) {
         await _google.signOut();
         if (mounted) setState(() { _loading = false; _error = 'No se pudo autenticar con Google.'; });
         return;
       }
-      // email y nombre vienen del GoogleSignInAccount.
-      final email = account.email;
-      final name = account.displayName ?? '';
-      final photo = account.photoUrl ?? '';
 
       if (!mounted) return;
       final session = context.read<Session>();
-      final err = await session.googleSignIn(
-        email: email,
-        name: name,
-        avatarUrl: photo,
-      );
-      if (err == null) unawaited(_rememberEmail(email));
+      // El backend verifica el idToken server-side y hace find-or-create.
+      final err = await session.googleSignIn(idToken: idToken);
+      if (err == null) unawaited(_rememberEmail(account.email));
       if (!mounted) return;
       setState(() { _loading = false; _error = err; });
     } catch (e) {

@@ -1,8 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../data/courts.dart';
 import '../data/models.dart';
-import '../notion/notion_config.dart';
-import 'notion_service.dart';
+import 'api/api_client.dart';
 
 /// Cache de perfiles indexado por email (inmutable). Permite resolver en vivo
 /// el handle y la insignia de clan de quien propuso una cancha, de modo que si
@@ -10,9 +9,9 @@ import 'notion_service.dart';
 ///
 /// Se recarga al abrir la app; el dataset es chico (un perfil por usuario).
 class ProfilesProvider extends ChangeNotifier {
-  ProfilesProvider({NotionService? notion}) : _notion = notion ?? NotionService();
+  ProfilesProvider({ApiClient? api}) : _api = api ?? ApiClient();
 
-  final NotionService _notion;
+  final ApiClient _api;
 
   Map<String, Profile> _byEmail = {};
   bool _loading = false;
@@ -52,14 +51,14 @@ class ProfilesProvider extends ChangeNotifier {
   }
 
   Future<void> load() async {
-    if (!_notion.isConfigured) return;
+    if (!_api.isConfigured || !_api.hasToken) return;
     _loading = true;
     notifyListeners();
     try {
-      final rows = await _notion.queryDatabase(NotionConfig.dbProfiles);
+      final rows = await _api.profiles();
       final map = <String, Profile>{};
       for (final row in rows) {
-        final p = Profile.fromNotion(row);
+        final p = Profile.fromJson(row);
         if (p.userEmail.isNotEmpty) map[p.userEmail.toLowerCase()] = p;
       }
       _byEmail = map;

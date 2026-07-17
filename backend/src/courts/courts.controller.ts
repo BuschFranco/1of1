@@ -78,7 +78,13 @@ export class CourtsController {
     @CurrentUser() user: AuthUser,
     @Param('pageId') pageId: string,
   ) {
-    if (!user.isAdmin) throw new ForbiddenException('Solo un admin puede eliminar reseñas.');
+    // El dueño puede borrar su propia reseña; un admin, cualquiera.
+    if (!user.isAdmin) {
+      const review = await this.courts.getReview(pageId);
+      if (review.userEmail.trim().toLowerCase() !== user.email.trim().toLowerCase()) {
+        throw new ForbiddenException('Solo podés eliminar tus propias reseñas.');
+      }
+    }
     await this.courts.removeReview(pageId);
     return { ok: true };
   }

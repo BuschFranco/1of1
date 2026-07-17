@@ -1,13 +1,12 @@
 import '../data/models.dart';
-import '../notion/notion_config.dart';
-import 'notion_service.dart';
+import 'api/api_client.dart';
 
-/// Maneja amistades (base Amistades) y búsqueda de perfiles por handle.
+/// Maneja amistades y búsqueda de perfiles por handle (vía backend).
 class FriendsService {
-  FriendsService({NotionService? notion}) : _notion = notion ?? NotionService();
-  final NotionService _notion;
+  FriendsService({ApiClient? api}) : _api = api ?? ApiClient();
+  final ApiClient _api;
 
-  bool get isConfigured => _notion.isConfigured;
+  bool get isConfigured => _api.isConfigured && _api.hasToken;
 
   /// Normaliza un handle: minúsculas y con '@' adelante.
   static String normalizeHandle(String raw) {
@@ -21,40 +20,34 @@ class FriendsService {
   Future<Profile?> searchByHandle(String handleRaw) async {
     final handle = normalizeHandle(handleRaw);
     if (handle.isEmpty) return null;
-    final rows = await _notion.queryDatabase(
-      NotionConfig.dbProfiles,
-      filter: NotionService.filterText('Handle', handle),
-    );
-    if (rows.isEmpty) return null;
-    return Profile.fromNotion(rows.first);
+    try {
+      final json = await _api.profileByHandle(handle);
+      return Profile.fromJson(json);
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) return null;
+      rethrow;
+    }
   }
 
-  /// Lista los amigos del usuario (owner).
+  /// Lista los amigos del usuario. El owner sale del token en el server:
+  /// [ownerEmail] se conserva en la firma por compatibilidad con los callers.
   Future<List<Friend>> listFriends(String ownerEmail) async {
-    final rows = await _notion.queryDatabase(
-      NotionConfig.dbFriends,
-      filter: NotionService.filterText('OwnerEmail', ownerEmail),
-    );
-    return rows.map(Friend.fromNotion).toList();
+    final rows = await _api.friends();
+    return rows.map(Friend.fromApi).toList();
   }
 
   /// Agrega un amigo (sin requerir aceptación). Devuelve el Friend creado.
   Future<Friend> addFriend(String ownerEmail, Profile friend) async {
-    final f = Friend(
-      ownerEmail: ownerEmail,
+    final json = await _api.addFriend(
       friendHandle: friend.handle,
       friendName: friend.name,
       friendEmail: friend.userEmail,
     );
-    final page = await _notion.createPage(
-      NotionConfig.dbFriends,
-      f.toNotionProperties(),
-    );
-    return Friend.fromNotion(page);
+    return Friend.fromApi(json);
   }
 
-  /// Elimina (archiva) una amistad por su page id.
+  /// Elimina una amistad por su page id.
   Future<void> removeFriend(String pageId) async {
-    await _notion.archivePage(pageId);
+    await _api.removeFriend(pageId);
   }
 }

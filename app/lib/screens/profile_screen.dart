@@ -8,14 +8,14 @@ import '../data/cosmetics.dart';
 import '../data/courts.dart';
 import '../data/legal_content.dart';
 import '../data/models.dart';
-import '../notion/notion_config.dart';
+import '../services/api/api_client.dart';
+import '../services/api/api_config.dart';
 import '../services/app_permissions.dart';
 import '../services/blocked_provider.dart';
 import '../services/court_rating_service.dart';
 import '../services/courts_provider.dart';
 import '../services/favorites_provider.dart';
 import '../services/friends_service.dart';
-import '../services/notion_service.dart';
 import '../services/pickups_provider.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
@@ -2082,9 +2082,8 @@ class _RankingSheetState extends State<_RankingSheet> {
   bool _loading = false;
   List<_RankEntry> _entries = const [];
 
-  // El ranking por período necesita el historial con fecha en Notion.
-  bool get _periodsAvailable =>
-      NotionConfig.isConfigured && NotionConfig.dbMatches.isNotEmpty;
+  // El ranking por período necesita el historial con fecha en el backend.
+  bool get _periodsAvailable => ApiConfig.isConfigured;
 
   @override
   void initState() {
@@ -2135,7 +2134,8 @@ class _RankingSheetState extends State<_RankingSheet> {
       return;
     }
 
-    // Modo período: mis puntos de local, los de amigos de Notion.
+    // Modo período: mis puntos de local, los de amigos del backend (que ya
+    // agrupa y suma por email server-side).
     setState(() => _loading = true);
     final byEmail = <String, int>{};
     final emails = widget.friends
@@ -2145,21 +2145,14 @@ class _RankingSheetState extends State<_RankingSheet> {
     if (emails.isNotEmpty) {
       try {
         final cutoffIso = _cutoff(p).toIso8601String();
-        final rows = await NotionService().queryDatabaseAll(
-          NotionConfig.dbMatches,
-          filter: NotionService.filterAnd([
-            NotionService.filterDateOnOrAfter('EndedAt', cutoffIso),
-            NotionService.filterOr(
-              [for (final e in emails) NotionService.filterTitle('Email', e)],
-            ),
-          ]),
+        final rows = await ApiClient().ranking(
+          since: cutoffIso,
+          emails: emails,
         );
         for (final row in rows) {
-          final props = row['properties'] as Map<String, dynamic>?;
-          if (props == null) continue;
-          final email = NotionService.readTitle(props, 'Email').toLowerCase();
-          final pts = NotionService.readNumber(props, 'Points').round();
-          byEmail[email] = (byEmail[email] ?? 0) + pts;
+          final email = (row['email'] ?? '').toString().toLowerCase();
+          final pts = (row['points'] as num?)?.round() ?? 0;
+          if (email.isNotEmpty) byEmail[email] = pts;
         }
       } catch (_) {
         // Sin conexión / error: los amigos quedan en 0 para el período.

@@ -7,8 +7,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../notion/notion_config.dart';
-import 'notion_service.dart';
+import 'api/api_client.dart';
+import 'api/api_config.dart';
 import 'notifications_service.dart';
 
 /// Arranque/cierre AUTOMÁTICO del partido en segundo plano con alarmas exactas
@@ -955,6 +955,11 @@ Future<bool> _leftArea(double lat, double lng,
   }
 }
 
+/// Escribe la presencia en el backend DESDE EL ISOLATE de background. No hay
+/// memoria compartida con el isolate principal: el JWT se lee de prefs (clave
+/// global `session_jwt`). Si falta o venció, se deja `presence_dirty` en prefs
+/// y el ping al isolate principal dispara la reconciliación (que reintenta vía
+/// el mecanismo `_dirty` de Session).
 Future<void> _setNotionPresence(
   SharedPreferences prefs, {
   required bool playing,
@@ -962,23 +967,37 @@ Future<void> _setNotionPresence(
   required String sinceIso,
 }) async {
   try {
-    if (!NotionConfig.isConfigured) return;
-    final profRaw = prefs.getString('session_profile');
-    if (profRaw == null) return;
-    final prof = jsonDecode(profRaw) as Map<String, dynamic>;
-    final pageId = (prof['pageId'] ?? '') as String;
-    if (pageId.isEmpty) return;
-    await NotionService().updatePage(pageId, {
-      'Playing': NotionService.checkbox(playing),
-      'PlayingCourtId': NotionService.richText(playing ? courtId : ''),
-      'PlayingSince': NotionService.date(sinceIso.isEmpty ? null : sinceIso),
-    });
+    if (!ApiConfig.isConfigured) return;
+    final jwt = prefs.getString(ApiConfig.jwtPrefsKey);
+    final payload = ApiClient.decodePayload(jwt);
+    final exp = payload['exp'];
+    final expired = exp is num &&
+        DateTime.now().isAfter(
+            DateTime.fromMillisecondsSinceEpoch(exp.toInt() * 1000));
+    if (jwt == null || jwt.isEmpty || expired) {
+      await prefs.setBool('presence_dirty', true);
+      return;
+    }
+    await ApiClient(token: jwt).setPresence(
+      playing: playing,
+      courtId: playing ? courtId : '',
+      since: sinceIso.isEmpty ? null : sinceIso,
+    );
     // Reflejamos en el caché local para que quede consistente.
-    prof['playing'] = playing;
-    prof['playingCourtId'] = playing ? courtId : '';
-    prof['playingSince'] = sinceIso;
-    await prefs.setString('session_profile', jsonEncode(prof));
-  } catch (_) {/* best-effort */}
+    final profRaw = prefs.getString('session_profile');
+    if (profRaw != null) {
+      final prof = jsonDecode(profRaw) as Map<String, dynamic>;
+      prof['playing'] = playing;
+      prof['playingCourtId'] = playing ? courtId : '';
+      prof['playingSince'] = sinceIso;
+      await prefs.setString('session_profile', jsonEncode(prof));
+    }
+  } catch (_) {
+    // Best-effort: marcar para que el isolate principal reintente.
+    try {
+      await prefs.setBool('presence_dirty', true);
+    } catch (_) {}
+  }
 }
 
 void _pingMain() {

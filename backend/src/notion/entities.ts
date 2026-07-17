@@ -31,6 +31,9 @@ export interface Court {
   players: number;
   vibe: string;
   hours: string;
+  /** Horario estructurado "HH:mm" (vacío = desconocido). */
+  openTime: string;
+  closeTime: string;
   badges: string[];
   desc: string;
   lat: number;
@@ -65,6 +68,8 @@ export function courtFromNotion(page: any): Court {
     players: N.readInt(p, 'Players'),
     vibe: N.readSelect(p, 'Vibe', 'Casual'),
     hours: N.readText(p, 'Hours'),
+    openTime: N.readText(p, 'OpenTime'),
+    closeTime: N.readText(p, 'CloseTime'),
     badges: N.readMultiSelect(p, 'Badges'),
     desc: N.readText(p, 'Desc'),
     lat: N.readNumber(p, 'Lat'),
@@ -97,6 +102,8 @@ export function courtToNotionProps(
     Players: N.number(c.players ?? 0),
     Vibe: N.select(c.vibe ?? 'Casual'),
     Hours: N.richText(c.hours ?? ''),
+    OpenTime: N.richText(c.openTime ?? ''),
+    CloseTime: N.richText(c.closeTime ?? ''),
     Badges: N.multiSelect((c.badges ?? []).filter((b) => ALLOWED_BADGES.has(b))),
     Desc: N.richText(c.desc ?? ''),
     Lat: N.number(c.lat ?? 0),

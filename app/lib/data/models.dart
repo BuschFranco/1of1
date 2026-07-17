@@ -1,43 +1,17 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
-import '../services/notion_service.dart';
 
 part 'models.freezed.dart';
 part 'models.g.dart';
 
-/// Credenciales (base Usuarios). La contraseña se guarda hasheada.
-class AppUser {
-  final String pageId;
-  final String email;
-  final String passwordHash;
-  final String profileId;
-  final bool isAdmin;
-
-  const AppUser({
-    required this.pageId,
-    required this.email,
-    required this.passwordHash,
-    required this.profileId,
-    this.isAdmin = false,
-  });
-
-  factory AppUser.fromNotion(Map<String, dynamic> page) {
-    final p = page['properties'] as Map<String, dynamic>;
-    return AppUser(
-      pageId: page['id']?.toString() ?? '',
-      email: NotionService.readTitle(p, 'Email'),
-      passwordHash: NotionService.readText(p, 'PasswordHash'),
-      profileId: NotionService.readText(p, 'ProfileId'),
-      isAdmin: NotionService.readCheckbox(p, 'Adm'),
-    );
-  }
-}
+// Las credenciales (email/hash) viven SOLO en el backend: la app se autentica
+// con JWT y nunca ve la base Usuarios.
 
 /// Info pública del jugador (base Perfiles).
 ///
 /// Inmutable, con `copyWith`/`==`/`toJson`/`fromJson` generados por freezed +
-/// json_serializable. El mapeo desde/hacia Notion (`fromNotion`/
-/// `toNotionProperties`) se mantiene manual porque usa nombres de propiedad y
-/// lectores propios de Notion que no calzan con la serialización por defecto.
+/// json_serializable. Las claves del JSON coinciden con la entidad Profile que
+/// serializa el backend, así que el mismo `fromJson` sirve para el cache local
+/// y para las respuestas de la API.
 @freezed
 abstract class Profile with _$Profile {
   const Profile._();
@@ -111,91 +85,6 @@ abstract class Profile with _$Profile {
     return parts.join(' · ');
   }
 
-  factory Profile.fromNotion(Map<String, dynamic> page) {
-    final p = page['properties'] as Map<String, dynamic>;
-    return Profile(
-      pageId: page['id']?.toString() ?? '',
-      name: NotionService.readTitle(p, 'Name'),
-      handle: NotionService.readText(p, 'Handle'),
-      phone: NotionService.readPhone(p, 'Phone'),
-      city: NotionService.readText(p, 'City'),
-      lat: NotionService.readNumber(p, 'Lat'),
-      lng: NotionService.readNumber(p, 'Lng'),
-      avatar: NotionService.readUrl(p, 'Avatar'),
-      position: NotionService.readSelect(p, 'Position'),
-      height: NotionService.readNumber(p, 'Height'),
-      games: NotionService.readInt(p, 'Games'),
-      courts: NotionService.readInt(p, 'Courts'),
-      streak: NotionService.readInt(p, 'Streak'),
-      points: NotionService.readInt(p, 'Points'),
-      rating: NotionService.readNumber(p, 'Rating'),
-      userEmail: NotionService.readText(p, 'UserEmail'),
-      birthdate: NotionService.readDate(p, 'Birthdate') ?? '',
-      clan: NotionService.readText(p, 'Clan'),
-      avatarColor: NotionService.readText(p, 'AvatarColor'),
-      clanTextColor: NotionService.readText(p, 'ClanTextColor'),
-      clanFont: NotionService.readText(p, 'ClanFont'),
-      avatarFrame: NotionService.readText(p, 'AvatarFrame'),
-      title: NotionService.readText(p, 'EquippedTitle'),
-      level: NotionService.readText(p, 'Level'),
-      unlockedBadges: NotionService.readMultiSelect(p, 'UnlockedBadges'),
-      playSeconds: NotionService.readInt(p, 'PlaySeconds'),
-      playTimeByCourt: NotionService.readText(p, 'PlayTimeByCourt'),
-      shareStatus: NotionService.readCheckbox(p, 'ShareStatus'),
-      shareCourt: NotionService.readCheckbox(p, 'ShareCourt'),
-      shareTime: NotionService.readCheckbox(p, 'ShareTime'),
-      playing: NotionService.readCheckbox(p, 'Playing'),
-      playingCourtId: NotionService.readText(p, 'PlayingCourtId'),
-      playingSince: NotionService.readDate(p, 'PlayingSince') ?? '',
-      lastPlayedCourtId: NotionService.readText(p, 'LastPlayedCourtId'),
-      lastPlayedAt: NotionService.readDate(p, 'LastPlayedAt') ?? '',
-      showLastPlayed: NotionService.readCheckbox(p, 'ShowLastPlayed'),
-      isAdmin: NotionService.readCheckbox(p, 'Adm'),
-    );
-  }
-
-  Map<String, dynamic> toNotionProperties() {
-    return {
-      'Name': NotionService.title(name),
-      'Handle': NotionService.richText(handle),
-      'Phone': NotionService.phone(phone),
-      'City': NotionService.richText(city),
-      'Lat': NotionService.number(lat),
-      'Lng': NotionService.number(lng),
-      'Avatar': NotionService.url(avatar),
-      'Position': NotionService.select(position),
-      'Height': NotionService.number(height),
-      'Games': NotionService.number(games),
-      'Courts': NotionService.number(courts),
-      'Streak': NotionService.number(streak),
-      'Points': NotionService.number(points),
-      'Rating': NotionService.number(rating),
-      'UserEmail': NotionService.richText(userEmail),
-      'Birthdate': NotionService.date(birthdate.isEmpty ? null : birthdate),
-      'Clan': NotionService.richText(clan),
-      'AvatarColor': NotionService.richText(avatarColor),
-      'ClanTextColor': NotionService.richText(clanTextColor),
-      'ClanFont': NotionService.richText(clanFont),
-      'AvatarFrame': NotionService.richText(avatarFrame),
-      'EquippedTitle': NotionService.richText(title),
-      'Level': NotionService.richText(level),
-      'UnlockedBadges': NotionService.multiSelect(unlockedBadges),
-      'PlaySeconds': NotionService.number(playSeconds),
-      'PlayTimeByCourt': NotionService.richText(playTimeByCourt),
-      'ShareStatus': NotionService.checkbox(shareStatus),
-      'ShareCourt': NotionService.checkbox(shareCourt),
-      'ShareTime': NotionService.checkbox(shareTime),
-      'Playing': NotionService.checkbox(playing),
-      'PlayingCourtId': NotionService.richText(playingCourtId),
-      'PlayingSince':
-          NotionService.date(playingSince.isEmpty ? null : playingSince),
-      'LastPlayedCourtId': NotionService.richText(lastPlayedCourtId),
-      'LastPlayedAt':
-          NotionService.date(lastPlayedAt.isEmpty ? null : lastPlayedAt),
-      'ShowLastPlayed': NotionService.checkbox(showLastPlayed),
-      'Adm': NotionService.checkbox(isAdmin),
-    };
-  }
 }
 
 /// Reseña de una cancha (base Reseñas).
@@ -218,30 +107,19 @@ class Review {
     this.createdAt,
   });
 
-  factory Review.fromNotion(Map<String, dynamic> page) {
-    final p = page['properties'] as Map<String, dynamic>;
+  /// Desde el JSON plano del backend (shape de entities.ts).
+  factory Review.fromApi(Map<String, dynamic> json) {
     return Review(
-      pageId: page['id']?.toString() ?? '',
-      courtId: NotionService.readText(p, 'CourtId'),
-      userEmail: NotionService.readText(p, 'UserEmail'),
-      userHandle: NotionService.readText(p, 'UserHandle'),
-      rating: NotionService.readNumber(p, 'Rating'),
-      comment: NotionService.readText(p, 'Comment'),
-      createdAt: NotionService.readDate(p, 'CreatedAt'),
+      pageId: json['pageId'] as String? ?? '',
+      courtId: json['courtId'] as String? ?? '',
+      userEmail: json['userEmail'] as String? ?? '',
+      userHandle: json['userHandle'] as String? ?? '',
+      rating: (json['rating'] as num?)?.toDouble() ?? 0,
+      comment: json['comment'] as String? ?? '',
+      createdAt: json['createdAt'] as String?,
     );
   }
 
-  Map<String, dynamic> toNotionProperties() {
-    return {
-      'Title': NotionService.title('$userEmail → $courtId'),
-      'CourtId': NotionService.richText(courtId),
-      'UserEmail': NotionService.richText(userEmail),
-      'UserHandle': NotionService.richText(userHandle),
-      'Rating': NotionService.number(rating),
-      'Comment': NotionService.richText(comment),
-      'CreatedAt': NotionService.date(createdAt),
-    };
-  }
 }
 
 /// Amistad (base Amistades). Relación unidireccional: el dueño (owner) agregó
@@ -261,27 +139,17 @@ class Friend {
     required this.friendEmail,
   });
 
-  factory Friend.fromNotion(Map<String, dynamic> page) {
-    final p = page['properties'] as Map<String, dynamic>;
+  /// Desde el JSON plano del backend.
+  factory Friend.fromApi(Map<String, dynamic> json) {
     return Friend(
-      pageId: page['id']?.toString() ?? '',
-      ownerEmail: NotionService.readText(p, 'OwnerEmail'),
-      friendHandle: NotionService.readText(p, 'FriendHandle'),
-      friendName: NotionService.readText(p, 'FriendName'),
-      friendEmail: NotionService.readText(p, 'FriendEmail'),
+      pageId: json['pageId'] as String? ?? '',
+      ownerEmail: json['ownerEmail'] as String? ?? '',
+      friendHandle: json['friendHandle'] as String? ?? '',
+      friendName: json['friendName'] as String? ?? '',
+      friendEmail: json['friendEmail'] as String? ?? '',
     );
   }
 
-  Map<String, dynamic> toNotionProperties() {
-    return {
-      'Title': NotionService.title('$ownerEmail → $friendHandle'),
-      'OwnerEmail': NotionService.richText(ownerEmail),
-      'FriendHandle': NotionService.richText(friendHandle),
-      'FriendName': NotionService.richText(friendName),
-      'FriendEmail': NotionService.richText(friendEmail),
-      'CreatedAt': NotionService.date(DateTime.now().toIso8601String()),
-    };
-  }
 }
 
 /// Partido / pickup (base Partidos).
@@ -397,57 +265,62 @@ class Pickup {
     );
   }
 
-  factory Pickup.fromNotion(Map<String, dynamic> page) {
-    final p = page['properties'] as Map<String, dynamic>;
-    final rawA = NotionService.readText(p, 'TeamAMembers');
-    final rawB = NotionService.readText(p, 'TeamBMembers');
-    final rawAcc = NotionService.readText(p, 'AcceptedMembers');
-    final rawDec = NotionService.readText(p, 'DeclinedMembers');
+  /// Desde el JSON plano del backend (los members ya vienen como listas).
+  factory Pickup.fromApi(Map<String, dynamic> json) {
+    List<String> strs(dynamic v) =>
+        v is List ? v.map((e) => e.toString()).toList() : const [];
+    String str(dynamic v, String fallback) {
+      final s = (v ?? '').toString();
+      return s.isEmpty ? fallback : s;
+    }
+
     return Pickup(
-      pageId: page['id']?.toString() ?? '',
-      title: NotionService.readTitle(p, 'Title'),
-      courtId: NotionService.readText(p, 'CourtId'),
-      createdBy: NotionService.readText(p, 'CreatedBy'),
-      dateTime: NotionService.readDate(p, 'DateTime'),
-      maxPlayers: NotionService.readInt(p, 'MaxPlayers', fallback: 10),
-      vibe: NotionService.readSelect(p, 'Vibe', fallback: 'Casual'),
-      notes: NotionService.readText(p, 'Notes'),
-      teamSize: NotionService.readInt(p, 'TeamSize', fallback: 3),
-      teamAName: NotionService.readText(p, 'TeamAName').isEmpty ? 'Equipo A' : NotionService.readText(p, 'TeamAName'),
-      teamBName: NotionService.readText(p, 'TeamBName').isEmpty ? 'Equipo B' : NotionService.readText(p, 'TeamBName'),
-      teamAColor: NotionService.readText(p, 'TeamAColor').isEmpty ? '#FF6B1A' : NotionService.readText(p, 'TeamAColor'),
-      teamBColor: NotionService.readText(p, 'TeamBColor').isEmpty ? '#3B82F6' : NotionService.readText(p, 'TeamBColor'),
-      teamAMembers: rawA.isEmpty ? [] : rawA.split(',').where((e) => e.isNotEmpty).toList(),
-      teamBMembers: rawB.isEmpty ? [] : rawB.split(',').where((e) => e.isNotEmpty).toList(),
-      targetScore: NotionService.readInt(p, 'TargetScore', fallback: 21),
-      acceptedMembers: rawAcc.isEmpty ? [] : rawAcc.split(',').where((e) => e.isNotEmpty).toList(),
-      declinedMembers: rawDec.isEmpty ? [] : rawDec.split(',').where((e) => e.isNotEmpty).toList(),
-      inviteCode: NotionService.readText(p, 'InviteCode'),
+      pageId: json['pageId'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      courtId: json['courtId'] as String? ?? '',
+      createdBy: json['createdBy'] as String? ?? '',
+      dateTime: json['dateTime'] as String?,
+      maxPlayers: (json['maxPlayers'] as num?)?.toInt() ?? 10,
+      vibe: str(json['vibe'], 'Casual'),
+      notes: json['notes'] as String? ?? '',
+      teamSize: (json['teamSize'] as num?)?.toInt() ?? 3,
+      teamAName: str(json['teamAName'], 'Equipo A'),
+      teamBName: str(json['teamBName'], 'Equipo B'),
+      teamAColor: str(json['teamAColor'], '#FF6B1A'),
+      teamBColor: str(json['teamBColor'], '#3B82F6'),
+      teamAMembers: strs(json['teamAMembers']),
+      teamBMembers: strs(json['teamBMembers']),
+      targetScore: (json['targetScore'] as num?)?.toInt() ?? 21,
+      acceptedMembers: strs(json['acceptedMembers']),
+      declinedMembers: strs(json['declinedMembers']),
+      inviteCode: json['inviteCode'] as String? ?? '',
     );
   }
 
-  Map<String, dynamic> toNotionProperties() {
+  /// Payload para crear/actualizar en el backend. `createdBy` e `inviteCode`
+  /// los maneja el server (salen del token / se generan); `courtId` solo
+  /// aplica al crear (en updates el server lo ignora).
+  Map<String, dynamic> toApiJson() {
     return {
-      'Title': NotionService.title(title),
-      'CourtId': NotionService.richText(courtId),
-      'CreatedBy': NotionService.richText(createdBy),
-      'DateTime': NotionService.date(dateTime),
-      'MaxPlayers': NotionService.number(maxPlayers),
-      'Vibe': NotionService.select(vibe),
-      'Notes': NotionService.richText(notes),
-      'TeamSize': NotionService.number(teamSize),
-      'TeamAName': NotionService.richText(teamAName),
-      'TeamBName': NotionService.richText(teamBName),
-      'TeamAColor': NotionService.richText(teamAColor),
-      'TeamBColor': NotionService.richText(teamBColor),
-      'TeamAMembers': NotionService.richText(teamAMembers.join(',')),
-      'TeamBMembers': NotionService.richText(teamBMembers.join(',')),
-      'TargetScore': NotionService.number(targetScore),
-      'AcceptedMembers': NotionService.richText(acceptedMembers.join(',')),
-      'DeclinedMembers': NotionService.richText(declinedMembers.join(',')),
-      'InviteCode': NotionService.richText(inviteCode),
+      'title': title,
+      'courtId': courtId,
+      if (dateTime != null && dateTime!.isNotEmpty) 'dateTime': dateTime,
+      'maxPlayers': maxPlayers,
+      'vibe': vibe,
+      'notes': notes,
+      'teamSize': teamSize,
+      'teamAName': teamAName,
+      'teamBName': teamBName,
+      'teamAColor': teamAColor,
+      'teamBColor': teamBColor,
+      'teamAMembers': teamAMembers,
+      'teamBMembers': teamBMembers,
+      'targetScore': targetScore,
+      'acceptedMembers': acceptedMembers,
+      'declinedMembers': declinedMembers,
     };
   }
+
 }
 
 /// Chat de crew generado al crear un pickup game.
@@ -478,41 +351,38 @@ class CrewChat {
     this.createdAtMillis = 0,
   });
 
-  factory CrewChat.fromNotion(Map<String, dynamic> page) {
-    final p = page['properties'] as Map<String, dynamic>;
+  /// Desde el JSON plano del backend (`date` puede venir null).
+  factory CrewChat.fromApi(Map<String, dynamic> json) {
+    String str(dynamic v, String fallback) {
+      final s = (v ?? '').toString();
+      return s.isEmpty ? fallback : s;
+    }
+
     return CrewChat(
-      pageId: page['id']?.toString() ?? '',
-      name: NotionService.readTitle(p, 'Name'),
-      pickupId: NotionService.readText(p, 'PickupId'),
-      createdBy: NotionService.readText(p, 'CreatedBy'),
-      date: NotionService.readDate(p, 'Date') ?? '',
-      teamAName: NotionService.readText(p, 'TeamAName').isEmpty
-          ? 'Equipo A'
-          : NotionService.readText(p, 'TeamAName'),
-      teamBName: NotionService.readText(p, 'TeamBName').isEmpty
-          ? 'Equipo B'
-          : NotionService.readText(p, 'TeamBName'),
-      teamAColor: NotionService.readText(p, 'TeamAColor').isEmpty
-          ? '#FF6B1A'
-          : NotionService.readText(p, 'TeamAColor'),
-      teamBColor: NotionService.readText(p, 'TeamBColor').isEmpty
-          ? '#3B82F6'
-          : NotionService.readText(p, 'TeamBColor'),
-      lastMessage: NotionService.readText(p, 'LastMessage'),
+      pageId: json['pageId'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      pickupId: json['pickupId'] as String? ?? '',
+      createdBy: json['createdBy'] as String? ?? '',
+      date: json['date'] as String? ?? '',
+      teamAName: str(json['teamAName'], 'Equipo A'),
+      teamBName: str(json['teamBName'], 'Equipo B'),
+      teamAColor: str(json['teamAColor'], '#FF6B1A'),
+      teamBColor: str(json['teamBColor'], '#3B82F6'),
+      lastMessage: json['lastMessage'] as String? ?? '',
     );
   }
 
-  Map<String, dynamic> toNotionProperties() {
+  /// Payload para POST /chats (`createdBy` sale del token en el server).
+  Map<String, dynamic> toApiJson() {
     return {
-      'Name': NotionService.title(name),
-      'PickupId': NotionService.richText(pickupId),
-      'CreatedBy': NotionService.richText(createdBy),
-      'Date': NotionService.date(date.isEmpty ? null : date),
-      'TeamAName': NotionService.richText(teamAName),
-      'TeamBName': NotionService.richText(teamBName),
-      'TeamAColor': NotionService.richText(teamAColor),
-      'TeamBColor': NotionService.richText(teamBColor),
-      'LastMessage': NotionService.richText(lastMessage),
+      'name': name,
+      'pickupId': pickupId,
+      if (date.isNotEmpty) 'date': date,
+      'teamAName': teamAName,
+      'teamBName': teamBName,
+      'teamAColor': teamAColor,
+      'teamBColor': teamBColor,
+      'lastMessage': lastMessage,
     };
   }
 

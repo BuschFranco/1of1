@@ -9,14 +9,12 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/courts.dart';
 import '../data/models.dart';
-import '../notion/notion_config.dart';
 import '../services/app_loading_state.dart';
 import '../services/app_permissions.dart' as app_perms;
 import '../services/court_rating_service.dart';
 import '../services/location_service.dart';
 import '../services/route_service.dart';
 import '../services/notifications_service.dart';
-import '../services/notion_service.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
@@ -164,7 +162,6 @@ class _HomeScreenState extends State<HomeScreen>
 
   // Reseñas de la cancha seleccionada (máx. 2, rating ≥ 4). Se cargan al
   // cambiar de cancha y se muestran como burbujas sobre el punto GPS.
-  final NotionService _notion = NotionService();
   List<Review> _courtReviews = [];
   bool _reviewsLoading = false;
   int _reviewRequestId = 0;
@@ -625,10 +622,10 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  /// Carga las mejores reseñas de la cancha seleccionada.
+  /// Carga las mejores reseñas de la cancha seleccionada (vía backend).
   Future<void> _loadCourtReviews() async {
     final court = _court;
-    if (court == null || !_notion.isConfigured) {
+    if (court == null) {
       setState(() { _courtReviews = []; _reviewsLoading = false; });
       return;
     }
@@ -637,13 +634,10 @@ class _HomeScreenState extends State<HomeScreen>
     // Resetear expansión al cambiar de cancha.
     _reviewsExpanded = true;
     try {
-      final rows = await _notion.queryDatabase(
-        NotionConfig.dbReviews,
-        filter: NotionService.filterText('CourtId', court.id),
-      );
+      final all =
+          await context.read<CourtRatingService>().listReviews(court.id);
       // Si cambió la cancha mientras cargaba, descartar este resultado.
       if (myRequestId != _reviewRequestId) return;
-      final all = rows.map(Review.fromNotion).toList();
       // Solo 4-5 estrellas, ordenadas por rating desc, máximo 2.
       final best = all
           .where((r) => r.rating >= 4.0)

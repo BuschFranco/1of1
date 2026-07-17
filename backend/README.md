@@ -61,7 +61,7 @@ Todos protegidos con `Authorization: Bearer <jwt>` salvo los de `/auth`.
 | `GET /courts/:courtId/reviews` | — | `Review[]` |
 | `POST /courts/:courtId/reviews` | `{rating (1-5), comment}` (email+handle del token) | `Review` |
 | `DELETE /courts/:courtId` | — (solo `isAdmin`) | `{ok}` — archiva la cancha Y sus reseñas |
-| `DELETE /reviews/:pageId` | — (solo `isAdmin`) | `{ok}` |
+| `DELETE /reviews/:pageId` | — (dueño de la reseña o `isAdmin`) | `{ok}` |
 
 ### Amistades
 
@@ -106,8 +106,17 @@ solo la metadata (ficha del chat de crew).
 - Google sign-in: `POST /auth/google` verifica el idToken server-side con
   `google-auth-library`; `GOOGLE_CLIENT_IDS` (CSV) restringe el `aud`.
 
+## Estado
+
+- La app YA consume esta API (Fase A' completada): el token de Notion salió de
+  la APK y vive solo en `.env`. En beta el server corre en la PC del dev
+  (`app.listen` en `0.0.0.0`; la app se conecta por la IP LAN, ver
+  `app/dart_defines.json` → `API_BASE_URL`).
+- Smoke tests end-to-end pasados contra el workspace real (register, PATCH /me,
+  courts con `openTime/closeTime`, review propia crear/borrar, DELETE /me).
+
 ## Pendiente
 
-- Smoke tests end-to-end contra el workspace real.
-- Hardening producción: migrar hash a bcrypt (re-hash en login), JWT_SECRET
-  fuerte, rate limiting, helmet.
+- Hosting con TLS (al migrar, borrar `network_security_config.xml` de la app).
+- Hardening producción: migrar hash a bcrypt (re-hash en login), rate limiting,
+  helmet.

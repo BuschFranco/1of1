@@ -1,15 +1,14 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../data/models.dart';
-import '../notion/notion_config.dart';
-import 'notion_service.dart';
+import 'api/api_client.dart';
 
 /// Provee los pickups en los que el usuario está involucrado (como creador o
 /// invitado) y las operaciones de invitación/gestión: aceptar, rechazar, mover
-/// miembros de equipo, quitar miembros y eliminar el pickup.
+/// miembros de equipo, quitar miembros y eliminar el pickup. Todo vía backend.
 class PickupsProvider extends ChangeNotifier {
-  PickupsProvider({NotionService? notion}) : _notion = notion ?? NotionService();
-  final NotionService _notion;
+  PickupsProvider({ApiClient? api}) : _api = api ?? ApiClient();
+  final ApiClient _api;
 
   List<Pickup> _pickups = [];
   List<Pickup> get pickups => List.unmodifiable(_pickups);
@@ -19,13 +18,12 @@ class PickupsProvider extends ChangeNotifier {
 
   String _email = '';
 
-  /// Carga los pickups donde el usuario es creador o está invitado (aparece en
-  /// TeamAMembers/TeamBMembers). Best-effort: ante error deja la lista actual.
+  /// Carga los pickups donde el usuario es creador o está invitado. El filtro
+  /// lo hace el server con el email del token; [email] se conserva para la
+  /// lógica local (expiración/orden). Best-effort: ante error deja la lista.
   Future<void> loadForUser(String email) async {
     _email = email.trim().toLowerCase();
-    if (_email.isEmpty ||
-        !NotionConfig.isConfigured ||
-        NotionConfig.dbPickups.isEmpty) {
+    if (_email.isEmpty || !_api.isConfigured || !_api.hasToken) {
       _pickups = [];
       notifyListeners();
       return;
@@ -33,15 +31,8 @@ class PickupsProvider extends ChangeNotifier {
     _loading = true;
     notifyListeners();
     try {
-      final rows = await _notion.queryDatabaseAll(
-        NotionConfig.dbPickups,
-        filter: NotionService.filterOr([
-          NotionService.filterText('CreatedBy', _email),
-          NotionService.filterTextContains('TeamAMembers', _email),
-          NotionService.filterTextContains('TeamBMembers', _email),
-        ]),
-      );
-      final list = rows.map(Pickup.fromNotion).toList();
+      final rows = await _api.pickups();
+      final list = rows.map(Pickup.fromApi).toList();
       final seen = <String>{};
       final deduped = [for (final p in list) if (seen.add(p.pageId)) p];
       // Regla de retención: 24h después del pickup deja de mostrarse y se
@@ -79,8 +70,30 @@ class PickupsProvider extends ChangeNotifier {
         .toList();
   }
 
+  /// Crea el pickup en el backend (el server genera el inviteCode de 5 dígitos
+  /// y toma el creador del token). Devuelve el pickup creado.
+  Future<Pickup> create(Pickup p) async {
+    final json = await _api.createPickup(p.toApiJson());
+    final created = Pickup.fromApi(json);
+    _pickups.insert(0, created);
+    notifyListeners();
+    return created;
+  }
+
+  /// Crea la metadata del chat de crew. Devuelve null si la feature está
+  /// apagada en el server (503) — el chat local funciona igual.
+  Future<CrewChat?> createChat(CrewChat chat) async {
+    try {
+      final json = await _api.createChat(chat.toApiJson());
+      return CrewChat.fromApi(json);
+    } on ApiException catch (e) {
+      if (e.statusCode == 503) return null;
+      rethrow;
+    }
+  }
+
   Future<Pickup> _update(Pickup updated) async {
-    await _notion.updatePage(updated.pageId, updated.toNotionProperties());
+    await _api.updatePickup(updated.pageId, updated.toApiJson());
     final i = _pickups.indexWhere((p) => p.pageId == updated.pageId);
     if (i >= 0) _pickups[i] = updated;
     notifyListeners();
@@ -110,7 +123,7 @@ class PickupsProvider extends ChangeNotifier {
     return _update(p.copyWith(acceptedMembers: acc, declinedMembers: dec));
   }
 
-  /// Mueve un miembro al equipo destino ('A' o 'B'), reconstruyendo los CSV.
+  /// Mueve un miembro al equipo destino ('A' o 'B').
   Future<Pickup> moveMember(Pickup p, String email, String toTeam) async {
     final a = p.teamAMembers.where((x) => !_eq(x, email)).toList();
     final b = p.teamBMembers.where((x) => !_eq(x, email)).toList();
@@ -141,9 +154,9 @@ class PickupsProvider extends ChangeNotifier {
     ));
   }
 
-  /// Unirse a un pickup por código de invitación (5 dígitos). Busca el pickup
-  /// server-side, valida estado y capacidad, y mete al usuario en el equipo con
-  /// espacio (el de menos miembros primero) como miembro ya ACEPTADO.
+  /// Unirse a un pickup por código de invitación (5 dígitos). El server valida
+  /// todo (código, expiración, capacidad, ya-miembro) y mete al usuario en el
+  /// equipo con espacio como miembro ya ACEPTADO.
   ///
   /// Límite conocido: el creador no recibe aviso push cuando alguien se une (no
   /// existe canal push entre usuarios); ve al nuevo miembro al abrir el chat.
@@ -154,63 +167,35 @@ class PickupsProvider extends ChangeNotifier {
     if (c.length != 5 || int.tryParse(c) == null) {
       return (error: 'Código inválido. Revisá los 5 dígitos.', pickupId: null);
     }
-    if (e.isEmpty || !NotionConfig.isConfigured) {
+    if (e.isEmpty || !_api.isConfigured || !_api.hasToken) {
       return (error: 'No se pudo conectar. Probá de nuevo.', pickupId: null);
     }
     try {
-      final rows = await _notion.queryDatabase(
-        NotionConfig.dbPickups,
-        filter: NotionService.filterText('InviteCode', c),
-      );
-      if (rows.isEmpty) {
+      final json = await _api.joinPickup(c);
+      final joined = Pickup.fromApi(json);
+      // El pickup no estaba en la lista local del que se une: recargar.
+      await loadForUser(e);
+      return (error: null, pickupId: joined.pageId);
+    } on ApiException catch (ex) {
+      if (ex.statusCode == 404) {
         return (
           error: 'Código inválido. Revisá los 5 dígitos.',
           pickupId: null
         );
       }
-      final p = Pickup.fromNotion(rows.first);
-      if (p.isExpired) {
-        return (error: 'Ese pickup ya terminó.', pickupId: null);
+      // 403: propio / completo / expirado / ya unido — el server manda el
+      // mensaje legible.
+      if (ex.statusCode == 403 && ex.message.isNotEmpty) {
+        return (error: ex.message, pickupId: null);
       }
-      if (p.isCreator(e)) {
-        return (error: 'Este pickup es tuyo 🙂', pickupId: null);
-      }
-      if (p.teamOf(e) != null) {
-        // Ya estaba invitado: si tenía la invitación pendiente, aceptarla.
-        if (!p.hasAccepted(e)) {
-          await accept(p, e);
-          await loadForUser(e);
-          return (error: null, pickupId: p.pageId);
-        }
-        return (error: 'Ya estás en este pickup.', pickupId: null);
-      }
-      // Elegir el equipo con espacio (menos miembros primero) según teamSize.
-      final aFree = p.teamAMembers.length < p.teamSize;
-      final bFree = p.teamBMembers.length < p.teamSize;
-      if (!aFree && !bFree) {
-        return (error: 'El pickup ya está completo.', pickupId: null);
-      }
-      final toA = aFree &&
-          (!bFree || p.teamAMembers.length <= p.teamBMembers.length);
-      final updated = p.copyWith(
-        teamAMembers: toA ? [...p.teamAMembers, e] : null,
-        teamBMembers: toA ? null : [...p.teamBMembers, e],
-        acceptedMembers: [
-          ...p.acceptedMembers.where((x) => !_eq(x, e)),
-          e,
-        ],
-      );
-      await _notion.updatePage(updated.pageId, updated.toNotionProperties());
-      // El pickup no estaba en la lista local del que se une: recargar.
-      await loadForUser(e);
-      return (error: null, pickupId: p.pageId);
+      return (error: 'No se pudo conectar. Probá de nuevo.', pickupId: null);
     } catch (_) {
       return (error: 'No se pudo conectar. Probá de nuevo.', pickupId: null);
     }
   }
 
-  /// El usuario abandona el pickup: se quita de equipos y respuestas en Notion y
-  /// se remueve de la lista local (ya no participa).
+  /// El usuario abandona el pickup: se quita de equipos y respuestas y se
+  /// remueve de la lista local (ya no participa).
   Future<void> leave(Pickup p, String email) async {
     final updated = p.copyWith(
       teamAMembers: p.teamAMembers.where((x) => !_eq(x, email)).toList(),
@@ -218,46 +203,28 @@ class PickupsProvider extends ChangeNotifier {
       acceptedMembers: p.acceptedMembers.where((x) => !_eq(x, email)).toList(),
       declinedMembers: p.declinedMembers.where((x) => !_eq(x, email)).toList(),
     );
-    await _notion.updatePage(updated.pageId, updated.toNotionProperties());
+    await _api.updatePickup(updated.pageId, updated.toApiJson());
     _pickups.removeWhere((x) => x.pageId == p.pageId);
     notifyListeners();
   }
 
-  /// Archiva en Notion la página del pickup y, best-effort, las filas de su
-  /// chat. Compartido entre la eliminación manual y la limpieza por expiración.
-  Future<void> _archiveInNotion(Pickup p) async {
-    await _notion.archivePage(p.pageId);
-    // Chat asociado en Notion (si dbChats está configurado).
-    if (NotionConfig.dbChats.isNotEmpty) {
-      try {
-        final chats = await _notion.queryDatabase(
-          NotionConfig.dbChats,
-          filter: NotionService.filterText('PickupId', p.pageId),
-        );
-        for (final c in chats) {
-          final id = c['id']?.toString();
-          if (id != null) await _notion.archivePage(id);
-        }
-      } catch (_) {}
-    }
-  }
-
-  /// Limpia de la BDD los pickups vencidos (24h después del partido). Cualquier
-  /// cliente que los vea los archiva: los datos ya están muertos y archivar es
-  /// idempotente, así que no importa si dos usuarios lo intentan a la vez.
+  /// Limpia de la BDD los pickups vencidos (24h después del partido). El
+  /// DELETE del server es solo-creador: en los clientes de los invitados da
+  /// 403 y se ignora (el creador lo limpia en su próxima carga). El server
+  /// también archiva el chat asociado.
   Future<void> _cleanupExpired(List<Pickup> expired) async {
     for (final p in expired) {
       try {
-        await _archiveInNotion(p);
+        await _api.deletePickup(p.pageId);
       } catch (_) {
-        // Best-effort: se reintenta en la próxima carga.
+        // Best-effort: 403 de no-creador o sin red; se reintenta luego.
       }
     }
   }
 
-  /// Elimina (archiva) el pickup y, best-effort, su chat en Notion.
+  /// Elimina el pickup (y su chat, server-side). Solo el creador.
   Future<void> deletePickup(Pickup p) async {
-    await _archiveInNotion(p);
+    await _api.deletePickup(p.pageId);
     _pickups.removeWhere((x) => x.pageId == p.pageId);
     notifyListeners();
   }

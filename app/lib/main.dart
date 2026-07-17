@@ -12,7 +12,7 @@ import 'screens/handle_setup_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/pickup_chat_screen.dart';
-import 'notion/notion_config.dart';
+import 'services/api/api_client.dart';
 import 'services/app_loading_state.dart';
 import 'services/blocked_provider.dart';
 import 'services/court_rating_service.dart';
@@ -21,7 +21,6 @@ import 'services/favorites_provider.dart';
 import 'services/geofence_service.dart';
 import 'services/location_service.dart';
 import 'services/notifications_service.dart';
-import 'services/notion_service.dart';
 import 'services/pickups_provider.dart';
 import 'services/play_session_service.dart';
 import 'services/profiles_provider.dart';
@@ -60,107 +59,14 @@ void main() async {
     unawaited(AndroidAlarmManager.initialize());
   }
 
-  // Crea (si faltan) las columnas que usan las features nuevas. Idempotente y
-  // sin bloquear el arranque: si falla por permisos, la app sigue funcionando.
-  unawaited(_ensureNotionSchema());
+  // El schema de la BD lo asegura el BACKEND al arrancar (ProfilesService.
+  // onModuleInit): la app ya no toca Notion ni conoce su token.
+
+  // Cargar el JWT persistido ANTES de crear los providers: los load() del
+  // arranque (canchas, perfiles) necesitan el token para hablar con la API.
+  await ApiClient().loadToken();
 
   runApp(const OneOfOneApp());
-}
-
-/// Garantiza el schema de Notion necesario para clan/color y autor de cancha.
-Future<void> _ensureNotionSchema() async {
-  if (!NotionConfig.isConfigured) return;
-  final notion = NotionService();
-  try {
-    await notion.ensureProperties(
-      NotionConfig.dbProfiles,
-      const {
-        'Clan': 'rich_text',
-        'AvatarColor': 'rich_text',
-        'ClanTextColor': 'rich_text',
-        'ClanFont': 'rich_text',
-        'AvatarFrame': 'rich_text',
-        'EquippedTitle': 'rich_text',
-        'Level': 'rich_text',
-        'ShareStatus': 'checkbox',
-        'ShareCourt': 'checkbox',
-        'ShareTime': 'checkbox',
-        'Playing': 'checkbox',
-        'PlayingCourtId': 'rich_text',
-        'PlayingSince': 'date',
-        'LastPlayedCourtId': 'rich_text',
-        'LastPlayedAt': 'date',
-        'ShowLastPlayed': 'checkbox',
-        'Birthdate': 'date',
-        'Adm': 'checkbox',
-      },
-    );
-    await notion.ensureProperties(
-      NotionConfig.dbCourts,
-      const {
-        'CreatedByClan': 'rich_text',
-        'CreatedByEmail': 'rich_text',
-        'OpenTime': 'rich_text',
-        'CloseTime': 'rich_text',
-        // OJO: NO declarar 'Aprobacion' (select) acá. ensureProperties hace un
-        // PATCH que resetea las opciones del select existente y borra el valor
-        // "Aprobado" de las canchas → el mapa queda vacío. La columna se crea a
-        // mano en Notion.
-      },
-    );
-    await notion.ensureProperties(
-      NotionConfig.dbReviews,
-      const {'UserHandle': 'rich_text'},
-    );
-    await notion.ensureProperties(
-      NotionConfig.dbPickups,
-      const {
-        'TeamSize': 'number',
-        'TeamAName': 'rich_text',
-        'TeamBName': 'rich_text',
-        'TeamAColor': 'rich_text',
-        'TeamBColor': 'rich_text',
-        'TeamAMembers': 'rich_text',
-        'TeamBMembers': 'rich_text',
-        'TargetScore': 'number',
-        'AcceptedMembers': 'rich_text',
-        'DeclinedMembers': 'rich_text',
-        'InviteCode': 'rich_text',
-      },
-    );
-    if (NotionConfig.dbChats.isNotEmpty) {
-      await notion.ensureProperties(
-        NotionConfig.dbChats,
-        const {
-          'Name': 'title',
-          'PickupId': 'rich_text',
-          'CreatedBy': 'rich_text',
-          'Date': 'date',
-          'TeamAName': 'rich_text',
-          'TeamBName': 'rich_text',
-          'TeamAColor': 'rich_text',
-          'TeamBColor': 'rich_text',
-          'LastMessage': 'rich_text',
-        },
-      );
-    }
-    if (NotionConfig.dbMatches.isNotEmpty) {
-      await notion.ensureProperties(
-        NotionConfig.dbMatches,
-        const {
-          'Email': 'title',
-          'Points': 'number',
-          'EndedAt': 'date',
-          'CourtId': 'rich_text',
-          'CourtName': 'rich_text',
-          'Result': 'select',
-          'Seconds': 'number',
-        },
-      );
-    }
-  } catch (_) {
-    // Permisos insuficientes u otro error: se puede crear a mano en Notion.
-  }
 }
 
 class OneOfOneApp extends StatelessWidget {
@@ -168,20 +74,23 @@ class OneOfOneApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Cliente único del backend, compartido por todos los providers (el JWT
+    // igualmente es estático a nivel proceso).
+    final api = ApiClient();
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => Session()..restore()),
-        ChangeNotifierProvider(create: (_) => CourtsProvider()..load()),
+        ChangeNotifierProvider(create: (_) => Session(api: api)..restore()),
+        ChangeNotifierProvider(create: (_) => CourtsProvider(api: api)..load()),
         ChangeNotifierProvider(create: (_) => FavoritesProvider()..load()),
-        ChangeNotifierProvider(create: (_) => ProfilesProvider()..load()),
+        ChangeNotifierProvider(create: (_) => ProfilesProvider(api: api)..load()),
         ChangeNotifierProvider(create: (_) => PlaySessionService()),
-        ChangeNotifierProvider(create: (_) => PickupsProvider()),
+        ChangeNotifierProvider(create: (_) => PickupsProvider(api: api)),
         ChangeNotifierProvider(create: (_) => BlockedProvider()),
         // Última posición conocida compartida: la alimenta el mapa y la leen
         // canchas/detalle para mostrar distancias reales.
         ChangeNotifierProvider(create: (_) => LocationService()..warmUp()),
         ChangeNotifierProvider(create: (_) => AppLoadingState()),
-        Provider(create: (_) => CourtRatingService()),
+        Provider(create: (_) => CourtRatingService(api: api)),
         // Pegamento de sincronización (presencia, batch, sembrado). Se crea de
         // forma temprana (lazy: false) para cablear los callbacks ni bien
         // arranca la app, sin depender de que se monte ninguna pantalla.

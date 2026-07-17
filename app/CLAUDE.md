@@ -12,8 +12,9 @@ existentes.
 
 ## 0. Ubicación y arranque
 
-- Monorepo: la raíz git es `C:\ProyectosF\1of1`. **Todo el código de la app vive
-  en `app/`** (este directorio). `backend/` está sin implementar (TBD).
+- Monorepo: la raíz git es `D:\dev\1of1`. **Todo el código de la app vive
+  en `app/`** (este directorio). `backend/` es el gateway NestJS que la app
+  consume (la app YA NO habla con Notion directo: ver §2).
 - Entorno de desarrollo: **Windows + PowerShell**. Hay un shell Bash (Git Bash)
   disponible para scripts POSIX.
 
@@ -27,9 +28,11 @@ flutter analyze lib                                         # linter (dejar en 0
 dart run build_runner build --delete-conflicting-outputs   # regenerar freezed/json (ver §4)
 ```
 
-- **Secretos:** `dart_defines.json` (token de Notion + `MAPS_API_KEY`) **no se
+- **Secretos:** `dart_defines.json` (`MAPS_API_KEY` + `API_BASE_URL`) **no se
   commitea** (`.gitignore`). Ver `lib/config.template.dart` para el formato.
-  **Nunca** hardcodees el token ni lo imprimas en logs.
+  El token de Notion vive SOLO en `backend/.env` (server-side). Antes de correr
+  la app hay que levantar el backend: `cd backend && npm run start:dev` (y que
+  `API_BASE_URL` apunte a la IP LAN de esa PC).
 - **Instalar en el device** (adb no está en PATH; usar ruta completa):
 
   ```bash
@@ -51,9 +54,9 @@ dart run build_runner build --delete-conflicting-outputs   # regenerar freezed/j
 ## 1. Arquitectura en 30 segundos
 
 ```
-Notion (BD)  ◀──HTTP──▶  NotionService  ◀──  Providers (estado, ChangeNotifier)  ◀──  UI (screens/widgets)
-                                              ▲
-                                    SyncCoordinator (pegamento)
+Notion (BD) ◀──▶ backend/ (NestJS, JWT) ◀──HTTP──▶ ApiClient ◀── Providers (ChangeNotifier) ◀── UI
+                                                      ▲
+                                            SyncCoordinator (pegamento)
 ```
 
 - **Estado:** `provider` + `ChangeNotifier`. Todos los providers se registran en
@@ -68,82 +71,61 @@ Notion (BD)  ◀──HTTP──▶  NotionService  ◀──  Providers (estado
 
 | Archivo | Rol |
 | --- | --- |
-| `notion_service.dart` | **Único** cliente HTTP de la BD. Query/create/update + builders/parsers de propiedades. |
-| `session.dart` | Login/signup, perfil del usuario, batch (`stageStats` + `flush`), presencia. |
-| `courts_provider.dart` | Lista de canchas (Notion → fallback mock `kCourts`). |
-| `profiles_provider.dart` | Perfiles públicos (amigos, presencia). |
+| `api/api_client.dart` | **Único** cliente HTTP del backend. JWT (memoria + prefs `session_jwt`) + métodos tipados por dominio. |
+| `api/api_config.dart` | `API_BASE_URL` (const de compile-time) + clave del JWT en prefs. |
+| `session.dart` | Login/signup/Google (vía `/auth`), perfil, batch (`stageStats` + `flush` → `PATCH /me`), presencia. |
+| `courts_provider.dart` | Lista de canchas (`GET /courts`), propuesta, moderación (`/courts/mine`), delete admin. |
+| `profiles_provider.dart` | Perfiles públicos (amigos, presencia) — `GET /profiles`. |
+| `court_rating_service.dart` | Reseñas: rating con cache + `listReviews/createReview/deleteReview`. |
 | `favorites_provider.dart` | Favoritos (local). |
-| `friends_service.dart` | Amistades. |
+| `friends_service.dart` | Amistades (`/friends`) y búsqueda por handle (`/profiles/by-handle`). |
+| `pickups_provider.dart` | Pickups (`/pickups` CRUD + join por código + chats). |
 | `play_session_service.dart` | **Núcleo**: detección de partido (GPS/dwell), cronómetro, puntos, logros, historial, notificaciones. |
 | `session_alarms.dart` | Arranque/cierre automático del partido en background (AlarmManager, isolates). |
-| `sync_coordinator.dart` | Cablea todo: presencia→Notion, batch, geofences, notificaciones, callbacks. |
+| `sync_coordinator.dart` | Cablea todo: presencia→API, batch, flush de partidos (`POST /matches`), geofences, callbacks. |
 | `notifications_service.dart` | Notificaciones locales del sistema. |
 | `app_permissions.dart` | Chequeo/pedido de permisos (ubicación, notif, alarmas exactas). |
 
 - **`SyncCoordinator`** se crea con `lazy: false` en `main.dart`: es donde se
   conectan los callbacks entre servicios. Si agregás un evento nuevo entre
   servicios (p.ej. `onAlgo`), **cableálo acá**, no dentro de la UI.
-- La UI **no llama a `NotionService` directamente**: siempre pasa por un provider.
+- La UI **no llama a `ApiClient` directamente**: siempre pasa por un provider.
 
 ---
 
-## 2. Base de datos (Notion) — cómo funciona y cómo cambiarla
+## 2. Backend propio (la app YA NO habla con Notion)
 
-Hoy la "BD" es **Notion** (6 databases) vía su API REST. El acceso está
-**centralizado**, lo que permite cambiar de base o de backend sin tocar la UI.
+La app consume la API REST de `backend/` (NestJS) con **JWT propio**; el backend
+es quien habla con Notion (y quien asegura el schema al arrancar, en
+`ProfilesService.onModuleInit`). Contratos completos en `backend/README.md`.
 
-### Configuración — cambiar de una base a otra
+### Cómo funciona la capa de datos
 
-Los IDs de las databases viven en [`lib/notion/notion_config.dart`](lib/notion/notion_config.dart).
-No son secretos: tienen default embebido y se pueden sobrescribir por
-`--dart-define` sin recompilar el código:
+- `lib/services/api/api_client.dart` es el **único** cliente HTTP: métodos
+  tipados por endpoint que devuelven JSON plano. Los modelos parsean con
+  `fromApi(Map)` (o `fromJson` en `Profile`, cuyas claves coinciden con la
+  entidad del backend) y serializan con `toApiJson()`.
+- **JWT**: se emite en `/auth/*`, se guarda en memoria (campo **estático**, así
+  los servicios instanciados sueltos comparten sesión) y persistido en prefs
+  bajo la clave **global** `session_jwt` (no namespaced: el isolate de
+  background no conoce el userKey). Expira a los 30 días; ante 401 en
+  `GET /me`, `Session` cierra la sesión → pantalla de login.
+- `ApiConfig.baseUrl` es **const de compile-time** (dart-define `API_BASE_URL`)
+  por la misma razón que antes lo era el token de Notion: los **isolates de
+  background** no comparten memoria. El isolate escribe presencia leyendo el
+  JWT desde prefs (`_setNotionPresence` en `session_alarms.dart`); si el token
+  falta/venció, deja `presence_dirty` y el isolate principal reconcilia.
+- Sin `API_BASE_URL` la app degrada a modo offline (listas vacías, sin red).
 
-```bash
-flutter run --dart-define-from-file=dart_defines.json \
-  --dart-define=NOTION_DB_PROFILES=<nuevo_id> \
-  --dart-define=NOTION_DB_COURTS=<nuevo_id>
-```
+### Beta LAN (hosting actual)
 
-Para apuntar a **otro workspace/copia de Notion** (staging, otra cuenta):
-1. Cambiá los defaults en `notion_config.dart` **o** pasá los `--dart-define`.
-2. Cambiá `NOTION_TOKEN` en `dart_defines.json` por el de la nueva integración.
-3. Compartí las 6 databases con esa integración en Notion.
-
-`NotionConfig.isConfigured` es `false` si no hay token → la app **degrada a datos
-mock** (`kCourts`) y no intenta red. Útil para demos offline.
-
-### Schema auto-gestionado
-
-`_ensureNotionSchema()` en [`lib/main.dart`](lib/main.dart) crea (idempotente) las
-columnas que usan las features nuevas al arrancar. **Si agregás un campo nuevo a
-Notion, sumalo a ese mapa** (`nombre: 'tipo'`) para que se cree solo en cualquier
-workspace. Tipos soportados por los helpers: `title`, `rich_text`, `number`,
-`checkbox`, `select`, `multi_select`, `url`, `phone_number`, `date`.
-
-### Cambiar de backend (Notion → REST propio / Supabase / Firebase)
-
-El diseño ya está preparado para esto. Regla de oro: **nada fuera de la capa de
-datos sabe que existe Notion**.
-
-1. Definí una **interfaz** con las operaciones que usan los providers
-   (`queryDatabase`, `createPage`, `updatePage`, `archivePage`, `retrievePage`).
-2. Implementá esa interfaz contra el backend nuevo (`SupabaseDataService`, etc.),
-   respetando la forma de dato que esperan los `fromNotion`/`toNotionProperties`
-   de `models.dart` **o** adaptá también esos mapeos.
-3. Inyectá la nueva implementación en los providers (todos aceptan
-   `NotionService?` por constructor: `CourtsProvider({NotionService? notion})`,
-   `Session({NotionService? notion})`, …). Cambiá el `create:` en `main.dart`.
-4. Puntos de contacto a revisar (los únicos que referencian Notion):
-   `notion_service.dart`, `notion_config.dart`, los `fromNotion/toNotionProperties`
-   en `data/models.dart` y `data/courts.dart`, y el `_ensureNotionSchema` de
-   `main.dart`. **También** los isolates de background
-   (`session_alarms.dart`) usan `NotionService` directo para escribir presencia:
-   actualizalos ahí.
-
-> Cuidado: `NotionConfig.token` es `const` de compile-time para poder usarse desde
-> los **isolates de background** (que no comparten memoria con el isolate
-> principal). Cualquier reemplazo de backend debe seguir siendo accesible desde un
-> isolate sin estado compartido.
+El backend corre en la PC del dev (`http://<ip-lan>:3000`). Piezas involucradas:
+- `backend/.env` (token de Notion, JWT_SECRET, GOOGLE_CLIENT_IDS).
+- Regla de firewall Windows "1of1-backend-3000" (puerto 3000 TCP in).
+- `app/android/.../res/xml/network_security_config.xml`: permite HTTP SOLO a la
+  IP LAN (Android bloquea cleartext por default). **Si cambia la IP** hay que
+  tocar ese XML + `dart_defines.json` y recompilar → conviene reservar la IP en
+  el router. Con hosting TLS futuro, borrar el XML y el atributo del manifest.
 
 ---
 
@@ -151,15 +133,14 @@ datos sabe que existe Notion**.
 
 ### Agregar un campo al perfil del usuario (patrón más común)
 
-1. **Modelo** — agregá el campo a `Profile` en [`lib/data/models.dart`](lib/data/models.dart)
-   con `@Default(...)`.
-2. **Mapeo Notion** — mapealo en `fromNotion` (lectura) y `toNotionProperties`
-   (escritura) del mismo archivo.
-3. **Schema** — sumá `'MiCampo': 'tipo'` al mapa de `_ensureNotionSchema` en
-   `main.dart`.
-4. **Codegen** — corré `dart run build_runner build --delete-conflicting-outputs`
+1. **Modelo (app)** — agregá el campo a `Profile` en [`lib/data/models.dart`](lib/data/models.dart)
+   con `@Default(...)`. El `toJson/fromJson` generado ya viaja por la API.
+2. **Backend** — mapealo en `profileFromNotion`/`profileToNotionProps`
+   (`backend/src/notion/models.ts`) y sumá la columna al schema-ensure de
+   `ProfilesService.onModuleInit` (¡nunca declarar selects existentes!).
+3. **Codegen** — corré `dart run build_runner build --delete-conflicting-outputs`
    (regenera `models.freezed.dart` y `models.g.dart`). Ver §4.
-5. **Escritura** — si el usuario lo edita, agregá un setter en `session.dart` que
+4. **Escritura** — si el usuario lo edita, agregá un setter en `session.dart` que
    haga `copyWith` + marque `_dirty` (se sube en el próximo `flush()`, no pega a la
    red al toque salvo que sea presencia).
 
@@ -196,11 +177,11 @@ datos sabe que existe Notion**.
   corte es `PlaySessionService.seasonStart([now])` (devuelve el 1/1 o el 1/7 del año
   en curso); la usan tanto el getter `pointsSeason` como la UI del ranking. Si cambiás
   la definición de temporada, cambiala **solo ahí**.
-- Los puntos por período de **amigos** salen de la DB Notion **"Partidos"**
-  (`NotionConfig.dbMatches`), una fila por partido resuelto (`Email`, `Points`,
-  `EndedAt`, `CourtId`, `CourtName`, `Result`, `Seconds`). Se escribe con
+- Los puntos por período de **amigos** salen del backend (`GET /matches/ranking`,
+  que agrupa y suma por email server-side sobre la DB "Partidos"). Se escribe con
   staging+flush offline-resiliente: `resolvePending()` encola en
-  `pending_matches::$userKey` y `SyncCoordinator._flushPendingMatches()` sube en lote.
+  `pending_matches::$userKey` y `SyncCoordinator._flushPendingMatches()` sube el
+  lote con `POST /matches` (los ítems con `ok:false` quedan en el buffer).
   Mis propios puntos del período salen del historial local (frescos), los de amigos de
   esa DB — así no hay doble conteo. "Total" sigue usando el acumulado `Profile.points`.
 
@@ -249,8 +230,9 @@ datos sabe que existe Notion**.
 - Después de tocar `@freezed` en `models.dart` **siempre** corré:
   `dart run build_runner build --delete-conflicting-outputs`.
 - Si el build de codegen falla, suele ser por un `@Default` mal tipado o un import
-  faltante. Los mapeos `fromNotion`/`toNotionProperties` son **manuales** (no los
-  genera json_serializable): actualizalos vos.
+  faltante. Los mapeos `fromApi`/`toApiJson` de los modelos planos (Court, Review,
+  Friend, Pickup, CrewChat) son **manuales**: actualizalos vos (y su gemelo en
+  `backend/src/notion/entities.ts`).
 
 ---
 
@@ -334,8 +316,9 @@ Si lo hacés, cambiá **de forma consistente**:
 
 1. `flutter analyze lib` → 0 issues nuevos.
 2. Si tocaste `@freezed` → corriste `build_runner` y compila.
-3. Si agregaste un campo de Notion → está en `fromNotion`, `toNotionProperties` y
-   `_ensureNotionSchema`.
+3. Si agregaste un campo de la BD → está en `fromApi`/`toApiJson` (app), en la
+   entidad del backend (`entities.ts`/`models.ts`) y en el schema-ensure de
+   `ProfilesService.onModuleInit` (sin selects existentes).
 4. Si tocaste estado del partido → revisaste el **servicio principal y**
    `session_alarms.dart` (isolate), y las constantes gemelas.
 5. Estado local nuevo → namespaced por usuario y limpiado en logout.

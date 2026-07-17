@@ -7,13 +7,13 @@
 // dart_defines.json:
 // {
 //   "MAPS_API_KEY": "<google maps key>",
-//   "NOTION_TOKEN": "<internal integration secret de Notion, ntn_... o secret_...>"
+//   "API_BASE_URL": "http://<ip-lan-de-la-pc>:3000"
 // }
 //
-// Los IDs de las bases de Notion tienen default embebido en
-// lib/notion/notion_config.dart (no son secretos); se pueden sobreescribir con
-// --dart-define NOTION_DB_USERS / NOTION_DB_PROFILES / NOTION_DB_COURTS /
-// NOTION_DB_REVIEWS / NOTION_DB_PICKUPS si fuera necesario.
+// API_BASE_URL apunta al backend NestJS (backend/). En beta corre en la PC del
+// dev: usar la IP LAN (ipconfig → IPv4) y reservarla en el router (DHCP
+// reservation) — la URL es const de compile-time, si la IP cambia hay que
+// recompilar. El token de Notion vive SOLO en backend/.env (ya no en la app).
 //
 // Para correr: flutter run --dart-define-from-file=dart_defines.json
 const kMapsApiKey = 'TU_API_KEY_AQUI';

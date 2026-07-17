@@ -20,6 +20,8 @@ export class ProposeCourtDto {
   @IsOptional() @IsString() surface?: string;
   @IsOptional() @IsString() vibe?: string;
   @IsOptional() @IsString() hours?: string;
+  @IsOptional() @IsString() openTime?: string;
+  @IsOptional() @IsString() closeTime?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) badges?: string[];
   @IsOptional() @IsString() desc?: string;
   @IsOptional() @IsNumber() lat?: number;

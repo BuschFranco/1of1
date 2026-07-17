@@ -4,13 +4,12 @@ import 'package:geolocator/geolocator.dart';
 import 'package:native_geofence/native_geofence.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/courts.dart';
-import '../notion/notion_config.dart';
+import 'api/api_client.dart';
 import 'courts_provider.dart';
 import 'blocked_provider.dart';
 import 'favorites_provider.dart';
 import 'geofence_service.dart';
 import 'notifications_service.dart';
-import 'notion_service.dart';
 import 'pickups_provider.dart';
 import 'play_session_service.dart';
 import 'session.dart';
@@ -187,30 +186,35 @@ class SyncCoordinator {
     _onSessionChanged();
   }
 
-  /// Sube en lote los partidos pendientes a la DB "Partidos" de Notion (para el
-  /// ranking por período). Best-effort: los que fallan (sin señal en la cancha)
-  /// quedan en el buffer y se reintentan en el próximo flush. No se sube nada si
-  /// no hay DB configurada o no hay token.
+  /// Sube EN UN LOTE los partidos pendientes al backend (POST /matches, para
+  /// el ranking por período; el email sale del token). Best-effort: si la
+  /// request entera falla, todo queda en el buffer; si el server responde,
+  /// solo se conservan los ítems con ok:false. Reintento en el próximo flush.
   Future<void> _flushPendingMatches() async {
-    if (NotionConfig.dbMatches.isEmpty || !NotionConfig.isConfigured) return;
+    final api = ApiClient();
+    if (!api.isConfigured || !api.hasToken) return;
     final pending = await _play.readPendingMatches();
     if (pending.isEmpty) return;
-    final notion = NotionService();
     final failed = <Map<String, dynamic>>[];
-    for (final m in pending) {
-      try {
-        await notion.createPage(NotionConfig.dbMatches, {
-          'Email': NotionService.title((m['email'] ?? '') as String),
-          'Points': NotionService.number(m['points'] as num?),
-          'EndedAt': NotionService.date(m['endedAt'] as String?),
-          'CourtId': NotionService.richText((m['courtId'] ?? '') as String),
-          'CourtName': NotionService.richText((m['courtName'] ?? '') as String),
-          'Result': NotionService.select(m['result'] as String?),
-          'Seconds': NotionService.number(m['seconds'] as num?),
-        });
-      } catch (_) {
-        failed.add(m); // reintento en el próximo flush
+    try {
+      final res = await api.postMatches([
+        for (final m in pending)
+          {
+            'points': (m['points'] as num?)?.toInt() ?? 0,
+            'endedAt': (m['endedAt'] ?? '') as String,
+            'courtId': (m['courtId'] ?? '') as String,
+            'courtName': (m['courtName'] ?? '') as String,
+            if ((m['result'] ?? '') != '') 'result': m['result'] as String,
+            'seconds': (m['seconds'] as num?)?.toInt() ?? 0,
+          }
+      ]);
+      final results = (res['results'] as List?) ?? const [];
+      for (var i = 0; i < pending.length; i++) {
+        final ok = i < results.length && (results[i] as Map)['ok'] == true;
+        if (!ok) failed.add(pending[i]);
       }
+    } catch (_) {
+      failed.addAll(pending); // sin red: reintento completo en el próximo flush
     }
     await _play.writePendingMatches(failed);
   }
@@ -303,6 +307,9 @@ class SyncCoordinator {
     // Clave por usuario: aísla los datos locales de cada cuenta en el dispositivo.
     final userKey = (_session.email ?? p.userEmail).trim().toLowerCase();
     _favorites.setUser(userKey);
+    // Con sesión (JWT) recién disponible: (re)cargar el catálogo. El load()
+    // del arranque pudo haber corrido sin token (401/lista vacía).
+    if (_courts.courts.isEmpty) unawaited(_courts.load());
     // Cargar los pickups/invitaciones del usuario (para el badge de la campana y
     // las notificaciones del perfil, sin depender de abrir la pestaña Crew).
     unawaited(_pickups.loadForUser(userKey));
