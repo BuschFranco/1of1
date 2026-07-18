@@ -7,7 +7,7 @@
 // dart_defines.json:
 // {
 //   "MAPS_API_KEY": "<google maps key>",
-//   "API_BASE_URL": "http://<ip-lan-de-la-pc>:3000"
+//   "API_BASE_URL": "https://oneofone-backend.onrender.com"
 // }
 //
 // API_BASE_URL apunta al backend NestJS (backend/). En beta corre en la PC del
