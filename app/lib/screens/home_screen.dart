@@ -2480,6 +2480,22 @@ class _CourtSwipeCard extends StatelessWidget {
                 FutureBuilder<String?>(
                   future: CourtOwnerCache.ownerFor(court.id),
                   builder: (context, snap) {
+                    if (snap.connectionState != ConnectionState.done) {
+                      return Row(
+                        children: [
+                          Icon(Icons.emoji_events, size: 11, color: AppColors.white(0.2)),
+                          const SizedBox(width: 4),
+                          Container(
+                            width: 80,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: AppColors.white(0.08),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
                     final clan = snap.data;
                     if (clan == null || clan.isEmpty) {
                       return const SizedBox.shrink();
@@ -2520,6 +2536,22 @@ class _CourtSwipeCard extends StatelessWidget {
                 FutureBuilder<String?>(
                   future: CourtOwnerCache.kingFor(court.id),
                   builder: (context, snap) {
+                    if (snap.connectionState != ConnectionState.done) {
+                      return Row(
+                        children: [
+                          Icon(Icons.workspace_premium, size: 11, color: AppColors.white(0.2)),
+                          const SizedBox(width: 4),
+                          Container(
+                            width: 60,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: AppColors.white(0.08),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
                     final king = snap.data;
                     if (king == null || king.isEmpty) {
                       return const SizedBox.shrink();

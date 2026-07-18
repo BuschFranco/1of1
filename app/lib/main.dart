@@ -141,12 +141,18 @@ class _RootState extends State<_Root> {
   bool _bootstrapping = true;
   bool _onboardingSeen = false;
   bool _goAuth = false;
+  bool _splashTimeout = false;
   AuthMode _authMode = AuthMode.signup;
+  Timer? _splashTimer;
 
   @override
   void initState() {
     super.initState();
     _bootstrap();
+    // Si después de 5 s la sesión no se restauró, ir al login.
+    _splashTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted && !_splashTimeout) setState(() => _splashTimeout = true);
+    });
     // Enrutar al chat del pickup al tocar su notificación (o el botón "Ir al
     // chat"). Al asignarlo se drena un pickup pendiente si la app se abrió
     // desde la notificación con el proceso muerto.
@@ -157,6 +163,12 @@ class _RootState extends State<_Root> {
         ),
       );
     };
+  }
+
+  @override
+  void dispose() {
+    _splashTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _bootstrap() async {
@@ -180,12 +192,18 @@ class _RootState extends State<_Root> {
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
 
-    if (_bootstrapping || session.restoring) return const _Splash();
+    // Splash: mientras se restaura O se espera el bootstrap local.
+    // Si hay timeout (5 s), forzar salida del splash.
+    if ((_bootstrapping || session.restoring) && !_splashTimeout) {
+      return const _Splash();
+    }
+
     if (session.isLoggedIn) {
       // Recién registrado sin handle → forzar la elección antes de entrar.
       return session.needsHandle ? const HandleSetupScreen() : const MainShell();
     }
 
+    // Si no se pudo establecer sesión (timeout o sin cache/token), ir al login.
     if (!_onboardingSeen && !_goAuth) {
       return OnboardingScreen(
         onStart: () => _leaveOnboarding(AuthMode.signup),
