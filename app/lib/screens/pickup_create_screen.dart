@@ -6,7 +6,6 @@ import '../data/courts.dart';
 import '../data/models.dart';
 import '../services/courts_provider.dart';
 import '../services/friends_service.dart';
-import '../services/local_chat_service.dart';
 import '../services/notifications_service.dart';
 import '../services/pickups_provider.dart';
 import '../services/play_session_service.dart';
@@ -131,7 +130,6 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
         lastMessage: '${_teamSize}v$_teamSize · $_targetScore pts',
         createdAtMillis: DateTime.now().millisecondsSinceEpoch,
       );
-      await LocalChatService(_userEmail).saveChat(chat);
 
       // Notificar al usuario que se creó el chat.
       if (mounted) {

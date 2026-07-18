@@ -7,11 +7,12 @@ import '../widgets/app_chip.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/season_banner.dart';
 
-/// Ranking GLOBAL de la app. Dos pestañas: **Global** (Jugadores/Clanes con
-/// filtro Semana/Mes) y **Temporada** (aparte, con su banner de fechas +
-/// Jugadores/Clanes de la temporada en curso). Muestra tu posición y la de tu
-/// clan abajo aunque quedes fuera del top 50. Se abre desde el botón de trofeo
-/// del mapa; el ranking del perfil queda scopeado a amigos.
+/// Ranking GLOBAL de la app. Dos pestañas REALES arriba: **Global** (con
+/// filtros Jugadores/Clanes y Semana/Mes) y **Temporada** (con su banner de
+/// fechas + Jugadores/Clanes de la temporada en curso). El swipe alterna solo
+/// entre esas dos pestañas; los filtros de adentro cambian al tocar. Muestra tu
+/// posición y la de tu clan abajo aunque quedes fuera del top 50. Se abre desde
+/// el botón de trofeo del mapa; el ranking del perfil queda scopeado a amigos.
 class RankingScreen extends StatefulWidget {
   const RankingScreen({super.key});
 
@@ -22,30 +23,23 @@ class RankingScreen extends StatefulWidget {
 enum _Period { week, month, season }
 
 class _RankingScreenState extends State<RankingScreen> {
-  // Swipe lineal de 6 páginas:
-  //  0 Global·Jug·Semana · 1 Global·Jug·Mes · 2 Global·Clan·Semana
-  //  3 Global·Clan·Mes  · 4 Temp·Jugadores  · 5 Temp·Clanes
-  static const int _pages = 6;
-  static const _pageIsClans = [false, false, true, true, false, true];
-  static const _pagePeriod = [
-    _Period.week, _Period.month, _Period.week, _Period.month, //
-    _Period.season, _Period.season,
-  ];
-
   final PageController _pageCtrl = PageController();
-  int _page = 0;
-  // Respuesta cruda del backend cacheada por período (cubre ambos scopes, así
-  // Jugadores↔Clanes no vuelve a la red).
-  final Map<_Period, Map<String, dynamic>> _cache = {};
+  int _tab = 0; // 0 = Global, 1 = Temporada
 
-  bool get _isSeason => _page >= 4;
-  bool get _isClans => _pageIsClans[_page];
-  _Period get _period => _pagePeriod[_page];
+  // Filtros de la pestaña Global (tap, instantáneos).
+  bool _globalClans = false;
+  _Period _globalPeriod = _Period.week;
+  // Filtro de la pestaña Temporada.
+  bool _seasonClans = false;
+
+  // Respuesta cruda del backend cacheada por período (cubre ambos scopes, así
+  // Jugadores↔Clanes cambia sin volver a la red).
+  final Map<_Period, Map<String, dynamic>> _cache = {};
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _load(_Period.week);
   }
 
   @override
@@ -68,10 +62,9 @@ class _RankingScreenState extends State<RankingScreen> {
     }
   }
 
-  Future<void> _load() async {
-    final p = _period;
+  Future<void> _load(_Period p) async {
     if (_cache.containsKey(p)) return;
-    setState(() {}); // muestra el spinner de la página nueva
+    setState(() {}); // muestra el spinner de esa página
     try {
       final data =
           await ApiClient().globalRanking(_cutoff(p).toIso8601String());
@@ -88,10 +81,18 @@ class _RankingScreenState extends State<RankingScreen> {
           if (r is Map) r.cast<String, dynamic>(),
       ];
 
+  void _selectTab(int i) {
+    if (i == _tab) return;
+    // Páginas adyacentes: el swipe/animación NO atraviesa filtros.
+    _pageCtrl.animateToPage(
+      i,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOut,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Sin swipe-right-to-pop acá: el drag horizontal navega las 6 páginas del
-    // ranking (queda el botón de volver).
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -122,112 +123,162 @@ class _RankingScreenState extends State<RankingScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Los mejores de toda la app',
-              style: AppText.grotesk(size: 12, color: AppColors.white(0.4)),
-            ),
-            const SizedBox(height: 16),
-            // Fila 1: pestaña principal (Global vs Temporada, separadas).
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _tabChip('Global', season: false),
-                const SizedBox(width: 8),
-                _tabChip('Temporada', season: true),
-              ],
-            ),
-            const SizedBox(height: 10),
-            // Fila 2: scope (Jugadores/Clanes), en ambas pestañas.
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _scopeChip('Jugadores', clans: false),
-                const SizedBox(width: 8),
-                _scopeChip('Clanes', clans: true),
-              ],
-            ),
-            // Fila 3: filtro de tiempo, solo en Global (Temporada es fija).
-            if (!_isSeason) ...[
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _periodChip('Semana', _Period.week),
-                  const SizedBox(width: 8),
-                  _periodChip('Mes', _Period.month),
-                ],
-              ),
-            ],
+            const SizedBox(height: 12),
+            // Tabs REALES (subrayado), distintas de los chips de filtro.
+            _tabBar(),
             const SizedBox(height: 14),
             Expanded(
-              child: PageView.builder(
+              child: PageView(
                 controller: _pageCtrl,
-                itemCount: _pages,
                 onPageChanged: (i) {
-                  setState(() => _page = i);
-                  _load();
+                  setState(() => _tab = i);
+                  _load(i == 0 ? _globalPeriod : _Period.season);
                 },
-                itemBuilder: (_, i) => _pageBody(i),
+                children: [
+                  _globalPage(),
+                  _seasonPage(),
+                ],
               ),
             ),
-            _myPosition(),
           ],
         ),
       ),
     );
   }
 
-  /// Contenido de la página [i]: en Temporada, banner arriba + lista.
-  Widget _pageBody(int i) {
-    final list = _list(_pageIsClans[i], _pagePeriod[i]);
-    if (_pagePeriod[i] != _Period.season) return list;
+  // ── Header de tabs ─────────────────────────────────────────────────────────
+
+  Widget _tabBar() {
     return Column(
       children: [
-        const SeasonBanner(),
-        Expanded(child: list),
+        Row(
+          children: [
+            _tabItem('Global', 0),
+            _tabItem('Temporada', 1),
+          ],
+        ),
+        Container(height: 1, color: AppColors.line),
       ],
     );
   }
 
-  /// Anima el carrusel a una página objetivo.
-  void _goTo(int target) {
-    if (target == _page) return;
-    _pageCtrl.animateToPage(
-      target,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOut,
+  Widget _tabItem(String label, int i) {
+    final active = _tab == i;
+    return Expanded(
+      child: PressableWidget(
+        onTap: () => _selectTab(i),
+        child: Container(
+          color: Colors.transparent,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Column(
+            children: [
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: AppText.archivo(
+                  size: 15,
+                  weight: FontWeight.w900,
+                  color: active ? AppColors.accent : AppColors.white(0.45),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Subrayado indicador (3px) solo bajo la pestaña activa.
+              Container(
+                height: 3,
+                width: 60,
+                decoration: BoxDecoration(
+                  color: active ? AppColors.accent : Colors.transparent,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _tabChip(String label, {required bool season}) => AppChip(
-        label: label,
-        active: _isSeason == season,
-        // Al cambiar de pestaña conserva el scope (jugadores/clanes) actual.
-        // Global vuelve a Semana; Temporada no tiene sub-período.
-        onTap: () => _goTo(
-          season ? (_isClans ? 5 : 4) : (_isClans ? 2 : 0),
+  // ── Página Global ────────────────────────────────────────────────────────
+
+  Widget _globalPage() {
+    return Column(
+      children: [
+        const SizedBox(height: 4),
+        // Filtro scope.
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AppChip(
+                label: 'Jugadores',
+                active: !_globalClans,
+                onTap: () => setState(() => _globalClans = false)),
+            const SizedBox(width: 8),
+            AppChip(
+                label: 'Clanes',
+                active: _globalClans,
+                onTap: () => setState(() => _globalClans = true)),
+          ],
         ),
-      );
-
-  Widget _scopeChip(String label, {required bool clans}) => AppChip(
-        label: label,
-        active: _isClans == clans,
-        onTap: () => _goTo(
-          _isSeason
-              ? (clans ? 5 : 4)
-              // Global: preserva el período (semana=+0, mes=+1).
-              : (clans ? 2 : 0) + (_period == _Period.month ? 1 : 0),
+        const SizedBox(height: 10),
+        // Filtro período.
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AppChip(
+                label: 'Semana',
+                active: _globalPeriod == _Period.week,
+                onTap: () {
+                  setState(() => _globalPeriod = _Period.week);
+                  _load(_Period.week);
+                }),
+            const SizedBox(width: 8),
+            AppChip(
+                label: 'Mes',
+                active: _globalPeriod == _Period.month,
+                onTap: () {
+                  setState(() => _globalPeriod = _Period.month);
+                  _load(_Period.month);
+                }),
+          ],
         ),
-      );
+        const SizedBox(height: 14),
+        Expanded(child: _list(_globalPeriod, _globalClans)),
+        _myPosition(_globalPeriod),
+      ],
+    );
+  }
 
-  Widget _periodChip(String label, _Period p) => AppChip(
-        label: label,
-        active: _period == p,
-        onTap: () => _goTo((_isClans ? 2 : 0) + (p == _Period.month ? 1 : 0)),
-      );
+  // ── Página Temporada ───────────────────────────────────────────────────────
 
-  Widget _list(bool clans, _Period period) {
+  Widget _seasonPage() {
+    return Column(
+      children: [
+        const SizedBox(height: 4),
+        const SeasonBanner(),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AppChip(
+                label: 'Jugadores',
+                active: !_seasonClans,
+                onTap: () => setState(() => _seasonClans = false)),
+            const SizedBox(width: 8),
+            AppChip(
+                label: 'Clanes',
+                active: _seasonClans,
+                onTap: () => setState(() => _seasonClans = true)),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Expanded(child: _list(_Period.season, _seasonClans)),
+        _myPosition(_Period.season),
+      ],
+    );
+  }
+
+  // ── Lista y filas ──────────────────────────────────────────────────────────
+
+  Widget _list(_Period period, bool clans) {
     if (!_cache.containsKey(period)) {
       return Center(
         child: SizedBox(
@@ -382,9 +433,9 @@ class _RankingScreenState extends State<RankingScreen> {
   }
 
   /// Sección fija de abajo: tu puesto como jugador y el de tu clan en el
-  /// período elegido (aunque estén fuera del top 50).
-  Widget _myPosition() {
-    final data = _cache[_period];
+  /// período visible (aunque estén fuera del top 50).
+  Widget _myPosition(_Period period) {
+    final data = _cache[period];
     if (data == null) return const SizedBox.shrink();
     final me = (data['me'] as Map?)?.cast<String, dynamic>() ?? const {};
     final playerRank = (me['playerRank'] as num?)?.toInt();

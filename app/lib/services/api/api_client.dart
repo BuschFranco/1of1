@@ -279,6 +279,41 @@ class ApiClient {
   Future<Map<String, dynamic>> createChat(Map<String, dynamic> chat) =>
       _map(_send('POST', '/chats', body: chat));
 
+  /// Mensajes del chat de un pickup. Con [sinceIso] trae solo los posteriores
+  /// (polling incremental). Devuelve {messages: [...]}.
+  Future<List<Map<String, dynamic>>> pickupMessages(
+    String pickupId, {
+    String? sinceIso,
+  }) async {
+    final res = await _map(_send('GET', '/pickups/$pickupId/messages',
+        query: {if (sinceIso != null && sinceIso.isNotEmpty) 'after': sinceIso}));
+    return ((res['messages'] as List?) ?? const [])
+        .cast<Map<String, dynamic>>();
+  }
+
+  /// Envía un mensaje al chat del pickup (solo creador/miembros). 403 si no.
+  Future<Map<String, dynamic>> sendPickupMessage(String pickupId, String text) =>
+      _map(_send('POST', '/pickups/$pickupId/messages', body: {'text': text}));
+
+  /// Sube una imagen de cancha (ya comprimida) a Storage vía multipart.
+  /// Devuelve la URL pública. Timeout propio más largo que el de JSON.
+  Future<String> uploadCourtImage(String filePath) async {
+    final req = http.MultipartRequest(
+      'POST',
+      _uri('/uploads/court-image'),
+    );
+    if (hasToken) req.headers['Authorization'] = 'Bearer $_token';
+    req.files.add(await http.MultipartFile.fromPath('file', filePath));
+    final streamed = await req.send().timeout(const Duration(seconds: 60));
+    final res = await http.Response.fromStream(streamed);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw ApiException(
+          res.statusCode, _errorMessage(res.body), '/uploads/court-image');
+    }
+    final data = jsonDecode(res.body) as Map;
+    return (data['url'] ?? '').toString();
+  }
+
   // ── Historial de partidos / ranking ────────────────────────────────────
 
   /// Sube un lote; devuelve {results: [{ok}]} en el mismo orden.

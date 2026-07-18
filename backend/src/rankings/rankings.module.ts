@@ -10,11 +10,12 @@ import {
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser } from '../auth/jwt.strategy';
-import { NotionService } from '../notion/notion.service';
+import { parseUtc } from '../domain/wire';
+import { PrismaService } from '../prisma/prisma.module';
 
 // Ranking GLOBAL por período (semana/mes/temporada): top de jugadores y de
-// clanes de toda la app, sumando la DB Partidos desde el corte. Los clanes son
-// la insignia del perfil normalizada (misma regla que clans.module).
+// clanes de toda la app, sumando la tabla de partidos desde el corte. Los
+// clanes son la insignia del perfil normalizada (misma regla que clans.module).
 
 type PlayerRow = { name: string; handle: string; points: number };
 type ClanRow = { clan: string; points: number; members: number };
@@ -34,88 +35,54 @@ const TOP = 50;
 
 @Injectable()
 class RankingsService {
-  constructor(private readonly notion: NotionService) {}
-
-  // Identidades (nombre/handle/clan por email) cacheadas: cambian poco y se
-  // necesitan en cada request para resolver los emails de los partidos.
-  private idCache: { at: number; byEmail: Map<string, ProfileLite> } | null =
-    null;
-  private static readonly cacheTtlMs = 60_000;
-
-  private get profilesDb() {
-    return this.notion.cfg.db.profiles;
-  }
-  private get matchesDb() {
-    return this.notion.cfg.db.matches;
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   private static clanKey(raw: string): string {
     return raw.trim().toUpperCase();
   }
 
-  /** Todos los perfiles → email→{name, handle, clan}. queryDatabaseAll capea
-   * (~2000 filas): límite aceptado en beta. */
+  /** Identidades de todos los perfiles: email→{name, handle, clan}. */
   private async identities(): Promise<Map<string, ProfileLite>> {
-    const cached = this.idCache;
-    if (cached && Date.now() - cached.at < RankingsService.cacheTtlMs) {
-      return cached.byEmail;
-    }
+    const rows = await this.prisma.profile.findMany({
+      where: { archived: false },
+      select: { userEmail: true, name: true, handle: true, clan: true },
+    });
     const byEmail = new Map<string, ProfileLite>();
-    const rows = await this.notion.queryDatabaseAll(this.profilesDb, {});
     for (const r of rows) {
-      const p = r.properties;
-      const email = NotionService.readText(p, 'UserEmail').trim().toLowerCase();
+      const email = r.userEmail.trim().toLowerCase();
       if (!email) continue;
       byEmail.set(email, {
-        name: NotionService.readTitle(p, 'Name'),
-        handle: NotionService.readText(p, 'Handle'),
-        clan: RankingsService.clanKey(NotionService.readText(p, 'Clan')),
+        name: r.name,
+        handle: r.handle,
+        clan: RankingsService.clanKey(r.clan),
       });
     }
-    this.idCache = { at: Date.now(), byEmail };
     return byEmail;
   }
 
   /** Ranking global del período: top 50 jugadores + top 50 clanes + mi
    * posición (como jugador y la de mi clan) aunque quede fuera del top. */
   async global(
-    since: string,
+    since: Date,
     myEmail: string,
   ): Promise<{ players: PlayerRow[]; clans: ClanRow[]; me: MeRow }> {
-    if (!this.matchesDb || !this.profilesDb) {
-      return {
-        players: [],
-        clans: [],
-        me: {
-          playerRank: null,
-          playerPoints: 0,
-          clan: null,
-          clanRank: null,
-          clanPoints: 0,
-        },
-      };
-    }
     const ids = await this.identities();
-    const rows = await this.notion.queryDatabaseAll(this.matchesDb, {
-      filter: NotionService.filterDateOnOrAfter('EndedAt', since),
-      maxPages: 30,
+    const rows = await this.prisma.match.findMany({
+      where: { endedAt: { gte: since }, archived: false },
+      select: { email: true, clan: true, points: true },
     });
 
     // Una sola pasada por los partidos alimenta ambos agregados.
     const byPlayer = new Map<string, number>();
     const byClan = new Map<string, number>();
     for (const r of rows) {
-      const p = r.properties;
-      const email = NotionService.readTitle(p, 'Email').trim().toLowerCase();
+      const email = r.email.trim().toLowerCase();
       if (!email) continue;
-      const pts = NotionService.readInt(p, 'Points');
-      byPlayer.set(email, (byPlayer.get(email) ?? 0) + pts);
+      byPlayer.set(email, (byPlayer.get(email) ?? 0) + r.points);
       // El clan sale de la FILA (estampado al jugar): cambiar de clan no muda
-      // los puntos ya aportados. Filas legadas sin Clan → clan actual del autor.
-      const clan =
-        RankingsService.clanKey(NotionService.readText(p, 'Clan')) ||
-        ids.get(email)?.clan;
-      if (clan) byClan.set(clan, (byClan.get(clan) ?? 0) + pts);
+      // los puntos ya aportados. Filas legadas sin clan → clan actual del autor.
+      const clan = RankingsService.clanKey(r.clan) || ids.get(email)?.clan;
+      if (clan) byClan.set(clan, (byClan.get(clan) ?? 0) + r.points);
     }
 
     // Jugadores: orden points desc → email asc (estable). El nombre/handle
@@ -179,11 +146,11 @@ class RankingsController {
 
   @Get('global')
   global(@CurrentUser() user: AuthUser, @Query('since') since: string) {
-    const s = (since ?? '').trim();
-    if (!s || isNaN(new Date(s).getTime())) {
+    const start = parseUtc((since ?? '').trim());
+    if (!start) {
       throw new BadRequestException('since (ISO) requerido');
     }
-    return this.rankings.global(s, user.email);
+    return this.rankings.global(start, user.email);
   }
 }
 

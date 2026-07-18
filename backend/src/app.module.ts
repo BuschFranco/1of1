@@ -5,15 +5,16 @@ import { ClansModule } from './clans/clans.module';
 import { CourtsModule } from './courts/courts.module';
 import { FriendsModule } from './friends/friends.module';
 import { MatchesModule } from './matches/matches.module';
-import { NotionModule } from './notion/notion.module';
+import { PrismaModule } from './prisma/prisma.module';
 import { PickupsModule } from './pickups/pickups.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { RankingsModule } from './rankings/rankings.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    NotionModule,
+    PrismaModule,
     AuthModule,
     ProfilesModule,
     CourtsModule,
@@ -22,6 +23,7 @@ import { RankingsModule } from './rankings/rankings.module';
     MatchesModule,
     ClansModule,
     RankingsModule,
+    UploadsModule,
   ],
 })
 export class AppModule {}

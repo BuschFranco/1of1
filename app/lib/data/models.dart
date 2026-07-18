@@ -323,6 +323,35 @@ class Pickup {
 
 }
 
+/// Un mensaje del chat de un pickup (server-backed). El autor se identifica por
+/// email; la UI resuelve nombre/insignia contra los perfiles que ya tiene.
+class ChatMessage {
+  final String id;
+  final String email;
+  final String text;
+  final String createdAt; // ISO del server
+  final int createdAtMillis;
+
+  const ChatMessage({
+    required this.id,
+    required this.email,
+    required this.text,
+    required this.createdAt,
+    required this.createdAtMillis,
+  });
+
+  factory ChatMessage.fromApi(Map<String, dynamic> json) {
+    final iso = (json['createdAt'] ?? '').toString();
+    return ChatMessage(
+      id: (json['id'] ?? '').toString(),
+      email: (json['email'] ?? '').toString(),
+      text: (json['text'] ?? '').toString(),
+      createdAt: iso,
+      createdAtMillis: DateTime.tryParse(iso)?.millisecondsSinceEpoch ?? 0,
+    );
+  }
+}
+
 /// Chat de crew generado al crear un pickup game.
 class CrewChat {
   final String pageId;

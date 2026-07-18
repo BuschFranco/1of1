@@ -19,8 +19,9 @@ import { Type } from 'class-transformer';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser } from '../auth/jwt.strategy';
-import { NotionService } from '../notion/notion.service';
-import { seasonStart, seasonStartIso } from '../season';
+import { parseUtc } from '../domain/wire';
+import { PrismaService } from '../prisma/prisma.module';
+import { seasonStart } from '../season';
 
 // ── DTOs ────────────────────────────────────────────────────────────────────
 
@@ -44,30 +45,19 @@ class UploadMatchesDto {
 
 @Injectable()
 class MatchesService {
-  constructor(private readonly notion: NotionService) {}
-
-  private get db() {
-    return this.notion.cfg.db.matches;
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   /** Insignia de clan ACTUAL del autor, normalizada (misma regla que
-   * clans/rankings: trim + mayúsculas). Vacía si no tiene clan o falla. */
+   * clans/rankings: trim + mayúsculas). Vacía si no tiene clan. */
   private async currentClan(email: string): Promise<string> {
-    const profilesDb = this.notion.cfg.db.profiles;
-    if (!profilesDb) return '';
-    try {
-      const rows = await this.notion.queryDatabase(profilesDb, {
-        filter: NotionService.filterText('UserEmail', email),
-        pageSize: 1,
-      });
-      const p = rows[0]?.properties;
-      return p ? NotionService.readText(p, 'Clan').trim().toUpperCase() : '';
-    } catch {
-      return '';
-    }
+    const p = await this.prisma.profile.findFirst({
+      where: { userEmail: email, archived: false },
+      select: { clan: true },
+    });
+    return (p?.clan ?? '').trim().toUpperCase();
   }
 
-  /** Sube un lote de partidos resueltos. El email sale del token (title). Devuelve
+  /** Sube un lote de partidos resueltos. El email sale del token. Devuelve
    * ok/err por ítem (el cliente reintenta los fallidos). Cada fila queda
    * estampada con el clan del autor al momento de subir: los puntos de clan no
    * migran cuando el usuario se cambia de insignia. */
@@ -75,20 +65,23 @@ class MatchesService {
     email: string,
     items: MatchItemDto[],
   ): Promise<{ results: { ok: boolean }[] }> {
-    if (!this.db) return { results: items.map(() => ({ ok: false })) };
     const clan = await this.currentClan(email);
     const results: { ok: boolean }[] = [];
     for (const m of items) {
       try {
-        await this.notion.createPage(this.db, {
-          Email: NotionService.title(email),
-          Points: NotionService.number(m.points),
-          EndedAt: NotionService.date(m.endedAt),
-          CourtId: NotionService.richText(m.courtId ?? ''),
-          CourtName: NotionService.richText(m.courtName ?? ''),
-          Result: NotionService.select(m.result ?? null),
-          Seconds: NotionService.number(m.seconds ?? 0),
-          Clan: NotionService.richText(clan),
+        const endedAt = parseUtc(m.endedAt);
+        if (!endedAt) throw new Error('endedAt inválido');
+        await this.prisma.match.create({
+          data: {
+            email,
+            points: m.points,
+            endedAt,
+            courtId: m.courtId ?? '',
+            courtName: m.courtName ?? '',
+            result: m.result ?? '',
+            seconds: m.seconds ?? 0,
+            clan,
+          },
         });
         results.push({ ok: true });
       } catch {
@@ -101,115 +94,45 @@ class MatchesService {
   /** Fechas de fin (ISO) de MIS partidos ya registrados. Lo usa la app para
    * dedupear el backfill del log local (sube solo lo que falta). */
   async mine(email: string): Promise<{ endedAt: string[] }> {
-    if (!this.db) return { endedAt: [] };
-    const rows = await this.notion.queryDatabaseAll(this.db, {
-      filter: NotionService.filterTitle('Email', email),
+    const rows = await this.prisma.match.findMany({
+      where: { email, archived: false },
+      select: { endedAt: true },
+      orderBy: { endedAt: 'desc' },
     });
-    const out: string[] = [];
-    for (const r of rows) {
-      const d = NotionService.readDate(r.properties, 'EndedAt');
-      if (d) out.push(d);
-    }
-    return { endedAt: out };
-  }
-
-  /** Puntos por email desde [since] (ISO) para los emails dados. Agrupa y suma
-   * server-side (lo que la app hoy hace en el cliente). */
-  async ranking(
-    since: string,
-    emails: string[],
-  ): Promise<{ email: string; points: number }[]> {
-    if (!this.db || emails.length === 0 || !since) return [];
-    const capped = emails.slice(0, 100);
-    const rows = await this.notion.queryDatabaseAll(this.db, {
-      filter: NotionService.filterAnd([
-        NotionService.filterDateOnOrAfter('EndedAt', since),
-        NotionService.filterOr(
-          capped.map((e) => NotionService.filterTitle('Email', e)),
-        ),
-      ]),
-    });
-    const totals = new Map<string, number>();
-    for (const r of rows) {
-      const p = r.properties;
-      const email = NotionService.readTitle(p, 'Email').trim().toLowerCase();
-      if (!email) continue;
-      const points = NotionService.readInt(p, 'Points');
-      totals.set(email, (totals.get(email) ?? 0) + points);
-    }
-    return [...totals.entries()].map(([email, points]) => ({ email, points }));
+    return { endedAt: rows.map((r) => r.endedAt.toISOString()) };
   }
 
   /** Jugador con más puntos en la cancha EN LA TEMPORADA ACTUAL ("rey de la
-   * cancha"): agrupa todos los partidos de la cancha por email, filtra por
-   * temporada y devuelve el máximo con su nombre/handle. Se reinicia cada
-   * temporada, igual que la conquista de clan. */
+   * cancha"). Se reinicia cada temporada, igual que la conquista de clan. */
   async courtKing(
     courtId: string,
   ): Promise<{ king: { name: string; handle: string; points: number } | null }> {
-    if (!this.db || !courtId) return { king: null };
-    const rows = await this.notion.queryDatabaseAll(this.db, {
-      filter: NotionService.filterAnd([
-        NotionService.filterText('CourtId', courtId),
-        NotionService.filterDateOnOrAfter('EndedAt', seasonStartIso()),
-      ]),
+    if (!courtId) return { king: null };
+    const top = await this.prisma.match.groupBy({
+      by: ['email'],
+      where: { courtId, endedAt: { gte: seasonStart() }, archived: false },
+      _sum: { points: true },
+      orderBy: { _sum: { points: 'desc' } },
+      take: 1,
     });
-    const byEmail = new Map<string, number>();
-    for (const r of rows) {
-      const email = NotionService.readTitle(r.properties, 'Email')
-        .trim()
-        .toLowerCase();
-      if (!email) continue;
-      byEmail.set(
-        email,
-        (byEmail.get(email) ?? 0) +
-          NotionService.readInt(r.properties, 'Points'),
-      );
-    }
-    let topEmail = '';
-    let topPoints = 0;
-    for (const [email, pts] of byEmail) {
-      if (pts > topPoints) {
-        topPoints = pts;
-        topEmail = email;
-      }
-    }
-    if (!topEmail || topPoints <= 0) return { king: null };
-    const id = await this.identity(topEmail);
+    const email = top[0]?.email ?? '';
+    const points = top[0]?._sum.points ?? 0;
+    if (!email || points <= 0) return { king: null };
+    const p = await this.prisma.profile.findFirst({
+      where: { userEmail: email, archived: false },
+      select: { name: true, handle: true },
+    });
     return {
       king: {
-        name: id.name || topEmail.split('@')[0],
-        handle: id.handle,
-        points: topPoints,
+        name: p?.name || email.split('@')[0],
+        handle: p?.handle ?? '',
+        points,
       },
     };
   }
 
-  /** Nombre y handle de un perfil por email (para el rey de la cancha). */
-  private async identity(
-    email: string,
-  ): Promise<{ name: string; handle: string }> {
-    const profilesDb = this.notion.cfg.db.profiles;
-    if (!profilesDb) return { name: '', handle: '' };
-    try {
-      const rows = await this.notion.queryDatabase(profilesDb, {
-        filter: NotionService.filterText('UserEmail', email),
-        pageSize: 1,
-      });
-      const p = rows[0]?.properties;
-      return {
-        name: p ? NotionService.readTitle(p, 'Name') : '',
-        handle: p ? NotionService.readText(p, 'Handle') : '',
-      };
-    } catch {
-      return { name: '', handle: '' };
-    }
-  }
-
-  /** Puntos del usuario en una cancha, sumados desde la DB Partidos: total
-   * histórico Y de la temporada actual por separado. Fuente de verdad para el
-   * detalle de cancha: a diferencia del log local de la app, sobrevive
-   * reinstalaciones y no está capado a los últimos 100 partidos. */
+  /** Puntos del usuario en una cancha: total histórico Y de la temporada
+   * actual por separado (para el detalle de cancha). */
   async courtPoints(
     email: string,
     courtId: string,
@@ -219,29 +142,46 @@ class MatchesService {
     seasonPoints: number;
     seasonMatches: number;
   }> {
-    if (!this.db || !courtId) {
+    if (!courtId) {
       return { points: 0, matches: 0, seasonPoints: 0, seasonMatches: 0 };
     }
-    const rows = await this.notion.queryDatabaseAll(this.db, {
-      filter: NotionService.filterAnd([
-        NotionService.filterTitle('Email', email),
-        NotionService.filterText('CourtId', courtId),
-      ]),
-    });
     const season = seasonStart();
+    const rows = await this.prisma.match.findMany({
+      where: { email, courtId, archived: false },
+      select: { points: true, endedAt: true },
+    });
     let points = 0;
     let seasonPoints = 0;
     let seasonMatches = 0;
     for (const r of rows) {
-      const pts = NotionService.readInt(r.properties, 'Points');
-      points += pts;
-      const ended = NotionService.readDate(r.properties, 'EndedAt');
-      if (ended && new Date(ended) >= season) {
-        seasonPoints += pts;
+      points += r.points;
+      if (r.endedAt >= season) {
+        seasonPoints += r.points;
         seasonMatches++;
       }
     }
     return { points, matches: rows.length, seasonPoints, seasonMatches };
+  }
+
+  /** Puntos por email desde [since] (ISO) para los emails dados. Agrupa y suma
+   * server-side. */
+  async ranking(
+    since: string,
+    emails: string[],
+  ): Promise<{ email: string; points: number }[]> {
+    const start = parseUtc(since);
+    if (!start || emails.length === 0) return [];
+    const capped = emails.slice(0, 100);
+    const rows = await this.prisma.match.groupBy({
+      by: ['email'],
+      where: {
+        email: { in: capped },
+        endedAt: { gte: start },
+        archived: false,
+      },
+      _sum: { points: true },
+    });
+    return rows.map((r) => ({ email: r.email, points: r._sum.points ?? 0 }));
   }
 }
 

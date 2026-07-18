@@ -10,7 +10,6 @@ import {
   Param,
   Patch,
   Post,
-  ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -22,18 +21,18 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { Query } from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser } from '../auth/jwt.strategy';
 import {
+  chatWire,
   CrewChat,
-  chatFromNotion,
-  chatToNotionProps,
+  parseUtc,
   Pickup,
-  pickupFromNotion,
-  pickupToNotionProps,
-} from '../notion/entities';
-import { NotionService } from '../notion/notion.service';
+  pickupWire,
+} from '../domain/wire';
+import { PrismaService } from '../prisma/prisma.module';
 
 // ── DTOs ────────────────────────────────────────────────────────────────────
 
@@ -79,6 +78,10 @@ class JoinPickupDto {
   @IsString() @Length(5, 5) code!: string;
 }
 
+class SendMessageDto {
+  @IsString() @Length(1, 500) text!: string;
+}
+
 class CreateChatDto {
   @IsString() name!: string;
   @IsString() pickupId!: string;
@@ -94,11 +97,7 @@ class CreateChatDto {
 
 @Injectable()
 class PickupsService {
-  constructor(private readonly notion: NotionService) {}
-
-  private get db() {
-    return this.notion.cfg.db;
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   private eq(a: string, b: string): boolean {
     return a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -109,41 +108,37 @@ class PickupsService {
     return (Math.floor(Math.random() * 90000) + 10000).toString();
   }
 
-  /** Pickups donde el usuario es creador o miembro de un equipo. Deduplicado. */
+  /** Pickups donde el usuario es creador o miembro de un equipo. */
   async listForUser(email: string): Promise<Pickup[]> {
     const e = email.trim().toLowerCase();
-    const rows = await this.notion.queryDatabaseAll(this.db.pickups, {
-      filter: NotionService.filterOr([
-        NotionService.filterText('CreatedBy', e),
-        NotionService.filterTextContains('TeamAMembers', e),
-        NotionService.filterTextContains('TeamBMembers', e),
-      ]),
+    const rows = await this.prisma.pickup.findMany({
+      where: {
+        archived: false,
+        OR: [
+          { createdBy: e },
+          { teamAMembers: { has: e } },
+          { teamBMembers: { has: e } },
+        ],
+      },
     });
-    const seen = new Set<string>();
-    const out: Pickup[] = [];
-    for (const r of rows) {
-      const p = pickupFromNotion(r);
-      if (!seen.has(p.pageId)) {
-        seen.add(p.pageId);
-        out.push(p);
-      }
-    }
-    return out;
+    return rows.map(pickupWire);
   }
 
   private async getById(pageId: string): Promise<Pickup> {
-    const page = await this.notion.retrievePage(pageId);
-    return pickupFromNotion(page);
+    const row = await this.prisma.pickup.findUnique({ where: { id: pageId } });
+    if (!row || row.archived) {
+      throw new NotFoundException('Pickup no encontrado.');
+    }
+    return pickupWire(row);
   }
 
   async create(createdBy: string, dto: CreatePickupDto): Promise<Pickup> {
-    const page = await this.notion.createPage(
-      this.db.pickups,
-      pickupToNotionProps({
+    const row = await this.prisma.pickup.create({
+      data: {
         title: dto.title,
         courtId: dto.courtId,
         createdBy,
-        dateTime: dto.dateTime ?? null,
+        dateTime: parseUtc(dto.dateTime),
         maxPlayers: dto.maxPlayers ?? 10,
         vibe: dto.vibe ?? 'Casual',
         notes: dto.notes ?? '',
@@ -159,13 +154,13 @@ class PickupsService {
         declinedMembers: dto.declinedMembers ?? [],
         // El código lo genera el server (autoritativo), no el cliente.
         inviteCode: this.genInviteCode(),
-      }),
-    );
-    return pickupFromNotion(page);
+      },
+    });
+    return pickupWire(row);
   }
 
-  /** Actualiza (read-modify-write) solo los campos provistos. Solo creador o
-   * miembro. Cubre aceptar/rechazar/mover/quitar/abandonar/reenviar. */
+  /** Actualiza solo los campos provistos. Solo creador o miembro. Cubre
+   * aceptar/rechazar/mover/quitar/abandonar/reenviar. */
   async update(
     pageId: string,
     email: string,
@@ -179,44 +174,45 @@ class PickupsService {
     if (!isMember) {
       throw new ForbiddenException('No participás de este pickup.');
     }
-    const merged: Omit<Pickup, 'pageId'> = {
-      title: dto.title ?? cur.title,
-      courtId: cur.courtId,
-      createdBy: cur.createdBy,
-      dateTime: dto.dateTime ?? cur.dateTime,
-      maxPlayers: dto.maxPlayers ?? cur.maxPlayers,
-      vibe: dto.vibe ?? cur.vibe,
-      notes: dto.notes ?? cur.notes,
-      teamSize: dto.teamSize ?? cur.teamSize,
-      teamAName: dto.teamAName ?? cur.teamAName,
-      teamBName: dto.teamBName ?? cur.teamBName,
-      teamAColor: dto.teamAColor ?? cur.teamAColor,
-      teamBColor: dto.teamBColor ?? cur.teamBColor,
-      teamAMembers: dto.teamAMembers ?? cur.teamAMembers,
-      teamBMembers: dto.teamBMembers ?? cur.teamBMembers,
-      targetScore: dto.targetScore ?? cur.targetScore,
-      acceptedMembers: dto.acceptedMembers ?? cur.acceptedMembers,
-      declinedMembers: dto.declinedMembers ?? cur.declinedMembers,
-      inviteCode: cur.inviteCode, // inmutable
-    };
-    const page = await this.notion.updatePage(
-      pageId,
-      pickupToNotionProps(merged),
-    );
-    return pickupFromNotion(page);
+    const row = await this.prisma.pickup.update({
+      where: { id: pageId },
+      data: {
+        // courtId, createdBy e inviteCode son inmutables.
+        ...(dto.title !== undefined && { title: dto.title }),
+        ...(dto.dateTime !== undefined && { dateTime: parseUtc(dto.dateTime) }),
+        ...(dto.maxPlayers !== undefined && { maxPlayers: dto.maxPlayers }),
+        ...(dto.vibe !== undefined && { vibe: dto.vibe }),
+        ...(dto.notes !== undefined && { notes: dto.notes }),
+        ...(dto.teamSize !== undefined && { teamSize: dto.teamSize }),
+        ...(dto.teamAName !== undefined && { teamAName: dto.teamAName }),
+        ...(dto.teamBName !== undefined && { teamBName: dto.teamBName }),
+        ...(dto.teamAColor !== undefined && { teamAColor: dto.teamAColor }),
+        ...(dto.teamBColor !== undefined && { teamBColor: dto.teamBColor }),
+        ...(dto.teamAMembers !== undefined && { teamAMembers: dto.teamAMembers }),
+        ...(dto.teamBMembers !== undefined && { teamBMembers: dto.teamBMembers }),
+        ...(dto.targetScore !== undefined && { targetScore: dto.targetScore }),
+        ...(dto.acceptedMembers !== undefined && {
+          acceptedMembers: dto.acceptedMembers,
+        }),
+        ...(dto.declinedMembers !== undefined && {
+          declinedMembers: dto.declinedMembers,
+        }),
+      },
+    });
+    return pickupWire(row);
   }
 
   /** Unirse por código: entra al equipo con espacio (el de menos miembros
-   * primero), como miembro aceptado. Calca PickupsProvider.joinByCode. */
+   * primero), como miembro aceptado. */
   async join(code: string, email: string): Promise<Pickup> {
     const e = email.trim().toLowerCase();
-    const rows = await this.notion.queryDatabase(this.db.pickups, {
-      filter: NotionService.filterText('InviteCode', code.trim()),
+    const row = await this.prisma.pickup.findFirst({
+      where: { inviteCode: code.trim(), archived: false },
     });
-    if (rows.length === 0) {
+    if (!row) {
       throw new NotFoundException('Código inválido. Revisá los 5 dígitos.');
     }
-    const p = pickupFromNotion(rows[0]);
+    const p = pickupWire(row);
 
     // Expirado (24h después del horario)?
     const d = p.dateTime ? Date.parse(p.dateTime) : NaN;
@@ -231,15 +227,16 @@ class PickupsService {
     if (inA || inB) {
       // Ya es miembro: si estaba pendiente, aceptar; si no, error.
       if (!p.acceptedMembers.some((m) => this.eq(m, e))) {
-        const accepted = [
-          ...p.acceptedMembers.filter((m) => !this.eq(m, e)),
-          e,
-        ];
-        const page = await this.notion.updatePage(
-          p.pageId,
-          pickupToNotionProps({ ...p, acceptedMembers: accepted }),
-        );
-        return pickupFromNotion(page);
+        const updated = await this.prisma.pickup.update({
+          where: { id: p.pageId },
+          data: {
+            acceptedMembers: [
+              ...p.acceptedMembers.filter((m) => !this.eq(m, e)),
+              e,
+            ],
+          },
+        });
+        return pickupWire(updated);
       }
       throw new ForbiddenException('Ya estás en este pickup.');
     }
@@ -250,65 +247,116 @@ class PickupsService {
     }
     const toA =
       aFree && (!bFree || p.teamAMembers.length <= p.teamBMembers.length);
-    const updated: Omit<Pickup, 'pageId'> = {
-      ...p,
-      teamAMembers: toA ? [...p.teamAMembers, e] : p.teamAMembers,
-      teamBMembers: toA ? p.teamBMembers : [...p.teamBMembers, e],
-      acceptedMembers: [
-        ...p.acceptedMembers.filter((m) => !this.eq(m, e)),
-        e,
-      ],
-    };
-    const page = await this.notion.updatePage(
-      p.pageId,
-      pickupToNotionProps(updated),
-    );
-    return pickupFromNotion(page);
+    const updated = await this.prisma.pickup.update({
+      where: { id: p.pageId },
+      data: {
+        teamAMembers: toA ? [...p.teamAMembers, e] : p.teamAMembers,
+        teamBMembers: toA ? p.teamBMembers : [...p.teamBMembers, e],
+        acceptedMembers: [
+          ...p.acceptedMembers.filter((m) => !this.eq(m, e)),
+          e,
+        ],
+      },
+    });
+    return pickupWire(updated);
   }
 
-  /** Elimina (archiva) el pickup y sus chats. Solo el creador. */
+  /** Elimina (archiva) el pickup, sus chats y sus mensajes. Solo el creador. */
   async remove(pageId: string, email: string): Promise<void> {
     const cur = await this.getById(pageId);
     if (!this.eq(cur.createdBy, email)) {
       throw new ForbiddenException('Solo quien creó el pickup puede eliminarlo.');
     }
-    if (this.db.chats) {
-      try {
-        const chats = await this.notion.queryDatabaseAll(this.db.chats, {
-          filter: NotionService.filterText('PickupId', pageId),
-        });
-        for (const c of chats) {
-          const id = c.id?.toString();
-          if (id) await this.notion.archivePage(id);
-        }
-      } catch {
-        // best-effort: igual archivamos el pickup.
-      }
+    await this.prisma.$transaction([
+      this.prisma.chat.updateMany({
+        where: { pickupId: pageId, archived: false },
+        data: { archived: true },
+      }),
+      this.prisma.message.updateMany({
+        where: { pickupId: pageId, archived: false },
+        data: { archived: true },
+      }),
+      this.prisma.pickup.updateMany({
+        where: { id: pageId },
+        data: { archived: true },
+      }),
+    ]);
+  }
+
+  /** Valida que [email] sea creador o miembro del pickup; devuelve el pickup. */
+  private async requireMember(pageId: string, email: string): Promise<Pickup> {
+    const p = await this.getById(pageId);
+    const isMember =
+      this.eq(p.createdBy, email) ||
+      p.teamAMembers.some((m) => this.eq(m, email)) ||
+      p.teamBMembers.some((m) => this.eq(m, email));
+    if (!isMember) {
+      throw new ForbiddenException('No participás de este pickup.');
     }
-    await this.notion.archivePage(pageId);
+    return p;
+  }
+
+  /** Mensajes del chat del pickup, orden cronológico. [afterIso] = polling
+   * incremental (solo los posteriores a esa fecha). Límite 200. */
+  async listMessages(
+    pageId: string,
+    email: string,
+    afterIso?: string,
+  ): Promise<{ messages: { id: string; email: string; text: string; createdAt: string }[] }> {
+    await this.requireMember(pageId, email);
+    const after = parseUtc(afterIso);
+    const rows = await this.prisma.message.findMany({
+      where: {
+        pickupId: pageId,
+        archived: false,
+        ...(after && { createdAt: { gt: after } }),
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 200,
+    });
+    return {
+      messages: rows.map((m) => ({
+        id: m.id,
+        email: m.email,
+        text: m.text,
+        createdAt: m.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  /** Envía un mensaje al chat del pickup (solo creador/miembros). */
+  async sendMessage(
+    pageId: string,
+    email: string,
+    text: string,
+  ): Promise<{ id: string; email: string; text: string; createdAt: string }> {
+    await this.requireMember(pageId, email);
+    const m = await this.prisma.message.create({
+      data: { pickupId: pageId, email, text: text.trim() },
+    });
+    return {
+      id: m.id,
+      email: m.email,
+      text: m.text,
+      createdAt: m.createdAt.toISOString(),
+    };
   }
 
   async createChat(createdBy: string, dto: CreateChatDto): Promise<CrewChat> {
-    if (!this.db.chats) {
-      throw new ServiceUnavailableException(
-        'El chat de crew no está configurado (NOTION_DB_CHATS vacío).',
-      );
-    }
-    const page = await this.notion.createPage(
-      this.db.chats,
-      chatToNotionProps({
+    const row = await this.prisma.chat.create({
+      data: {
         name: dto.name,
         pickupId: dto.pickupId,
         createdBy,
-        date: dto.date ?? new Date().toISOString(),
+        date: parseUtc(dto.date) ?? new Date(),
         teamAName: dto.teamAName ?? 'Equipo A',
         teamBName: dto.teamBName ?? 'Equipo B',
         teamAColor: dto.teamAColor ?? '#FF6B1A',
         teamBColor: dto.teamBColor ?? '#3B82F6',
         lastMessage: dto.lastMessage ?? '',
-      }),
-    );
-    return chatFromNotion(page);
+      },
+    });
+    return chatWire(row);
   }
 }
 
@@ -350,6 +398,24 @@ class PickupsController {
   ) {
     await this.pickups.remove(pageId, user.email);
     return { ok: true };
+  }
+
+  @Get(':pageId/messages')
+  messages(
+    @CurrentUser() user: AuthUser,
+    @Param('pageId') pageId: string,
+    @Query('after') after?: string,
+  ) {
+    return this.pickups.listMessages(pageId, user.email, after);
+  }
+
+  @Post(':pageId/messages')
+  sendMessage(
+    @CurrentUser() user: AuthUser,
+    @Param('pageId') pageId: string,
+    @Body() dto: SendMessageDto,
+  ) {
+    return this.pickups.sendMessage(pageId, user.email, dto.text);
   }
 }
 

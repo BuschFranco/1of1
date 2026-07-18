@@ -1,18 +1,36 @@
 # Backend — 1of1
 
-Gateway NestJS entre la app y Notion. Centraliza el token de Notion
-**server-side** (la app ya no lo embebe), autentica con JWT propio y expone la
-API por dominio. Es la "Fase A"; la migración del front a esta API es la
-Fase A'.
+API NestJS de la app, respaldada por **Supabase Postgres vía Prisma** (migrada
+desde Notion; el gateway de Notion quedó solo como legado para el script de
+migración). Autentica con JWT propio y expone la API por dominio.
 
 ## Correr
 
 ```bash
 npm install
-cp .env.example .env   # completar NOTION_TOKEN y JWT_SECRET
-npm run start:dev      # http://localhost:3000
-npm run build          # compila a dist/
+cp .env.example .env       # completar DATABASE_URL/DIRECT_URL y JWT_SECRET
+npx prisma migrate deploy  # aplica migraciones (crea/actualiza tablas)
+npm run start:dev          # http://localhost:3000
+npm run build              # compila a dist/
 ```
+
+## Base de datos
+
+- **Supabase Postgres** (proyecto `mwkrsqgdfnfidchotjel`, São Paulo). Data API
+  apagada: el ÚNICO cliente es este backend, por connection string.
+- `DATABASE_URL` = pooler transaccional (puerto 6543, `?pgbouncer=true`) para
+  runtime; `DIRECT_URL` = puerto 5432 para `prisma migrate`.
+- Esquema en `prisma/schema.prisma`; cambios de esquema =
+  `npx prisma migrate dev --name <nombre>` (nunca tocar tablas a mano).
+- **IDs**: PKs UUID; los datos migrados conservan los pageId de Notion, así los
+  JWT y los ids cacheados en la app siguieron válidos tras la migración.
+- **Borrado lógico**: `archived=true` (nunca hard-delete); toda lectura filtra
+  `archived=false`.
+- **Fechas**: regla heredada — un ISO sin offset se interpreta como **UTC**
+  (`domain/wire.ts: parseUtc`). No cambiar: el dedup del backfill de la app
+  compara el reloj de pared de los primeros 16 chars.
+- Migración one-off de datos: `node scripts/migrate-notion.mjs` (idempotente;
+  requiere `NOTION_TOKEN` legado en `.env`).
 
 ## Auth
 
@@ -79,11 +97,22 @@ Todos protegidos con `Authorization: Bearer <jwt>` salvo los de `/auth`.
 | `POST /pickups` | `{title, courtId, dateTime?, maxPlayers?, vibe?, notes?, teamSize?, teamA/BName?, teamA/BColor?, teamA/BMembers?, targetScore?, accepted/declinedMembers?}` — el `inviteCode` de 5 dígitos lo genera el server | `Pickup` |
 | `POST /pickups/join` | `{code}` (5 dígitos) — entra al equipo con espacio (menos miembros primero) como aceptado | `Pickup` (404 código inválido / 403 propio, lleno, ya unido o expirado) |
 | `PATCH /pickups/:pageId` | mismos campos opcionales (update parcial; solo creador/miembro) — cubre aceptar/rechazar/mover/quitar/abandonar/reenviar | `Pickup` |
-| `DELETE /pickups/:pageId` | — (solo el creador) | `{ok}` — archiva pickup + chat asociado |
-| `POST /chats` | `{name, pickupId, date?, teamA/BName?, teamA/BColor?, lastMessage?}` | `CrewChat` (503 si `NOTION_DB_CHATS` no está configurada) |
+| `DELETE /pickups/:pageId` | — (solo el creador) | `{ok}` — archiva pickup + chat + mensajes |
+| `GET /pickups/:pageId/messages` | `?after=<ISO>` (opcional, polling incremental) — solo creador/miembro (403 si no) | `{messages: [{id, email, text, createdAt}]}` orden asc, máx 200 |
+| `POST /pickups/:pageId/messages` | `{text}` (1–500 chars) — solo creador/miembro | `{id, email, text, createdAt}` |
+| `POST /chats` | `{name, pickupId, date?, teamA/BName?, teamA/BColor?, lastMessage?}` | `CrewChat` (metadata del chat de crew) |
 
-Los MENSAJES de chat no pasan por acá: viven locales en la app. `/chats` es
-solo la metadata (ficha del chat de crew).
+El chat de pickups es **server-backed** (tabla `messages`): mensajes reales,
+polling incremental cada 4 s en la app. `/chats` sigue siendo solo la metadata.
+
+### Uploads (Supabase Storage)
+
+| Endpoint | Body | Devuelve |
+| --- | --- | --- |
+| `POST /uploads/court-image` | multipart `file` (webp/jpeg/png, máx 8 MB; la app comprime a WebP antes) | `{url}` pública del bucket `media` (503 si falta `SUPABASE_SERVICE_KEY`) |
+
+Sube con la service key server-side (bypassa RLS); la URL pública se guarda como
+texto en `courts.img`. La DB nunca ve bytes de imagen.
 
 ### Historial de partidos (ranking)
 

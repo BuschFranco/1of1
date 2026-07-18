@@ -13,7 +13,7 @@ import { IsBoolean, IsOptional, IsString } from 'class-validator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser } from '../auth/jwt.strategy';
-import { Profile } from '../notion/models';
+import { Profile } from '../domain/wire';
 import { ProfilesService } from './profiles.service';
 
 class SetHandleDto {

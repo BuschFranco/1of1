@@ -1,0 +1,227 @@
+// Schema de 1of1 — espejo 1:1 de las bases de Notion que reemplaza.
+// Convenciones heredadas del gateway (NO romper: la app depende de esto):
+//  - PKs string UUID: los pageId de Notion se migran como PK, así los JWT
+//    (sub/profileId) y los ids cacheados en la app siguen válidos.
+//  - Borrado lógico: archived=true (era archivePage) + WHERE NOT archived.
+//  - Selects de Notion = text plano (el código normaliza/defaultea).
+//  - Fechas: timestamptz; todo ISO sin offset se interpreta como UTC (regla
+//    heredada: Notion trataba la hora local naive de la app como +00:00).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // pooler (6543, pgbouncer)
+  directUrl = env("DIRECT_URL") // conexión directa (5432) para migrate
+}
+
+/// Credenciales (era DB Usuarios). email es la clave de negocio.
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @default("") @map("password_hash")
+  profileId    String   @map("profile_id")
+  isAdmin      Boolean  @default(false) @map("is_admin")
+  createdAt    DateTime @default(now()) @map("created_at")
+  archived     Boolean  @default(false)
+
+  @@map("users")
+}
+
+/// Perfil público del jugador (era DB Perfiles). Espejo del modelo de la app.
+model Profile {
+  id              String    @id @default(uuid())
+  name            String    @default("")
+  handle          String    @default("") // unicidad a nivel app (isHandleTaken)
+  phone           String    @default("")
+  city            String    @default("")
+  lat             Float     @default(0)
+  lng             Float     @default(0)
+  avatar          String    @default("") // URL externa
+  position        String    @default("")
+  height          Float     @default(0)
+  games           Int       @default(0)
+  courts          Int       @default(0)
+  streak          Int       @default(0)
+  points          Int       @default(0) // acumulado de por vida (nivel/logros)
+  rating          Float     @default(0)
+  userEmail       String    @default("") @map("user_email")
+  birthdate       DateTime?
+  clan            String    @default("") // insignia ≤4 chars (clave de clanes)
+  avatarColor     String    @default("") @map("avatar_color")
+  clanTextColor   String    @default("") @map("clan_text_color")
+  clanFont        String    @default("") @map("clan_font")
+  avatarFrame     String    @default("") @map("avatar_frame")
+  title           String    @default("") @map("equipped_title")
+  level           String    @default("")
+  unlockedBadges  String[]  @default([]) @map("unlocked_badges")
+  playSeconds     Int       @default(0) @map("play_seconds")
+  playTimeByCourt String    @default("") @map("play_time_by_court") // JSON string (wire tal cual)
+  shareStatus     Boolean   @default(false) @map("share_status")
+  shareCourt      Boolean   @default(false) @map("share_court")
+  shareTime       Boolean   @default(false) @map("share_time")
+  playing         Boolean   @default(false)
+  playingCourtId  String    @default("") @map("playing_court_id")
+  playingSince    DateTime? @map("playing_since")
+  lastPlayedCourtId String  @default("") @map("last_played_court_id")
+  lastPlayedAt    DateTime? @map("last_played_at")
+  showLastPlayed  Boolean   @default(false) @map("show_last_played")
+  clanJoinedAt    DateTime? @map("clan_joined_at")
+  archived        Boolean   @default(false)
+
+  @@index([userEmail])
+  @@index([handle])
+  @@index([clan])
+  @@map("profiles")
+}
+
+/// Cancha (era DB Canchas). Rating/Reviews son agregados denormalizados que
+/// mantiene la app; approval es el select de moderación (Sin definir/Aprobado/
+/// Desaprobado); status es open|busy|closed.
+model Court {
+  id              String   @id @default(uuid())
+  name            String   @default("")
+  area            String   @default("")
+  dist            String   @default("")
+  img             String   @default("") // URL externa
+  rating          Float    @default(0)
+  reviews         Int      @default(0)
+  type            String   @default("Exterior")
+  free            Boolean  @default(false)
+  lit             Boolean  @default(false)
+  hoops           Int      @default(1)
+  surface         String   @default("Asfalto")
+  status          String   @default("open")
+  players         Int      @default(0)
+  vibe            String   @default("Casual")
+  hours           String   @default("")
+  openTime        String   @default("") @map("open_time")
+  closeTime       String   @default("") @map("close_time")
+  badges          String[] @default([])
+  desc            String   @default("")
+  lat             Float    @default(0)
+  lng             Float    @default(0)
+  proposedBy      String   @default("") @map("created_by") // handle del autor
+  proposedByClan  String   @default("") @map("created_by_clan")
+  proposedByEmail String   @default("") @map("created_by_email")
+  approval        String   @default("")
+  archived        Boolean  @default(false)
+
+  @@index([approval])
+  @@index([proposedByEmail])
+  @@map("courts")
+}
+
+/// Reseña de cancha (era DB Reseñas).
+model Review {
+  id         String    @id @default(uuid())
+  courtId    String    @map("court_id")
+  userEmail  String    @map("user_email")
+  userHandle String    @default("") @map("user_handle")
+  rating     Float     @default(0)
+  comment    String    @default("")
+  createdAt  DateTime? @map("created_at")
+  archived   Boolean   @default(false)
+
+  @@index([courtId])
+  @@index([userEmail])
+  @@map("reviews")
+}
+
+/// Pickup game (era DB Partidos-pickup). Members son listas de emails.
+model Pickup {
+  id              String    @id @default(uuid())
+  title           String    @default("")
+  courtId         String    @default("") @map("court_id")
+  createdBy       String    @default("") @map("created_by") // email
+  dateTime        DateTime? @map("date_time")
+  maxPlayers      Int       @default(10) @map("max_players")
+  vibe            String    @default("Casual")
+  notes           String    @default("")
+  teamSize        Int       @default(3) @map("team_size")
+  teamAName       String    @default("Equipo A") @map("team_a_name")
+  teamBName       String    @default("Equipo B") @map("team_b_name")
+  teamAColor      String    @default("#FF6B1A") @map("team_a_color")
+  teamBColor      String    @default("#3B82F6") @map("team_b_color")
+  teamAMembers    String[]  @default([]) @map("team_a_members")
+  teamBMembers    String[]  @default([]) @map("team_b_members")
+  targetScore     Int       @default(21) @map("target_score")
+  acceptedMembers String[]  @default([]) @map("accepted_members")
+  declinedMembers String[]  @default([]) @map("declined_members")
+  inviteCode      String    @default("") @map("invite_code")
+  archived        Boolean   @default(false)
+
+  @@index([inviteCode])
+  @@index([createdBy])
+  @@map("pickups")
+}
+
+/// Amistad unidireccional (era DB Amistades).
+model Friend {
+  id           String   @id @default(uuid())
+  ownerEmail   String   @map("owner_email")
+  friendHandle String   @default("") @map("friend_handle")
+  friendName   String   @default("") @map("friend_name")
+  friendEmail  String   @default("") @map("friend_email")
+  createdAt    DateTime @default(now()) @map("created_at")
+  archived     Boolean  @default(false)
+
+  @@index([ownerEmail])
+  @@map("friends")
+}
+
+/// Partido jugado y resuelto (era DB Partidos): la fuente de rankings,
+/// conquistas y rey de cancha. `clan` queda congelado al momento de subir.
+model Match {
+  id        String   @id @default(uuid())
+  email     String
+  points    Int      @default(0)
+  endedAt   DateTime @map("ended_at")
+  courtId   String   @default("") @map("court_id")
+  courtName String   @default("") @map("court_name")
+  result    String   @default("")
+  seconds   Int      @default(0)
+  clan      String   @default("")
+  archived  Boolean  @default(false)
+
+  @@index([email])
+  @@index([courtId, endedAt])
+  @@index([endedAt])
+  @@index([clan])
+  @@map("matches")
+}
+
+/// Mensaje del chat de un pickup. Vive mientras viva el pickup (se archiva en
+/// cascada con él). El autor se identifica por email: los miembros de un
+/// pickup ya ven los emails de los demás, no expone nada nuevo.
+model Message {
+  id        String   @id @default(uuid())
+  pickupId  String   @map("pickup_id")
+  email     String
+  text      String
+  createdAt DateTime @default(now()) @map("created_at")
+  archived  Boolean  @default(false)
+
+  @@index([pickupId, createdAt])
+  @@map("messages")
+}
+
+/// Chat de crew asociado a un pickup (era DB Chats, feature opcional).
+model Chat {
+  id          String    @id @default(uuid())
+  name        String    @default("")
+  pickupId    String    @default("") @map("pickup_id")
+  createdBy   String    @default("") @map("created_by")
+  date        DateTime?
+  teamAName   String    @default("Equipo A") @map("team_a_name")
+  teamBName   String    @default("Equipo B") @map("team_b_name")
+  teamAColor  String    @default("#FF6B1A") @map("team_a_color")
+  teamBColor  String    @default("#3B82F6") @map("team_b_color")
+  lastMessage String    @default("") @map("last_message")
+  archived    Boolean   @default(false)
+
+  @@index([pickupId])
+  @@map("chats")
+}

@@ -5,9 +5,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../data/courts.dart';
+import '../services/api/api_client.dart';
 import '../services/courts_provider.dart';
 import '../services/geocoding_service.dart';
 import '../services/session.dart';
@@ -198,14 +201,34 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
     }
     if (!mounted) return;
 
+    // Foto: comprimir a WebP y subir a Storage; guardamos la URL pública.
+    // Si falla, abortamos el submit (el usuario reintenta o quita la foto).
+    var imgUrl = '';
+    if (_pickedImage != null) {
+      try {
+        final compressed = await _compressToWebp(_pickedImage!.path);
+        imgUrl = await ApiClient().uploadCourtImage(compressed);
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _submitted = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo subir la foto. Reintentá o quitala.',
+                style: AppText.grotesk(size: 13)),
+            backgroundColor: AppColors.bgElev,
+          ),
+        );
+        return;
+      }
+    }
+    if (!mounted) return;
+
     final court = Court(
       id: '',
       name: _nameCtrl.text.trim(),
       area: area,
       dist: '',
-      // TODO: subir _pickedImage a storage y guardar la URL acá. Por ahora la
-      // imagen elegida solo se previsualiza en el front y no se persiste.
-      img: '',
+      img: imgUrl,
       rating: 0,
       reviews: 0,
       type: _type,
@@ -646,6 +669,35 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
     );
   }
 
+  /// Comprime la imagen a WebP (calidad 80, máx 1280px) para bajar el peso
+  /// antes de subirla. Si el encoder WebP falla en el dispositivo, cae a JPEG.
+  /// Devuelve la ruta del archivo comprimido (en el dir temporal).
+  Future<String> _compressToWebp(String srcPath) async {
+    final dir = await getTemporaryDirectory();
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    Future<XFile?> attempt(CompressFormat fmt, String ext) =>
+        FlutterImageCompress.compressAndGetFile(
+          srcPath,
+          '${dir.path}/court_$stamp.$ext',
+          format: fmt,
+          quality: 80,
+          minWidth: 1280,
+          minHeight: 1280,
+        );
+    XFile? out;
+    try {
+      out = await attempt(CompressFormat.webp, 'webp');
+    } catch (_) {
+      out = null;
+    }
+    out ??= await attempt(CompressFormat.jpeg, 'jpg');
+    if (out == null) {
+      // Último recurso: subir el original tal cual lo dejó el picker.
+      return srcPath;
+    }
+    return out.path;
+  }
+
   Future<void> _pickImage(ImageSource source) async {
     try {
       final XFile? picked = await _picker.pickImage(
@@ -1065,7 +1117,7 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
                 child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.white(0.6)),
               )
             : Text(
-                'PUBLICAR CANCHA',
+                _pickedImage != null ? 'SUBIR Y PUBLICAR' : 'PUBLICAR CANCHA',
                 style: AppText.archivo(size: 14, weight: FontWeight.w900, letterSpacing: 0.04),
               ),
       ),

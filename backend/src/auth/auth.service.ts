@@ -7,13 +7,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { createHash } from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
-import {
-  appUserFromNotion,
-  profileFromNotion,
-  profileToNotionProps,
-  Profile,
-} from '../notion/models';
-import { NotionService } from '../notion/notion.service';
+import { Profile, profileWire } from '../domain/wire';
+import { PrismaService } from '../prisma/prisma.module';
 import { GoogleDto, LoginDto, RegisterDto } from './dto';
 import { JwtPayload } from './jwt.strategy';
 
@@ -28,11 +23,12 @@ export class AuthService {
     .filter((s) => s.length > 0);
 
   constructor(
-    private readonly notion: NotionService,
+    private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
   ) {}
 
-  /** Mismo esquema que la app Dart: sha256("<email_lowercase>:<password>") hex. */
+  /** Mismo esquema que siempre: sha256("<email_lowercase>:<password>") hex.
+   * Se mantiene para que los hashes migrados de Notion sigan funcionando. */
   private hash(email: string, password: string): string {
     return createHash('sha256')
       .update(`${email.toLowerCase()}:${password}`)
@@ -40,74 +36,76 @@ export class AuthService {
   }
 
   private sign(
-    userPageId: string,
+    userId: string,
     email: string,
     profileId: string,
     isAdmin: boolean,
   ): string {
-    const payload: JwtPayload = { sub: userPageId, email, profileId, isAdmin };
+    const payload: JwtPayload = { sub: userId, email, profileId, isAdmin };
     return this.jwt.sign(payload);
   }
 
   async login(dto: LoginDto): Promise<{ token: string; profile: Profile }> {
     const email = dto.email.trim().toLowerCase();
-    const rows = await this.notion.queryDatabase(this.notion.cfg.db.users, {
-      filter: NotionService.filterTitle('Email', email),
+    const user = await this.prisma.user.findFirst({
+      where: { email, archived: false },
     });
-    if (rows.length === 0) {
+    if (!user) {
       throw new UnauthorizedException('No existe una cuenta con ese email.');
     }
-    const user = appUserFromNotion(rows[0]);
     if (user.passwordHash !== this.hash(email, dto.password)) {
       throw new UnauthorizedException('Contraseña incorrecta.');
     }
-    const profilePage = await this.notion.retrievePage(user.profileId);
-    const profile = profileFromNotion(profilePage);
+    const profile = await this.prisma.profile.findUnique({
+      where: { id: user.profileId },
+    });
+    if (!profile) {
+      throw new UnauthorizedException('La cuenta no tiene perfil.');
+    }
     return {
-      token: this.sign(user.pageId, email, user.profileId, user.isAdmin),
-      profile,
+      token: this.sign(user.id, email, user.profileId, user.isAdmin),
+      profile: profileWire(profile),
     };
   }
 
   async register(dto: RegisterDto): Promise<{ token: string; profile: Profile }> {
     const email = dto.email.trim().toLowerCase();
-    const existing = await this.notion.queryDatabase(this.notion.cfg.db.users, {
-      filter: NotionService.filterTitle('Email', email),
+    const existing = await this.prisma.user.findFirst({
+      where: { email, archived: false },
     });
-    if (existing.length > 0) {
+    if (existing) {
       throw new ConflictException('Ya existe una cuenta con ese email.');
     }
 
     // El handle NO se autogenera: se define después en la pantalla de handle.
-    const profilePage = await this.notion.createPage(
-      this.notion.cfg.db.profiles,
-      profileToNotionProps({
-        name: dto.name.trim(),
-        handle: '',
-        city: (dto.city ?? '').trim(),
-        phone: (dto.phone ?? '').trim(),
-        birthdate: (dto.birthdate ?? '').trim(),
-        userEmail: email,
-      }),
-    );
-    const profileId = profilePage.id?.toString() ?? '';
-
-    const userPage = await this.notion.createPage(this.notion.cfg.db.users, {
-      Email: NotionService.title(email),
-      PasswordHash: NotionService.richText(this.hash(email, dto.password)),
-      ProfileId: NotionService.richText(profileId),
-      CreatedAt: NotionService.date(new Date().toISOString()),
+    const { profile, user } = await this.prisma.$transaction(async (tx) => {
+      const profile = await tx.profile.create({
+        data: {
+          name: dto.name.trim(),
+          city: (dto.city ?? '').trim(),
+          phone: (dto.phone ?? '').trim(),
+          birthdate: dto.birthdate ? new Date(`${dto.birthdate.trim()}T00:00:00Z`) : null,
+          userEmail: email,
+        },
+      });
+      const user = await tx.user.create({
+        data: {
+          email,
+          passwordHash: this.hash(email, dto.password),
+          profileId: profile.id,
+        },
+      });
+      return { profile, user };
     });
 
-    const profile = profileFromNotion(profilePage);
     return {
-      token: this.sign(userPage.id?.toString() ?? '', email, profileId, false),
-      profile,
+      token: this.sign(user.id, email, profile.id, false),
+      profile: profileWire(profile),
     };
   }
 
   /** Login/registro con Google: verifica el idToken server-side y hace
-   * find-or-create (mismo criterio que la app: PasswordHash = 'google:'). */
+   * find-or-create (mismo criterio que siempre: PasswordHash = 'google:'). */
   async google(dto: GoogleDto): Promise<{ token: string; profile: Profile }> {
     let payload: Record<string, any> | undefined;
     try {
@@ -129,38 +127,35 @@ export class AuthService {
     const avatarUrl = (payload?.picture ?? '').toString();
 
     // ¿Ya existe? → login directo.
-    const existing = await this.notion.queryDatabase(this.notion.cfg.db.users, {
-      filter: NotionService.filterTitle('Email', email),
+    const existing = await this.prisma.user.findFirst({
+      where: { email, archived: false },
     });
-    if (existing.length > 0) {
-      const user = appUserFromNotion(existing[0]);
-      const profilePage = await this.notion.retrievePage(user.profileId);
+    if (existing) {
+      const profile = await this.prisma.profile.findUnique({
+        where: { id: existing.profileId },
+      });
+      if (!profile) {
+        throw new UnauthorizedException('La cuenta no tiene perfil.');
+      }
       return {
-        token: this.sign(user.pageId, email, user.profileId, user.isAdmin),
-        profile: profileFromNotion(profilePage),
+        token: this.sign(existing.id, email, existing.profileId, existing.isAdmin),
+        profile: profileWire(profile),
       };
     }
 
     // Nuevo: crear Profile + User (PasswordHash 'google:').
-    const profilePage = await this.notion.createPage(
-      this.notion.cfg.db.profiles,
-      profileToNotionProps({
-        name: name.trim(),
-        handle: '',
-        avatar: avatarUrl,
-        userEmail: email,
-      }),
-    );
-    const profileId = profilePage.id?.toString() ?? '';
-    const userPage = await this.notion.createPage(this.notion.cfg.db.users, {
-      Email: NotionService.title(email),
-      PasswordHash: NotionService.richText('google:'),
-      ProfileId: NotionService.richText(profileId),
-      CreatedAt: NotionService.date(new Date().toISOString()),
+    const { profile, user } = await this.prisma.$transaction(async (tx) => {
+      const profile = await tx.profile.create({
+        data: { name: name.trim(), avatar: avatarUrl, userEmail: email },
+      });
+      const user = await tx.user.create({
+        data: { email, passwordHash: 'google:', profileId: profile.id },
+      });
+      return { profile, user };
     });
     return {
-      token: this.sign(userPage.id?.toString() ?? '', email, profileId, false),
-      profile: profileFromNotion(profilePage),
+      token: this.sign(user.id, email, profile.id, false),
+      profile: profileWire(profile),
     };
   }
 }

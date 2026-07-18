@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -5,6 +6,7 @@ import '../data/achievements.dart';
 import '../data/cosmetics.dart';
 import '../data/courts.dart';
 import '../data/models.dart';
+import '../services/api/api_client.dart';
 import '../services/courts_provider.dart';
 import '../services/pickups_provider.dart';
 import '../services/profiles_provider.dart';
@@ -26,11 +28,111 @@ class PickupChatScreen extends StatefulWidget {
 }
 
 class _PickupChatScreenState extends State<PickupChatScreen> {
-  bool _infoOpen = true; // arranca desplegado para que la info sea visible
+  bool _infoOpen = false; // el chat es el protagonista; la info arranca colapsada
   bool _busy = false;
+
+  // ── Chat ──────────────────────────────────────────────────────────────────
+  final _api = ApiClient();
+  final List<ChatMessage> _messages = [];
+  final Set<String> _seenIds = {};
+  final TextEditingController _msgCtrl = TextEditingController();
+  final ScrollController _scrollCtrl = ScrollController();
+  Timer? _poll;
+  bool _loadingMsgs = true;
+  bool _sending = false;
+  String _lastIso = ''; // createdAt del último mensaje traído (polling incremental)
 
   String get _myEmail =>
       (context.read<Session>().email ?? '').trim().toLowerCase();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMessages(initial: true);
+    // Polling incremental cada 4s mientras la pantalla está montada. Sin
+    // websockets: consistente con la arquitectura REST y suficiente para beta.
+    _poll = Timer.periodic(
+      const Duration(seconds: 4),
+      (_) => _loadMessages(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    _msgCtrl.dispose();
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadMessages({bool initial = false}) async {
+    try {
+      final rows = await _api.pickupMessages(
+        widget.pickupId,
+        sinceIso: _lastIso.isEmpty ? null : _lastIso,
+      );
+      if (!mounted) return;
+      var added = false;
+      for (final r in rows) {
+        final m = ChatMessage.fromApi(r);
+        if (m.id.isEmpty || _seenIds.contains(m.id)) continue;
+        _seenIds.add(m.id);
+        _messages.add(m);
+        if (m.createdAt.compareTo(_lastIso) > 0) _lastIso = m.createdAt;
+        added = true;
+      }
+      if (initial || added) {
+        setState(() => _loadingMsgs = false);
+        if (added) _scrollToBottom();
+      } else if (_loadingMsgs) {
+        setState(() => _loadingMsgs = false);
+      }
+    } catch (_) {
+      // Sin conexión / 403: dejamos lo que haya. El polling reintenta.
+      if (mounted && _loadingMsgs) setState(() => _loadingMsgs = false);
+    }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollCtrl.hasClients) {
+        _scrollCtrl.animateTo(
+          _scrollCtrl.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  Future<void> _sendMessage() async {
+    final text = _msgCtrl.text.trim();
+    if (text.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    try {
+      final res = await _api.sendPickupMessage(widget.pickupId, text);
+      final m = ChatMessage.fromApi(res);
+      if (!mounted) return;
+      _msgCtrl.clear();
+      if (m.id.isNotEmpty && !_seenIds.contains(m.id)) {
+        _seenIds.add(m.id);
+        _messages.add(m);
+        if (m.createdAt.compareTo(_lastIso) > 0) _lastIso = m.createdAt;
+      }
+      setState(() => _sending = false);
+      _scrollToBottom();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _sending = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo enviar. Reintentá.',
+              style: AppText.grotesk(size: 13)),
+          backgroundColor: AppColors.bgElev,
+        ),
+      );
+    }
+  }
 
   Color _hex(String hex) {
     try {
@@ -134,9 +236,10 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
       ),
       body: Column(
         children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          // Panel de info colapsable, fijo arriba (no scrollea con el chat).
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Column(
               children: [
                 _infoHeader(pickup),
                 AnimatedSize(
@@ -147,12 +250,11 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
                       ? _infoPanel(pickup, isCreator)
                       : const SizedBox.shrink(),
                 ),
-                const SizedBox(height: 20),
-                _chatPlaceholder(),
               ],
             ),
           ),
-          _disabledInputBar(),
+          Expanded(child: _chatBody(pickup)),
+          _inputBar(),
         ],
       ),
     );
@@ -548,53 +650,189 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
     );
   }
 
-  Widget _chatPlaceholder() {
-    return Column(
-      children: [
-        const SizedBox(height: 24),
-        Icon(Icons.forum_outlined, size: 32, color: AppColors.white(0.2)),
-        const SizedBox(height: 10),
-        Text('El chat en vivo llega pronto',
-            style: AppText.grotesk(
-                size: 13, weight: FontWeight.w700, color: AppColors.white(0.5))),
-        const SizedBox(height: 4),
-        Text('Por ahora podés ver y organizar el pickup desde la info de arriba.',
-            textAlign: TextAlign.center,
-            style: AppText.grotesk(size: 12, color: AppColors.white(0.35))),
-      ],
+  /// Cuerpo del chat: lista de burbujas (más nuevo abajo). Loader en la carga
+  /// inicial; estado vacío cuando aún no hay mensajes.
+  Widget _chatBody(Pickup pickup) {
+    if (_loadingMsgs && _messages.isEmpty) {
+      return Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+              strokeWidth: 2, color: AppColors.accent),
+        ),
+      );
+    }
+    if (_messages.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.forum_outlined, size: 32, color: AppColors.white(0.2)),
+              const SizedBox(height: 10),
+              Text('Todavía no hay mensajes',
+                  style: AppText.grotesk(
+                      size: 13,
+                      weight: FontWeight.w700,
+                      color: AppColors.white(0.5))),
+              const SizedBox(height: 4),
+              Text('Arrancá la conversación con tu equipo.',
+                  textAlign: TextAlign.center,
+                  style:
+                      AppText.grotesk(size: 12, color: AppColors.white(0.35))),
+            ],
+          ),
+        ),
+      );
+    }
+    return ListView.builder(
+      controller: _scrollCtrl,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      itemCount: _messages.length,
+      itemBuilder: (_, i) => _bubble(pickup, _messages[i]),
     );
   }
 
-  // Barra de input DESHABILITADA: comunica que todavía no se puede escribir.
-  Widget _disabledInputBar() {
+  /// Burbuja de un mensaje. Las mías a la derecha en acento; las ajenas a la
+  /// izquierda con el nombre del autor tintado con el color de SU equipo.
+  Widget _bubble(Pickup pickup, ChatMessage m) {
+    final isMe = m.email.trim().toLowerCase() == _myEmail;
+    final team = pickup.teamOf(m.email);
+    final teamColor = team == 'A'
+        ? _hex(pickup.teamAColor)
+        : team == 'B'
+            ? _hex(pickup.teamBColor)
+            : AppColors.white(0.6);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment:
+            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          Flexible(
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.75,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isMe ? AppColors.accent : AppColors.card,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(14),
+                  topRight: const Radius.circular(14),
+                  bottomLeft: Radius.circular(isMe ? 14 : 4),
+                  bottomRight: Radius.circular(isMe ? 4 : 14),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!isMe)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Text(
+                        _memberName(m.email),
+                        style: AppText.grotesk(
+                            size: 11,
+                            weight: FontWeight.w800,
+                            color: teamColor),
+                      ),
+                    ),
+                  Text(
+                    m.text,
+                    style: AppText.grotesk(
+                      size: 14,
+                      color: isMe ? Colors.black : Colors.white,
+                      height: 1.3,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _timeLabel(m.createdAtMillis),
+                    style: AppText.grotesk(
+                      size: 9,
+                      color: isMe ? Colors.black.withAlpha(120) : AppColors.white(0.35),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _timeLabel(int millis) {
+    if (millis == 0) return '';
+    final d = DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
+    final h = d.hour.toString().padLeft(2, '0');
+    final m = d.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  /// Barra de input real: TextField pill + botón enviar.
+  Widget _inputBar() {
     return SafeArea(
       top: false,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
         decoration: BoxDecoration(
           color: AppColors.bg,
           border: Border(top: BorderSide(color: AppColors.line, width: 1)),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
                 decoration: BoxDecoration(
-                  color: AppColors.white(0.05),
+                  color: AppColors.card,
                   borderRadius: BorderRadius.circular(AppShape.rBtn),
                 ),
-                child: Row(
-                  children: [
-                    Icon(Icons.lock_outline,
-                        size: 15, color: AppColors.white(0.3)),
-                    const SizedBox(width: 8),
-                    Text('El chat todavía no está disponible',
-                        style: AppText.grotesk(
-                            size: 12, color: AppColors.white(0.3))),
-                  ],
+                child: TextField(
+                  controller: _msgCtrl,
+                  minLines: 1,
+                  maxLines: 4,
+                  maxLength: 500,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => _sendMessage(),
+                  cursorColor: AppColors.accent,
+                  style: AppText.grotesk(size: 14, color: Colors.white),
+                  decoration: InputDecoration(
+                    counterText: '',
+                    border: InputBorder.none,
+                    isDense: true,
+                    hintText: 'Escribí un mensaje…',
+                    hintStyle:
+                        AppText.grotesk(size: 14, color: AppColors.white(0.35)),
+                  ),
                 ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            PressableWidget(
+              onTap: _sending ? null : _sendMessage,
+              child: Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.accent,
+                  borderRadius: BorderRadius.circular(AppShape.rBtn),
+                ),
+                child: _sending
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.black),
+                      )
+                    : const Icon(Icons.send_rounded,
+                        size: 20, color: Colors.black),
               ),
             ),
           ],
