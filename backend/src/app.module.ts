@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { ClansModule } from './clans/clans.module';
 import { CourtsModule } from './courts/courts.module';
+import { HealthModule } from './health/health.module';
 import { FriendsModule } from './friends/friends.module';
 import { MatchesModule } from './matches/matches.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -24,6 +25,7 @@ import { UploadsModule } from './uploads/uploads.module';
     ClansModule,
     RankingsModule,
     UploadsModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

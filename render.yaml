@@ -1,0 +1,34 @@
+# Blueprint de Render para el backend de 1of1 (NestJS + Prisma → Supabase).
+# En el dashboard: New → Blueprint → conectar el repo → Render lee este archivo.
+# Las env vars marcadas sync:false NO viven en el repo: se cargan a mano en el
+# dashboard (son secretas). PORT lo inyecta Render automáticamente.
+services:
+  - type: web
+    name: oneofone-backend
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && node dist/main.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_EXPIRES_IN
+        value: 30d
+      - key: CORS_ORIGIN
+        value: "*"
+      # Secretas: cargar el valor en el dashboard (mismos del .env local).
+      - key: DATABASE_URL # pooler Supabase :6543 (?pgbouncer=true), password percent-encodeada
+        sync: false
+      - key: DIRECT_URL # pooler Supabase :5432, para prisma migrate
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_IDS
+        sync: false
