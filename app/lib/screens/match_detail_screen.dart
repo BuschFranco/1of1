@@ -640,6 +640,12 @@ class _ShareCard extends StatelessWidget {
             Text(court!.area,
                 style: AppText.grotesk(size: 28, color: AppColors.white(0.5))),
           ],
+          // Exterior/Interior: mismo dato que ya se muestra en el detalle de
+          // cancha (court.type), acá como chip con ícono para la imagen.
+          if (court != null && court!.type.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _shareTypeBadge(court!.type),
+          ],
           const SizedBox(height: 24),
           Text(
             '${_fmtDate(ended)} · ${ended.hour.toString().padLeft(2, '0')}:${ended.minute.toString().padLeft(2, '0')}',
@@ -690,6 +696,35 @@ class _ShareCard extends StatelessWidget {
                   color: AppColors.white(0.3),
                   letterSpacing: 0.06)),
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  /// Chip con el tipo de cancha (Exterior/Interior/lo que sea que traiga el
+  /// backend) para la imagen de compartir. Ícono de sol para exterior, techo
+  /// para cualquier otro valor (interior u otros que se agreguen a futuro).
+  Widget _shareTypeBadge(String type) {
+    final isOutdoor = type.toLowerCase() == 'exterior';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.white(0.06),
+        borderRadius: BorderRadius.circular(AppShape.rChip),
+        border: Border.all(color: AppColors.white(0.14)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(isOutdoor ? Icons.wb_sunny_outlined : Icons.home_outlined,
+              size: 26, color: AppColors.white(0.7)),
+          const SizedBox(width: 10),
+          Text(type.toUpperCase(),
+              style: AppText.grotesk(
+                  size: 24,
+                  weight: FontWeight.w700,
+                  color: AppColors.white(0.7),
+                  letterSpacing: 0.08)),
         ],
       ),
     );

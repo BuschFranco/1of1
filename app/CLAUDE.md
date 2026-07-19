@@ -117,15 +117,16 @@ es quien habla con Notion (y quien asegura el schema al arrancar, en
   falta/venció, deja `presence_dirty` y el isolate principal reconcilia.
 - Sin `API_BASE_URL` la app degrada a modo offline (listas vacías, sin red).
 
-### Beta LAN (hosting actual)
+### Hosting (producción)
 
-El backend corre en la PC del dev (`http://<ip-lan>:3000`). Piezas involucradas:
-- `backend/.env` (token de Notion, JWT_SECRET, GOOGLE_CLIENT_IDS).
-- Regla de firewall Windows "1of1-backend-3000" (puerto 3000 TCP in).
-- `app/android/.../res/xml/network_security_config.xml`: permite HTTP SOLO a la
-  IP LAN (Android bloquea cleartext por default). **Si cambia la IP** hay que
-  tocar ese XML + `dart_defines.json` y recompilar → conviene reservar la IP en
-  el router. Con hosting TLS futuro, borrar el XML y el atributo del manifest.
+El backend corre en **Render** (`https://oneofone-backend.onrender.com`, HTTPS),
+con la base en **Supabase Postgres**. `dart_defines.json` apunta ahí. Ya no hay
+cleartext ni IP LAN: se borró `network_security_config.xml` y su atributo en
+`AndroidManifest.xml`. El free tier de Render duerme tras ~15 min sin tráfico
+(cold start ~30-60s); mitigado con un ping keep-alive externo a `GET /health`
+cada ~10 min (cron-job.org u otro). Variables de entorno del backend en el
+dashboard de Render (no en un `.env` de producción). Deploy: push a `main` →
+Render redeploya solo (lee `render.yaml` en la raíz del repo).
 
 ---
 

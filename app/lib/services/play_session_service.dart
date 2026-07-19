@@ -2504,8 +2504,16 @@ class PlaySession {
     this.fromWorkout = false,
   });
 
+  /// Si mostrar la franja de métricas físicas en el historial. Exige que haya
+  /// existido una SESIÓN DE ENTRENAMIENTO real del reloj ([fromWorkout]) —
+  /// no importa si fue básquet, otro tipo, o ninguna se detectó: sin sesión,
+  /// no hay "datos del reloj" confiables. Pasos/distancia/calorías pueden
+  /// venir del podómetro del propio celular (o de la estimación de último
+  /// recurso en [withEstimates]) sin ningún wearable conectado; mostrarlos
+  /// como si fueran del reloj sería engañoso.
   bool get hasHealth =>
-      calories > 0 || steps > 0 || avgHr != null || distance > 0;
+      fromWorkout &&
+      (calories > 0 || steps > 0 || avgHr != null || distance > 0);
 
   /// ¿Faltan las métricas principales? El wearable sincroniza Health Connect
   /// por partes: puede haber pasos/pulso ya escritos y calorías/distancia aún

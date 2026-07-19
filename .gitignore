@@ -7,6 +7,13 @@
 **/.env
 .env
 
+# Firma de release de Android (Play Store): NUNCA versionar la keystore ni sus
+# contraseñas. Sin esto no se puede volver a firmar actualizaciones de la app.
+**/key.properties
+**/*.jks
+**/*.keystore
+/backup-keystore-NO-BORRAR/
+
 # OS
 .DS_Store
 Thumbs.db

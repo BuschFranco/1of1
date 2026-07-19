@@ -11,6 +11,15 @@ val localProps = Properties()
 val localPropsFile = rootProject.file("local.properties")
 if (localPropsFile.exists()) localPropsFile.inputStream().use { localProps.load(it) }
 
+// Firma de release (Play Store): key.properties es local y gitignored (NUNCA
+// versionar la keystore ni sus contraseñas). Sin él, el release cae al
+// signing de debug (sirve para `flutter run --release` en dev, pero un AAB
+// firmado con debug NO lo acepta Play Store).
+val keystoreProps = Properties()
+val keystorePropsFile = rootProject.file("key.properties")
+val hasReleaseSigning = keystorePropsFile.exists()
+if (hasReleaseSigning) keystorePropsFile.inputStream().use { keystoreProps.load(it) }
+
 // API key del mapa nativo. Fuente única: dart_defines.json (la misma que usa
 // `--dart-define-from-file`). local.properties la puede sobreescribir por equipo.
 fun resolveMapsApiKey(): String {
@@ -58,11 +67,27 @@ android {
         manifestPlaceholders["MAPS_API_KEY"] = resolveMapsApiKey()
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Con key.properties presente (release real / Play Store), firma con la
+            // upload key. Sin él (checkout nuevo sin la keystore), cae a debug para
+            // que `flutter run --release` siga andando en desarrollo.
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
