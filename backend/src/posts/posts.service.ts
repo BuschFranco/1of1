@@ -17,7 +17,7 @@ export class PostsService {
     limit = 20,
     cursor?: string,
   ): Promise<{ items: CourtPost[]; nextCursor: string | null }> {
-    const rows = await this.prisma.courtPost.findMany({
+    const rows: any[] = await this.prisma.courtPost.findMany({
       where: {
         courtId,
         archived: false,
@@ -41,15 +41,15 @@ export class PostsService {
           ? { where: { userEmail: userEmail.trim().toLowerCase() }, select: { id: true } }
           : false,
       },
-    }) as any[];
+    } as any);
 
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
     const nextCursor = hasMore ? items[items.length - 1].createdAt.toISOString() : null;
 
     return {
-      items: items.map((r) => {
-        const comments = r.comments.map((c) =>
+      items: items.map((r: any) => {
+        const comments = r.comments.map((c: any) =>
           postCommentWire(
             c,
             c._count.likes,
@@ -184,11 +184,16 @@ export class PostsService {
 
   /** Eliminar publicación (solo el autor o admin). */
   async remove(postId: string): Promise<void> {
+    const commentIds = (await this.prisma.postComment.findMany({
+      where: { postId },
+      select: { id: true },
+    })).map(c => c.id);
+
     await this.prisma.$transaction([
       this.prisma.postLike.deleteMany({ where: { postId } }),
-      this.prisma.postCommentLike.deleteMany({
-        where: { comment: { postId } },
-      }),
+      ...(commentIds.length > 0
+        ? [this.prisma.commentLike.deleteMany({ where: { commentId: { in: commentIds } } })]
+        : []),
       this.prisma.postComment.deleteMany({ where: { postId } }),
       this.prisma.courtPost.updateMany({
         where: { id: postId },
