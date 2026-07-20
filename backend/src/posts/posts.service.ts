@@ -27,16 +27,32 @@ export class PostsService {
       orderBy: { createdAt: 'desc' },
       take: limit + 1,
       include: {
-        comments: {
-          where: { archived: false },
-          orderBy: { createdAt: 'asc' },
-          include: {
-            _count: { select: { likes: true } },
-            ...(email ? { likes: { where: { userEmail: email }, select: { id: true } } } : {}),
-          },
-        },
         _count: { select: { likes: true } },
-        ...(email ? { likes: { where: { userEmail: email }, select: { id: true } } } : {}),
+        ...(email
+          ? {
+              likes: {
+                where: { userEmail: email },
+                select: { id: true },
+              },
+              comments: {
+                where: { archived: false },
+                orderBy: { createdAt: 'asc' },
+                include: {
+                  _count: { select: { likes: true } },
+                  likes: {
+                    where: { userEmail: email },
+                    select: { id: true },
+                  },
+                },
+              },
+            }
+          : {
+              comments: {
+                where: { archived: false },
+                orderBy: { createdAt: 'asc' },
+                include: { _count: { select: { likes: true } } },
+              },
+            }),
       },
     } as any);
 

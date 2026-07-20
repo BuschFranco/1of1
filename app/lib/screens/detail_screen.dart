@@ -1386,7 +1386,8 @@ class _PostsSectionState extends State<_PostsSection> {
       final list = rows.map<CourtPost>((r) => CourtPost.fromApi(r)).toList();
       if (mounted) setState(() => posts = list);
       return list;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('courtPosts fetch error: $e');
       return [];
     }
   }
