@@ -17,6 +17,7 @@ export class PostsService {
     limit = 20,
     cursor?: string,
   ): Promise<{ items: CourtPost[]; nextCursor: string | null }> {
+    const email = userEmail?.trim().toLowerCase();
     const rows: any[] = await this.prisma.courtPost.findMany({
       where: {
         courtId,
@@ -31,15 +32,11 @@ export class PostsService {
           orderBy: { createdAt: 'asc' },
           include: {
             _count: { select: { likes: true } },
-            likes: userEmail
-              ? { where: { userEmail: userEmail.trim().toLowerCase() }, select: { id: true } }
-              : false,
+            ...(email ? { likes: { where: { userEmail: email }, select: { id: true } } } : {}),
           },
         },
         _count: { select: { likes: true } },
-        likes: userEmail
-          ? { where: { userEmail: userEmail.trim().toLowerCase() }, select: { id: true } }
-          : false,
+        ...(email ? { likes: { where: { userEmail: email }, select: { id: true } } } : {}),
       },
     } as any);
 
@@ -49,16 +46,16 @@ export class PostsService {
 
     return {
       items: items.map((r: any) => {
-        const comments = r.comments.map((c: any) =>
+        const comments = (r.comments || []).map((c: any) =>
           postCommentWire(
             c,
-            c._count.likes,
+            c._count?.likes ?? 0,
             Array.isArray(c.likes) && c.likes.length > 0,
           ),
         );
         return courtPostWire(
           r,
-          r._count.likes,
+          r._count?.likes ?? 0,
           Array.isArray(r.likes) && r.likes.length > 0,
           comments,
         );
