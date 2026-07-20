@@ -18,7 +18,12 @@ export class PostsService {
     cursor?: string,
   ): Promise<{ items: CourtPost[]; nextCursor: string | null }> {
     const email = userEmail?.trim().toLowerCase();
-    const rows: any[] = await this.prisma.courtPost.findMany({
+
+    // Los modelos de posts/comentarios/likes se relacionan solo por IDs
+    // escalares (postId, commentId) — no hay `@relation` en el schema, así que
+    // no se puede usar `include`. Traemos los posts y después resolvemos likes y
+    // comentarios con consultas separadas por ID (mismo patrón que `remove`).
+    const rows = await this.prisma.courtPost.findMany({
       where: {
         courtId,
         archived: false,
@@ -26,56 +31,94 @@ export class PostsService {
       },
       orderBy: { createdAt: 'desc' },
       take: limit + 1,
-      include: {
-        _count: { select: { likes: true } },
-        ...(email
-          ? {
-              likes: {
-                where: { userEmail: email },
-                select: { id: true },
-              },
-              comments: {
-                where: { archived: false },
-                orderBy: { createdAt: 'asc' },
-                include: {
-                  _count: { select: { likes: true } },
-                  likes: {
-                    where: { userEmail: email },
-                    select: { id: true },
-                  },
-                },
-              },
-            }
-          : {
-              comments: {
-                where: { archived: false },
-                orderBy: { createdAt: 'asc' },
-                include: { _count: { select: { likes: true } } },
-              },
-            }),
-      },
-    } as any);
+    });
 
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
     const nextCursor = hasMore ? items[items.length - 1].createdAt.toISOString() : null;
 
+    if (items.length === 0) {
+      return { items: [], nextCursor };
+    }
+
+    const postIds = items.map((p) => p.id);
+
+    // Likes de los posts: conteo por post + cuáles likeó el usuario actual.
+    const postLikeGroups = await this.prisma.postLike.groupBy({
+      by: ['postId'],
+      where: { postId: { in: postIds } },
+      _count: true,
+    });
+    const postLikeCount = new Map<string, number>(
+      postLikeGroups.map((g) => [g.postId, g._count]),
+    );
+    const myPostLikes = email
+      ? new Set(
+          (
+            await this.prisma.postLike.findMany({
+              where: { postId: { in: postIds }, userEmail: email },
+              select: { postId: true },
+            })
+          ).map((l) => l.postId),
+        )
+      : new Set<string>();
+
+    // Comentarios (no archivados) de todos los posts de esta página.
+    const commentRows = await this.prisma.postComment.findMany({
+      where: { postId: { in: postIds }, archived: false },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Likes de esos comentarios: conteo + cuáles likeó el usuario actual.
+    const commentIds = commentRows.map((c) => c.id);
+    const commentLikeCount = new Map<string, number>();
+    let myCommentLikes = new Set<string>();
+    if (commentIds.length > 0) {
+      const commentLikeGroups = await this.prisma.commentLike.groupBy({
+        by: ['commentId'],
+        where: { commentId: { in: commentIds } },
+        _count: true,
+      });
+      for (const g of commentLikeGroups) {
+        commentLikeCount.set(g.commentId, g._count);
+      }
+      if (email) {
+        myCommentLikes = new Set(
+          (
+            await this.prisma.commentLike.findMany({
+              where: { commentId: { in: commentIds }, userEmail: email },
+              select: { commentId: true },
+            })
+          ).map((l) => l.commentId),
+        );
+      }
+    }
+
+    // Agrupar comentarios por post (ya vienen ordenados por createdAt asc).
+    const commentsByPost = new Map<string, PostComment[]>();
+    for (const c of commentRows) {
+      const wire = postCommentWire(
+        c,
+        commentLikeCount.get(c.id) ?? 0,
+        myCommentLikes.has(c.id),
+      );
+      const list = commentsByPost.get(c.postId);
+      if (list) {
+        list.push(wire);
+      } else {
+        commentsByPost.set(c.postId, [wire]);
+      }
+    }
+
     return {
-      items: items.map((r: any) => {
-        const comments = (r.comments || []).map((c: any) =>
-          postCommentWire(
-            c,
-            c._count?.likes ?? 0,
-            Array.isArray(c.likes) && c.likes.length > 0,
-          ),
-        );
-        return courtPostWire(
+      items: items.map((r) =>
+        courtPostWire(
           r,
-          r._count?.likes ?? 0,
-          Array.isArray(r.likes) && r.likes.length > 0,
-          comments,
-        );
-      }),
+          postLikeCount.get(r.id) ?? 0,
+          myPostLikes.has(r.id),
+          commentsByPost.get(r.id) ?? [],
+        ),
+      ),
       nextCursor,
     };
   }

@@ -1387,8 +1387,11 @@ class _PostsSectionState extends State<_PostsSection> {
       if (mounted) setState(() => posts = list);
       return list;
     } catch (e) {
+      // No tragar el error: relanzar para que el FutureBuilder muestre el
+      // estado de error (con reintento) en vez de confundirlo con "no hay
+      // publicaciones". Antes esto devolvía [] y ocultaba fallos reales.
       debugPrint('courtPosts fetch error: $e');
-      return [];
+      rethrow;
     }
   }
 
@@ -1417,6 +1420,46 @@ class _PostsSectionState extends State<_PostsSection> {
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: AppColors.white(0.4)),
                   ),
+                ),
+              );
+            }
+            if (snap.hasError) {
+              return Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(AppShape.rCard),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'No se pudieron cargar las publicaciones.',
+                      style: AppText.grotesk(
+                          size: 13, color: AppColors.white(0.7)),
+                    ),
+                    const SizedBox(height: 10),
+                    GestureDetector(
+                      onTap: _refresh,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.refresh,
+                              size: 16, color: AppColors.accent),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Reintentar',
+                            style: AppText.grotesk(
+                                size: 13,
+                                weight: FontWeight.w700,
+                                color: AppColors.accent),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               );
             }
