@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../data/achievements.dart';
 import '../data/cosmetics.dart';
 import '../data/courts.dart';
@@ -356,6 +358,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _profileView(Profile profile) {
+    final ps = context.watch<PlaySessionService>();
     return ListView(
       padding: const EdgeInsets.only(top: 4, bottom: 180),
       clipBehavior: Clip.none,
@@ -542,6 +545,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: _statsGrid(),
           ),
         ),
+        if (ps.hasHealthStats) ...[
+          const SizedBox(height: 16),
+          RevealOnScroll(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: _healthStatsCard(ps),
+            ),
+          ),
+          const SizedBox(height: 16),
+          RevealOnScroll(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: _healthTrendsCard(ps),
+            ),
+          ),
+        ],
+        if (ps.hasUserStats) ...[
+          const SizedBox(height: 16),
+          RevealOnScroll(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: _userStatsCard(ps),
+            ),
+          ),
+        ],
         const SizedBox(height: 24),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1047,6 +1075,388 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   PlayStats _stats() => _statsOf(context.watch<PlaySessionService>());
 
+  /// Card de stats de salud: muestra métricas agregadas del reloj/anillo.
+  /// Solo visible si hay health habilitado y al menos un partido con datos.
+  Widget _healthStatsCard(PlaySessionService ps) {
+    Widget stat(String label, String value, IconData icon, Color color) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 13, color: color),
+                const SizedBox(width: 6),
+                Text(label.toUpperCase(),
+                    style: AppText.grotesk(
+                        size: 9.5,
+                        weight: FontWeight.w700,
+                        color: AppColors.white(0.45),
+                        letterSpacing: 0.1)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(value,
+                style: AppText.archivo(
+                    size: 20,
+                    weight: FontWeight.w900,
+                    height: 1.0,
+                    color: AppColors.ink)),
+          ],
+        ),
+      );
+    }
+
+    Widget hDiv() => Container(height: 1, color: AppColors.white(0.06));
+
+    // Formateo de distancia: metros a km con 1 decimal.
+    String fmtDistance(double meters) {
+      if (meters >= 1000) {
+        return '${(meters / 1000).toStringAsFixed(1)} km';
+      }
+      return '${meters.round()} m';
+    }
+
+    // Formateo de pasos: abreviar si es > 1000.
+    String fmtSteps(int steps) {
+      if (steps >= 1000) {
+        return '${(steps / 1000).toStringAsFixed(1)}k';
+      }
+      return '$steps';
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Row(
+              children: [
+                Icon(Icons.favorite, size: 14, color: AppColors.accent),
+                const SizedBox(width: 8),
+                Text('SALUD',
+                    style: AppText.grotesk(
+                        size: 11,
+                        weight: FontWeight.w700,
+                        color: AppColors.white(0.5),
+                        letterSpacing: 0.1)),
+                const Spacer(),
+                Text(
+                    '${ps.healthMatches} de ${ps.totalPlays}',
+                    style: AppText.grotesk(
+                        size: 11,
+                        color: AppColors.white(0.35))),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                Expanded(
+                    child: stat('Calorías',
+                        '${ps.totalCalories.round()}', Icons.local_fire_department,
+                        const Color(0xFFFF6B1A))),
+                Container(width: 1, color: AppColors.white(0.06)),
+                Expanded(
+                    child: stat('Prom. cardíaco',
+                        ps.avgHeartRate != null ? '${ps.avgHeartRate}' : '—',
+                        Icons.favorite,
+                        const Color(0xFFEF4444))),
+              ],
+            ),
+          ),
+          hDiv(),
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                Expanded(
+                    child: stat('Máx. cardíaco',
+                        ps.maxHeartRate > 0 ? '${ps.maxHeartRate}' : '—',
+                        Icons.monitor_heart,
+                        const Color(0xFFF43F5E))),
+                Container(width: 1, color: AppColors.white(0.06)),
+                Expanded(
+                    child: stat('Pasos',
+                        fmtSteps(ps.totalSteps),
+                        Icons.directions_walk,
+                        const Color(0xFF22C55E))),
+              ],
+            ),
+          ),
+          hDiv(),
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                Expanded(
+                    child: stat('Distancia',
+                        fmtDistance(ps.totalDistanceMeters),
+                        Icons.straighten,
+                        const Color(0xFF3B82F6))),
+                const Expanded(child: SizedBox()),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Gráficas de tendencias de salud: barras de calorías y líneas de bpm
+  /// de los últimos partidos con datos.
+  Widget _healthTrendsCard(PlaySessionService ps) {
+    // Tomar los últimos 10 partidos con datos de salud.
+    final matches = ps.log.where((s) => s.hasHealth).take(10).toList().reversed.toList();
+    if (matches.length < 2) return const SizedBox.shrink();
+
+    final barColors = List.generate(
+      matches.length,
+      (i) => i == matches.length - 1 ? AppColors.accent : AppColors.white(0.2),
+    );
+
+    // ── Gráfica de barras: calorías ──
+    final maxCal = matches
+        .fold<double>(0, (m, s) => s.calories > m ? s.calories : m);
+    final calBars = List.generate(matches.length, (i) {
+      final h = maxCal > 0 ? (matches[i].calories / maxCal) * 100 : 0.0;
+      return BarChartGroupData(
+        x: i,
+        barRods: [
+          BarChartRodData(
+            toY: h,
+            color: barColors[i],
+            width: 14,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+          ),
+        ],
+      );
+    });
+
+    // ── Gráfica de líneas: bpm promedio ──
+    final hrSpots = <FlSpot>[];
+    for (var i = 0; i < matches.length; i++) {
+      if (matches[i].avgHr != null) {
+        hrSpots.add(FlSpot(i.toDouble(), matches[i].avgHr!.toDouble()));
+      }
+    }
+    final hasLine = hrSpots.length >= 2;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.show_chart, size: 14, color: AppColors.accent),
+              const SizedBox(width: 8),
+              Text('TENDENCIAS',
+                  style: AppText.grotesk(
+                      size: 11,
+                      weight: FontWeight.w700,
+                      color: AppColors.white(0.5),
+                      letterSpacing: 0.1)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Calorías: barras
+          Text('CALORÍAS',
+              style: AppText.grotesk(
+                  size: 9,
+                  weight: FontWeight.w600,
+                  color: AppColors.white(0.35),
+                  letterSpacing: 0.1)),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 80,
+            child: BarChart(
+              BarChartData(
+                alignment: BarChartAlignment.spaceAround,
+                maxY: 110,
+                titlesData: const FlTitlesData(show: false),
+                borderData: FlBorderData(show: false),
+                gridData: const FlGridData(show: false),
+                barGroups: calBars,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // BPM: línea
+          if (hasLine) ...[
+            Text('PROMEDIO CARDÍACO',
+                style: AppText.grotesk(
+                    size: 9,
+                    weight: FontWeight.w600,
+                    color: AppColors.white(0.35),
+                    letterSpacing: 0.1)),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 80,
+              child: LineChart(
+                LineChartData(
+                  minY: 0,
+                  maxY: 200,
+                  titlesData: const FlTitlesData(show: false),
+                  borderData: FlBorderData(show: false),
+                  gridData: const FlGridData(show: false),
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: hrSpots,
+                      isCurved: true,
+                      color: const Color(0xFFEF4444),
+                      barWidth: 2.5,
+                      dotData: FlDotData(
+                        show: true,
+                        getDotPainter: (spot, a, b, c) => FlDotCirclePainter(
+                          radius: 3,
+                          color: const Color(0xFFEF4444),
+                          strokeColor: Colors.white,
+                          strokeWidth: 1,
+                        ),
+                      ),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        color: const Color(0xFFEF4444).withAlpha(30),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Card de estadísticas de juego ingresadas por el usuario.
+  Widget _userStatsCard(PlaySessionService ps) {
+    Widget stat(String label, String value, IconData icon, Color color) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 13, color: color),
+                const SizedBox(width: 6),
+                Text(label.toUpperCase(),
+                    style: AppText.grotesk(
+                        size: 9.5,
+                        weight: FontWeight.w700,
+                        color: AppColors.white(0.45),
+                        letterSpacing: 0.1)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(value,
+                style: AppText.archivo(
+                    size: 20,
+                    weight: FontWeight.w900,
+                    height: 1.0,
+                    color: AppColors.ink)),
+          ],
+        ),
+      );
+    }
+
+    Widget hDiv() => Container(height: 1, color: AppColors.white(0.06));
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Row(
+              children: [
+                Icon(Icons.sports_basketball, size: 14, color: AppColors.accent),
+                const SizedBox(width: 8),
+                Text('ESTADÍSTICAS DE JUEGO',
+                    style: AppText.grotesk(
+                        size: 11,
+                        weight: FontWeight.w700,
+                        color: AppColors.white(0.5),
+                        letterSpacing: 0.1)),
+                const Spacer(),
+                Text(
+                    '${ps.userStatsMatches} de ${ps.totalPlays}',
+                    style: AppText.grotesk(
+                        size: 11,
+                        color: AppColors.white(0.35))),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                Expanded(
+                    child: stat('Puntos totales',
+                        '${ps.totalUserPoints}', Icons.score,
+                        const Color(0xFFFF6B1A))),
+                Container(width: 1, color: AppColors.white(0.06)),
+                Expanded(
+                    child: stat('Prom. por partido',
+                        ps.avgUserPoints.toStringAsFixed(1),
+                        Icons.trending_up,
+                        const Color(0xFF22C55E))),
+              ],
+            ),
+          ),
+          hDiv(),
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                Expanded(
+                    child: stat('Triples',
+                        '${ps.totalUserTriples}',
+                        Icons.add_circle_outline,
+                        const Color(0xFF3B82F6))),
+                Container(width: 1, color: AppColors.white(0.06)),
+                Expanded(
+                    child: stat('Dobles',
+                        '${ps.totalUserDoubles}',
+                        Icons.add_circle,
+                        const Color(0xFFA855F7))),
+              ],
+            ),
+          ),
+          hDiv(),
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                Expanded(
+                    child: stat('Tiros libres',
+                        '${ps.totalUserFreeThrows}',
+                        Icons.free_cancellation,
+                        const Color(0xFFEAB308))),
+                const Expanded(child: SizedBox()),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// "Ver más" plano: texto de acción sin box (abre el modal con la lista).
   Widget _seeMore(String label, VoidCallback onTap) {
     return PressableWidget(
@@ -1380,6 +1790,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _historyRow(PlaySession s) {
     final (color, label) = _resultStyle(s.result);
+    final hasUserStats = s.userTriples != null || s.userDoubles != null || s.userFreeThrows != null;
     // Fila plana: el resultado es un dot+etiqueta de color, sin card tintada
     // ni chip con borde.
     return GestureDetector(
@@ -1411,6 +1822,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ],
                   ),
+                  if (hasUserStats) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        if (s.userTriples != null && s.userTriples! > 0)
+                          _userStatChip('3pt', s.userTriples!),
+                        if (s.userTriples != null && s.userTriples! > 0 &&
+                            s.userDoubles != null && s.userDoubles! > 0)
+                          const SizedBox(width: 6),
+                        if (s.userDoubles != null && s.userDoubles! > 0)
+                          _userStatChip('2pt', s.userDoubles!),
+                        if ((s.userTriples != null && s.userTriples! > 0 ||
+                            s.userDoubles != null && s.userDoubles! > 0) &&
+                            s.userFreeThrows != null && s.userFreeThrows! > 0)
+                          const SizedBox(width: 6),
+                        if (s.userFreeThrows != null && s.userFreeThrows! > 0)
+                          _userStatChip('TL', s.userFreeThrows!),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1433,6 +1864,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+
+  Widget _userStatChip(String label, int value) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: AppColors.white(0.08),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          '$value $label',
+          style: AppText.grotesk(
+              size: 10,
+              weight: FontWeight.w600,
+              color: AppColors.white(0.55)),
+        ),
+      );
 
   /// Modal con el detalle de un partido: cancha (imagen + rating), resultado,
   /// fecha, hora, duración y puntos. Usa solo datos ya disponibles (el
@@ -2108,7 +2554,7 @@ class _RankFriend {
 
 /// Períodos del ranking. `total` usa el acumulado del perfil; el resto suma los
 /// puntos de los partidos con fecha en el rango.
-enum _RankPeriod { week, month, season, total }
+enum _RankPeriod { week, month, season, total, custom }
 
 /// Fila ya resuelta del ranking (identidad + puntos del período elegido).
 class _RankEntry {
@@ -2152,11 +2598,16 @@ class _RankingSheetState extends State<_RankingSheet> {
     _RankPeriod.month,
     _RankPeriod.total,
     _RankPeriod.season,
+    _RankPeriod.custom,
   ];
   late final PageController _pageCtrl;
   int _page = 2; // arranca en Total (posición 2 del orden)
   // Entradas ya resueltas por período (evita recomputar/re-pegar al swipe).
-  final Map<_RankPeriod, List<_RankEntry>> _cache = {};
+  final Map<String, List<_RankEntry>> _cache = {};
+
+  // Rango personalizado.
+  DateTime? _customFrom;
+  DateTime? _customTo;
 
   _RankPeriod get _period => _order[_page];
 
@@ -2176,6 +2627,10 @@ class _RankingSheetState extends State<_RankingSheet> {
     super.dispose();
   }
 
+  String _cacheKey(_RankPeriod p) => p == _RankPeriod.custom
+      ? 'custom_${_customFrom?.toIso8601String()}_${_customTo?.toIso8601String()}'
+      : p.name;
+
   /// Inicio del rango para el período elegido (espejo de los getters locales del
   /// servicio: semana = lunes 00:00, mes = día 1 00:00, temporada = −180 días).
   DateTime _cutoff(_RankPeriod p) {
@@ -2191,18 +2646,70 @@ class _RankingSheetState extends State<_RankingSheet> {
         return PlaySessionService.seasonStart(now);
       case _RankPeriod.total:
         return DateTime.fromMillisecondsSinceEpoch(0);
+      case _RankPeriod.custom:
+        return _customFrom ?? DateTime(now.year, now.month, 1);
     }
   }
 
-  int _myPeriodPoints(_RankPeriod p) => switch (p) {
-        _RankPeriod.week => widget.play.pointsThisWeek,
-        _RankPeriod.month => widget.play.pointsThisMonth,
-        _RankPeriod.season => widget.play.pointsSeason,
-        _RankPeriod.total => widget.myTotalPoints,
-      };
+  Future<void> _pickCustomRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2024),
+      lastDate: now,
+      initialDateRange: _customFrom != null && _customTo != null
+          ? DateTimeRange(start: _customFrom!, end: _customTo!)
+          : DateTimeRange(
+              start: DateTime(now.year, now.month, 1),
+              end: now,
+            ),
+      locale: const Locale('es', 'AR'),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: ColorScheme.dark(
+            primary: AppColors.accent,
+            onPrimary: Colors.white,
+            surface: AppColors.bgElev,
+            onSurface: AppColors.ink,
+          ),
+          dialogTheme: DialogThemeData(backgroundColor: AppColors.bgElev),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      setState(() {
+        _customFrom = picked.start;
+        _customTo = picked.end;
+        _cache.removeWhere((k, _) => k.startsWith('custom_'));
+      });
+      final target = _order.indexOf(_RankPeriod.custom);
+      _pageCtrl.animateToPage(
+        target,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  int _myPeriodPoints(_RankPeriod p) {
+    if (p == _RankPeriod.custom) {
+      // Para rango custom, filtramos los partidos del período.
+      if (_customFrom == null || _customTo == null) return 0;
+      return widget.play.pointsInRange(_customFrom!, _customTo!);
+    }
+    return switch (p) {
+      _RankPeriod.week => widget.play.pointsThisWeek,
+      _RankPeriod.month => widget.play.pointsThisMonth,
+      _RankPeriod.season => widget.play.pointsSeason,
+      _RankPeriod.total => widget.myTotalPoints,
+      _ => 0,
+    };
+  }
 
   Future<void> _rebuild(_RankPeriod p) async {
-    if (_cache.containsKey(p)) return;
+    final key = _cacheKey(p);
+    if (_cache.containsKey(key)) return;
 
     // Modo Total: todo sale de los acumulados, sin red.
     if (p == _RankPeriod.total) {
@@ -2213,7 +2720,7 @@ class _RankingSheetState extends State<_RankingSheet> {
       ];
       list.sort((a, b) => b.points.compareTo(a.points));
       if (!mounted) return;
-      setState(() => _cache[p] = list);
+      setState(() => _cache[key] = list);
       return;
     }
 
@@ -2248,7 +2755,7 @@ class _RankingSheetState extends State<_RankingSheet> {
         _RankEntry(f.name, f.handle, byEmail[f.email] ?? 0, false),
     ];
     list.sort((a, b) => b.points.compareTo(a.points));
-    setState(() => _cache[p] = list);
+    setState(() => _cache[key] = list);
   }
 
   void _select(_RankPeriod p) {
@@ -2266,7 +2773,13 @@ class _RankingSheetState extends State<_RankingSheet> {
         _RankPeriod.month => 'Puntos de este mes',
         _RankPeriod.season => 'Puntos de la temporada (semestre)',
         _RankPeriod.total => 'Puntos totales',
+        _RankPeriod.custom => _customFrom != null && _customTo != null
+            ? '${_fmtShort(_customFrom!)} — ${_fmtShort(_customTo!)}'
+            : 'Elegí un rango de fechas',
       };
+
+  String _fmtShort(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 
   @override
   Widget build(BuildContext context) {
@@ -2314,6 +2827,16 @@ class _RankingSheetState extends State<_RankingSheet> {
                   ],
                 ),
               ),
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _periodChip(_customRangeLabel, _RankPeriod.custom),
+                  ],
+                ),
+              ),
               const SizedBox(height: 14),
             ],
             // Lista de ranking: una página por período, deslizable.
@@ -2336,7 +2859,7 @@ class _RankingSheetState extends State<_RankingSheet> {
 
   /// Página de un período: banner (solo temporada) + card con las filas.
   Widget _periodPage(_RankPeriod p) {
-    final entries = _cache[p];
+    final entries = _cache[_cacheKey(p)];
     if (entries == null) {
       return Center(
         child: SizedBox(
@@ -2374,12 +2897,23 @@ class _RankingSheetState extends State<_RankingSheet> {
     );
   }
 
+  String get _customRangeLabel {
+    if (_customFrom == null || _customTo == null) return '\u{1F4C5} Rango';
+    return '\u{1F4C5} ${_fmtShort(_customFrom!)} — ${_fmtShort(_customTo!)}';
+  }
+
   Widget _periodChip(String label, _RankPeriod p) => AppChip(
         label: label,
         active: _period == p,
         // La temporada lleva trofeo: es el eje competitivo que se reinicia.
         icon: p == _RankPeriod.season ? '\u{1F3C6}' : null,
-        onTap: () => _select(p),
+        onTap: () async {
+          if (p == _RankPeriod.custom) {
+            await _pickCustomRange();
+          } else {
+            _select(p);
+          }
+        },
       );
 
   Widget _rankRow(int i, _RankEntry e) {
@@ -2544,6 +3078,13 @@ class _FriendsTabState extends State<_FriendsTab> {
     );
   }
 
+  void _inviteFriend() {
+    Share.share(
+      'Quiero invitarte a formar parte de la comunidad de 1of1 🏀\n'
+      'https://play.google.com/store/apps/details?id=com.buschfranco.oneofone',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -2582,6 +3123,20 @@ class _FriendsTabState extends State<_FriendsTab> {
                       ),
                     ],
                   ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              PressableWidget(
+                onTap: _inviteFriend,
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: AppColors.glass,
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                    border: Border.all(color: AppColors.line, width: 1),
+                  ),
+                  child: Icon(Icons.share_outlined, color: AppColors.white(0.6), size: 20),
                 ),
               ),
               const SizedBox(width: 10),
@@ -3066,8 +3621,8 @@ class _UpperCaseFormatter extends TextInputFormatter {
   }
 }
 
-/// Diálogo para definir la insignia de clan (hasta 4 caracteres), el color de
-/// fondo y el color de las letras. Guarda todo en la base Perfiles vía Session.
+/// Bottom sheet para definir la insignia de clan (hasta 4 caracteres), el color
+/// de fondo, el color de las letras, el marco y la tipografía.
 class _ClanBadgeDialog extends StatefulWidget {
   final String currentClan;
   final String currentColor;
@@ -3110,7 +3665,8 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
     _font = widget.currentFont.trim().isEmpty
         ? kFonts.first.family
         : widget.currentFont.trim();
-    _frame = widget.currentFrame.trim().isEmpty ? 'none' : widget.currentFrame.trim();
+    _frame =
+        widget.currentFrame.trim().isEmpty ? 'none' : widget.currentFrame.trim();
   }
 
   @override
@@ -3142,8 +3698,18 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
     }
   }
 
-  /// Chip seleccionable de cosmético. Si está bloqueado (nivel insuficiente) se
-  /// atenúa, no responde al tap y muestra el candado con el nivel requerido.
+  Widget _sectionLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(text.toUpperCase(),
+          style: AppText.grotesk(
+              size: 11,
+              weight: FontWeight.w600,
+              color: AppColors.white(0.4),
+              letterSpacing: 0.08)),
+    );
+  }
+
   Widget _lockableChip({
     required bool unlocked,
     required bool selected,
@@ -3153,32 +3719,36 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
   }) {
     return PressableWidget(
       onTap: unlocked ? onTap : null,
-      child: Opacity(
-        opacity: unlocked ? 1 : 0.45,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          // Chip plano (lenguaje editorial): fill sutil sin borde; el elegido
-          // se marca solo con el tinte de acento.
-          decoration: BoxDecoration(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.accent.withAlpha(50)
+              : AppColors.white(0.05),
+          borderRadius: BorderRadius.circular(AppShape.rChip),
+          border: Border.all(
             color: selected
-                ? AppColors.accent.withAlpha(45)
-                : AppColors.white(0.06),
-            borderRadius: BorderRadius.circular(AppShape.rChip),
+                ? AppColors.accent.withAlpha(100)
+                : AppColors.white(0.08),
+            width: 1,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              child,
-              if (!unlocked) ...[
-                const SizedBox(width: 6),
-                Icon(Icons.lock, size: 12, color: AppColors.white(0.55)),
-                const SizedBox(width: 1),
-                Text('Nv $unlockLevel',
-                    style:
-                        AppText.grotesk(size: 10, color: AppColors.white(0.55))),
-              ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            child,
+            if (!unlocked) ...[
+              const SizedBox(width: 6),
+              Icon(Icons.lock_rounded,
+                  size: 12, color: AppColors.white(0.4)),
+              const SizedBox(width: 2),
+              Text('Nv $unlockLevel',
+                  style: AppText.grotesk(
+                      size: 10, color: AppColors.white(0.4))),
             ],
-          ),
+          ],
         ),
       ),
     );
@@ -3189,201 +3759,292 @@ class _ClanBadgeDialogState extends State<_ClanBadgeDialog> {
     final bg = clanColor(_color);
     final fg = clanTextColor(_textColor);
     final preview = _ctrl.text.trim().isEmpty ? 'CLAN' : _ctrl.text.trim();
-    // El fondo/forma los pone el dialogTheme global (neobrutalista).
-    return AlertDialog(
-      title: Text('Insignia de Clan',
-          style: AppText.archivo(size: 18, weight: FontWeight.w800)),
-      content: SizedBox(
-        width: double.maxFinite,
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.88,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.bgElev,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: AnimatedPadding(
+        duration: const Duration(milliseconds: 200),
+        padding: EdgeInsets.only(bottom: bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Preview en vivo del avatar (con el marco equipado). Queda FIJA
-            // arriba: no entra en el scroll de las opciones, así siempre se ve.
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.white(0.15),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text('Insignia de Clan',
+                        style: AppText.archivo(
+                            size: 20, weight: FontWeight.w800)),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    icon: Icon(Icons.close_rounded,
+                        color: AppColors.white(0.5), size: 22),
+                    splashRadius: 20,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            // ── Preview ──
             Center(
               child: framedAvatar(
                 frameById(_frame),
                 AppShape.rCard,
                 Container(
-                  width: 64,
-                  height: 64,
+                  width: 80,
+                  height: 80,
                   alignment: Alignment.center,
-                  // Preview coherente con el avatar real: plano + borde negro.
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(AppShape.rCard),
-                    border: Border.all(color: AppColors.line, width: 1),
-                    color: bg,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        bg,
+                        bg.withAlpha(200),
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: bg.withAlpha(80),
+                        blurRadius: 24,
+                        spreadRadius: 0,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(preview,
-                          style: clanFontStyle(_font, size: 22, color: fg)),
+                          style: clanFontStyle(_font, size: 28, color: fg)),
                     ),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            // Opciones scrolleables (el preview de arriba permanece visible).
+            const SizedBox(height: 24),
+            // ── Opciones scrolleables ──
             Flexible(
               child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-          Text('Hasta 4 caracteres',
-              style: AppText.grotesk(size: 12, color: AppColors.white(0.5))),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            // Input plano: fill sutil sin borde (mismo lenguaje que el auth).
-            decoration: BoxDecoration(
-              color: AppColors.white(0.05),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: TextField(
-              controller: _ctrl,
-              // Sin autofocus: que el teclado no tape las opciones al abrir.
-              textAlign: TextAlign.center,
-              style: AppText.archivo(size: 18, weight: FontWeight.w800),
-              cursorColor: AppColors.accent,
-              textInputAction: TextInputAction.done,
-              onChanged: (_) => setState(() {}),
-              onSubmitted: (_) => _save(),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
-                LengthLimitingTextInputFormatter(4),
-                _UpperCaseFormatter(),
-              ],
-              decoration: InputDecoration(
-                hintText: 'TRPL',
-                hintStyle: AppText.archivo(
-                    size: 18, weight: FontWeight.w800, color: AppColors.white(0.25)),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          Text('Marco',
-              style: AppText.grotesk(size: 12, color: AppColors.white(0.5))),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final fr in kFrames)
-                _lockableChip(
-                  unlocked: fr.unlockedAt(widget.level),
-                  selected: _frame == fr.id,
-                  unlockLevel: fr.unlockLevel,
-                  onTap: () => setState(() => _frame = fr.id),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 18,
-                        height: 18,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: fr.isNone
-                              ? null
-                              : LinearGradient(colors: fr.ring),
-                          color: fr.isNone ? AppColors.white(0.12) : null,
-                          border: fr.isNone
-                              ? Border.all(color: AppColors.white(0.3))
-                              : null,
+                    _sectionLabel('Texto'),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: AppColors.white(0.05),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: AppColors.white(0.08), width: 1),
+                      ),
+                      child: TextField(
+                        controller: _ctrl,
+                        textAlign: TextAlign.center,
+                        style:
+                            AppText.archivo(size: 20, weight: FontWeight.w800),
+                        cursorColor: AppColors.accent,
+                        textInputAction: TextInputAction.done,
+                        onChanged: (_) => setState(() {}),
+                        onSubmitted: (_) => _save(),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                              RegExp(r'[a-zA-Z0-9]')),
+                          LengthLimitingTextInputFormatter(4),
+                          _UpperCaseFormatter(),
+                        ],
+                        decoration: InputDecoration(
+                          hintText: 'TRPL',
+                          hintStyle: AppText.archivo(
+                              size: 20,
+                              weight: FontWeight.w800,
+                              color: AppColors.white(0.2)),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 14),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Text(fr.name,
-                          style: AppText.grotesk(
-                              size: 12, weight: FontWeight.w600)),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Text('Tipografía',
-              style: AppText.grotesk(size: 12, color: AppColors.white(0.5))),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final f in kFonts)
-                _lockableChip(
-                  unlocked: f.unlockedAt(widget.level),
-                  selected: _font == f.family,
-                  unlockLevel: f.unlockLevel,
-                  onTap: () => setState(() => _font = f.family),
-                  // Tinta negra: el default blanco era invisible sobre el chip
-                  // claro del branding actual.
-                  child: Text(preview,
-                      style: clanFontStyle(f.family,
-                          size: 18, color: AppColors.ink)),
-                ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          _ColorPicker(
-            label: 'Color del fondo',
-            colors: kBgColors,
-            level: widget.level,
-            value: _color,
-            onChanged: (hex) => setState(() => _color = hex),
-          ),
-          const SizedBox(height: 18),
-          _ColorPicker(
-            label: 'Color de las letras',
-            colors: kTextColors,
-            level: widget.level,
-            value: _textColor,
-            onChanged: (hex) => setState(() => _textColor = hex),
-          ),
+                    ),
+                    const SizedBox(height: 24),
+                    _sectionLabel('Marco'),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final fr in kFrames)
+                          _lockableChip(
+                            unlocked: fr.unlockedAt(widget.level),
+                            selected: _frame == fr.id,
+                            unlockLevel: fr.unlockLevel,
+                            onTap: () => setState(() => _frame = fr.id),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: fr.isNone
+                                        ? null
+                                        : LinearGradient(colors: fr.ring),
+                                    color:
+                                        fr.isNone ? AppColors.white(0.1) : null,
+                                    border: fr.isNone
+                                        ? Border.all(
+                                            color: AppColors.white(0.25))
+                                        : null,
+                                    boxShadow: fr.isNone
+                                        ? null
+                                        : [
+                                            BoxShadow(
+                                              color: fr.glow.withAlpha(60),
+                                              blurRadius: 6,
+                                            ),
+                                          ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(fr.name,
+                                    style: AppText.grotesk(
+                                        size: 12, weight: FontWeight.w600)),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    _sectionLabel('Tipografía'),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final f in kFonts)
+                          _lockableChip(
+                            unlocked: f.unlockedAt(widget.level),
+                            selected: _font == f.family,
+                            unlockLevel: f.unlockLevel,
+                            onTap: () => setState(() => _font = f.family),
+                            child: Text(preview,
+                                style: clanFontStyle(f.family,
+                                    size: 18, color: AppColors.ink)),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    _ColorPicker(
+                      label: 'Color de fondo',
+                      colors: kBgColors,
+                      level: widget.level,
+                      value: _color,
+                      onChanged: (hex) => setState(() => _color = hex),
+                    ),
+                    const SizedBox(height: 20),
+                    _ColorPicker(
+                      label: 'Color de texto',
+                      colors: kTextColors,
+                      level: widget.level,
+                      value: _textColor,
+                      onChanged: (hex) => setState(() => _textColor = hex),
+                    ),
                     if (_error != null) ...[
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
                       Text(_error!,
                           style: AppText.grotesk(
                               size: 12, color: AppColors.accentDark)),
                     ],
+                    const SizedBox(height: 24),
                   ],
                 ),
+              ),
+            ),
+            // ── Botones de acción ──
+            Container(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                      color: AppColors.white(0.06), width: 1),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed:
+                          _loading ? null : () => Navigator.pop(context, false),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppShape.rChip),
+                          side: BorderSide(
+                              color: AppColors.white(0.12), width: 1),
+                        ),
+                      ),
+                      child: Text('Cancelar',
+                          style: AppText.grotesk(
+                              size: 14, color: AppColors.white(0.6))),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: TextButton(
+                      onPressed: _loading ? null : _save,
+                      style: TextButton.styleFrom(
+                        backgroundColor: AppColors.accent,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppShape.rChip),
+                        ),
+                      ),
+                      child: _loading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            )
+                          : Text('Aplicar',
+                              style: AppText.grotesk(
+                                  size: 14,
+                                  weight: FontWeight.w700,
+                                  color: Colors.white)),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _loading ? null : () => Navigator.pop(context, false),
-          child: Text('Cancelar',
-              style: AppText.grotesk(size: 13, color: AppColors.white(0.6))),
-        ),
-        TextButton(
-          onPressed: _loading ? null : _save,
-          child: _loading
-              ? SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
-                )
-              : Text('Aplicar',
-                  style: AppText.grotesk(
-                      size: 13, weight: FontWeight.w700, color: AppColors.accent)),
-        ),
-      ],
     );
   }
 }
 
-/// Selector de color reutilizable: paleta de muestras. Notifica el hex elegido
-/// (6 dígitos) vía [onChanged].
+/// Selector de color con muestras circulares más grandes y mejor feedback visual.
 class _ColorPicker extends StatefulWidget {
   final String label;
   final List<CosmeticColor> colors;
@@ -3421,12 +4082,16 @@ class _ColorPickerState extends State<_ColorPicker> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(widget.label,
-            style: AppText.grotesk(size: 12, color: AppColors.white(0.5))),
-        const SizedBox(height: 10),
+        Text(widget.label.toUpperCase(),
+            style: AppText.grotesk(
+                size: 11,
+                weight: FontWeight.w600,
+                color: AppColors.white(0.4),
+                letterSpacing: 0.08)),
+        const SizedBox(height: 12),
         Wrap(
-          spacing: 10,
-          runSpacing: 10,
+          spacing: 12,
+          runSpacing: 12,
           children: [
             for (final c in widget.colors)
               () {
@@ -3437,31 +4102,37 @@ class _ColorPickerState extends State<_ColorPicker> {
                     : Colors.white;
                 return PressableWidget(
                   onTap: unlocked ? () => _select(c.hex) : null,
-                  child: Opacity(
-                    opacity: unlocked ? 1 : 0.4,
-                    child: Container(
-                      width: 34,
-                      height: 34,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: clanColor(c.hex),
-                        shape: BoxShape.circle,
-                        // Plano: aro blanco solo en el seleccionado; un aro
-                        // sutil en el resto para que los oscuros no se fundan
-                        // con el fondo del diálogo.
-                        border: Border.all(
-                          color: selected
-                              ? Colors.white
-                              : AppColors.white(0.12),
-                          width: selected ? 2.5 : 1,
-                        ),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: selected ? 42 : 38,
+                    height: selected ? 42 : 38,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: clanColor(c.hex),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: selected
+                            ? Colors.white
+                            : AppColors.white(0.1),
+                        width: selected ? 2.5 : 1,
                       ),
-                      child: !unlocked
-                          ? Icon(Icons.lock, size: 13, color: contrast)
-                          : (selected
-                              ? Icon(Icons.check, size: 16, color: contrast)
-                              : null),
+                      boxShadow: selected
+                          ? [
+                              BoxShadow(
+                                color: clanColor(c.hex).withAlpha(80),
+                                blurRadius: 10,
+                                spreadRadius: 1,
+                              ),
+                            ]
+                          : null,
                     ),
+                    child: !unlocked
+                        ? Icon(Icons.lock_rounded,
+                            size: 14, color: contrast.withAlpha(180))
+                        : (selected
+                            ? Icon(Icons.check_rounded,
+                                size: 18, color: contrast)
+                            : null),
                   ),
                 );
               }(),

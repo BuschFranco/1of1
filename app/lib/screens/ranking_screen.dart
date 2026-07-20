@@ -20,7 +20,7 @@ class RankingScreen extends StatefulWidget {
   State<RankingScreen> createState() => _RankingScreenState();
 }
 
-enum _Period { week, month, season }
+enum _Period { week, month, season, custom }
 
 class _RankingScreenState extends State<RankingScreen> {
   final PageController _pageCtrl = PageController();
@@ -32,9 +32,13 @@ class _RankingScreenState extends State<RankingScreen> {
   // Filtro de la pestaña Temporada.
   bool _seasonClans = false;
 
+  // Rango personalizado.
+  DateTime? _customFrom;
+  DateTime? _customTo;
+
   // Respuesta cruda del backend cacheada por período (cubre ambos scopes, así
   // Jugadores↔Clanes cambia sin volver a la red).
-  final Map<_Period, Map<String, dynamic>> _cache = {};
+  final Map<String, Map<String, dynamic>> _cache = {};
 
   @override
   void initState() {
@@ -48,6 +52,10 @@ class _RankingScreenState extends State<RankingScreen> {
     super.dispose();
   }
 
+  String _cacheKey(_Period p) => p == _Period.custom
+      ? 'custom_${_customFrom?.toIso8601String()}_${_customTo?.toIso8601String()}'
+      : p.name;
+
   /// Corte del período (semana = lunes 00:00, mes = día 1, temporada = semestre).
   DateTime _cutoff(_Period p) {
     final now = DateTime.now();
@@ -59,24 +67,65 @@ class _RankingScreenState extends State<RankingScreen> {
         return DateTime(now.year, now.month, 1);
       case _Period.season:
         return PlaySessionService.seasonStart(now);
+      case _Period.custom:
+        return _customFrom ?? DateTime(now.year, now.month, 1);
     }
   }
 
   Future<void> _load(_Period p) async {
-    if (_cache.containsKey(p)) return;
+    final key = _cacheKey(p);
+    if (_cache.containsKey(key)) return;
     setState(() {}); // muestra el spinner de esa página
     try {
       final data =
           await ApiClient().globalRanking(_cutoff(p).toIso8601String());
-      _cache[p] = data;
+      _cache[key] = data;
     } catch (_) {
       // Sin conexión: queda la vista vacía con su mensaje.
     }
     if (mounted) setState(() {});
   }
 
+  Future<void> _pickCustomRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2024),
+      lastDate: now,
+      initialDateRange: _customFrom != null && _customTo != null
+          ? DateTimeRange(start: _customFrom!, end: _customTo!)
+          : DateTimeRange(
+              start: DateTime(now.year, now.month, 1),
+              end: now,
+            ),
+      locale: const Locale('es', 'AR'),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: ColorScheme.dark(
+            primary: AppColors.accent,
+            onPrimary: Colors.white,
+            surface: AppColors.bgElev,
+            onSurface: AppColors.ink,
+          ),
+          dialogTheme: DialogThemeData(backgroundColor: AppColors.bgElev),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      setState(() {
+        _customFrom = picked.start;
+        _customTo = picked.end;
+        _globalPeriod = _Period.custom;
+        _cache.removeWhere((k, _) => k.startsWith('custom_'));
+      });
+      _load(_Period.custom);
+    }
+  }
+
   List<Map<String, dynamic>> _rows(_Period p, bool clans) => [
-        for (final r in (_cache[p]?[clans ? 'clans' : 'players'] as List? ??
+        for (final r in (_cache[_cacheKey(p)]?[clans ? 'clans' : 'players']
+                as List? ??
             const []))
           if (r is Map) r.cast<String, dynamic>(),
       ];
@@ -239,14 +288,45 @@ class _RankingScreenState extends State<RankingScreen> {
                   setState(() => _globalPeriod = _Period.month);
                   _load(_Period.month);
                 }),
+            const SizedBox(width: 8),
+            AppChip(
+                label: _customRangeLabel,
+                icon: '\u{1F4C5}',
+                active: _globalPeriod == _Period.custom,
+                onTap: () async {
+                  if (_customFrom == null || _customTo == null) {
+                    await _pickCustomRange();
+                  } else {
+                    setState(() => _globalPeriod = _Period.custom);
+                    _load(_Period.custom);
+                  }
+                }),
           ],
         ),
+        if (_globalPeriod == _Period.custom && _customFrom != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            '${_fmt(_customFrom!)} — ${_fmt(_customTo!)}',
+            style: AppText.grotesk(size: 11, color: AppColors.white(0.45)),
+          ),
+        ],
         const SizedBox(height: 14),
         Expanded(child: _list(_globalPeriod, _globalClans)),
         _myPosition(_globalPeriod),
       ],
     );
   }
+
+  String get _customRangeLabel {
+    if (_customFrom == null || _customTo == null) return 'Rango';
+    return '${_fmtShort(_customFrom!)} — ${_fmtShort(_customTo!)}';
+  }
+
+  String _fmt(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  String _fmtShort(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
 
   // ── Página Temporada ───────────────────────────────────────────────────────
 
@@ -279,7 +359,7 @@ class _RankingScreenState extends State<RankingScreen> {
   // ── Lista y filas ──────────────────────────────────────────────────────────
 
   Widget _list(_Period period, bool clans) {
-    if (!_cache.containsKey(period)) {
+    if (!_cache.containsKey(_cacheKey(period))) {
       return Center(
         child: SizedBox(
           width: 24,
@@ -313,8 +393,8 @@ class _RankingScreenState extends State<RankingScreen> {
             for (var i = 0; i < rows.length; i++) ...[
               if (i > 0) Container(height: 1, color: AppColors.white(0.06)),
               clans
-                  ? _clanRow(i, rows[i], _cache[period])
-                  : _playerRow(i, rows[i], _cache[period]),
+                  ? _clanRow(i, rows[i], _cache[_cacheKey(period)])
+                  : _playerRow(i, rows[i], _cache[_cacheKey(period)]),
             ],
           ],
         ),
@@ -435,7 +515,7 @@ class _RankingScreenState extends State<RankingScreen> {
   /// Sección fija de abajo: tu puesto como jugador y el de tu clan en el
   /// período visible (aunque estén fuera del top 50).
   Widget _myPosition(_Period period) {
-    final data = _cache[period];
+    final data = _cache[_cacheKey(period)];
     if (data == null) return const SizedBox.shrink();
     final me = (data['me'] as Map?)?.cast<String, dynamic>() ?? const {};
     final playerRank = (me['playerRank'] as num?)?.toInt();

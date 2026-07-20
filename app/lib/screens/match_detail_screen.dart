@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../data/achievements.dart';
 import '../data/courts.dart';
 import '../services/courts_provider.dart';
@@ -309,6 +310,10 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                 ? '${(s.distance / 1000).toStringAsFixed(2)} km'
                 : '${s.distance.round()} m'),
     ];
+    final hasZones = s.hrZones != null &&
+        s.hrZones!.any((z) => z > 0);
+    final calorieRecord = context.read<PlaySessionService>().calorieRecord;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -370,7 +375,137 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
           ],
         ),
         const SizedBox(height: 10),
+        // Donut de zonas cardíacas + gauge de calorías (si hay datos).
+        if (hasZones || s.calories > 0) ...[
+          Row(
+            children: [
+              if (hasZones) Expanded(child: _hrZoneDonut(s.hrZones!)),
+              if (hasZones && s.calories > 0) const SizedBox(width: 16),
+              if (s.calories > 0)
+                Expanded(
+                    child: _calorieGauge(s.calories, calorieRecord)),
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
         Wrap(spacing: 8, runSpacing: 8, children: pills),
+      ],
+    );
+  }
+
+  /// Donut chart de zonas cardíacas: muestra distribución de intensidad.
+  static const _zoneColors = [
+    Color(0xFF22C55E), // Calentamiento (verde)
+    Color(0xFFEAB308), // Quema de grasa (amarillo)
+    Color(0xFFF97316), // Cardio (naranja)
+    Color(0xFFEF4444), // Pico (rojo)
+    Color(0xFF991B1B), // Máximo (rojo oscuro)
+  ];
+  static const _zoneLabels = ['Calentamiento', 'Quema', 'Cardio', 'Pico', 'Máximo'];
+
+  Widget _hrZoneDonut(List<int> zones) {
+    final total = zones.fold(0, (s, z) => s + z);
+    if (total == 0) return const SizedBox.shrink();
+
+    final sections = List.generate(5, (i) {
+      final pct = zones[i] / total * 100;
+      return PieChartSectionData(
+        value: zones[i].toDouble(),
+        color: _zoneColors[i],
+        radius: 14,
+        title: pct >= 8 ? '${pct.round()}%' : '',
+        titleStyle: AppText.grotesk(
+            size: 9, weight: FontWeight.w700, color: Colors.white),
+        titlePositionPercentageOffset: 0.55,
+      );
+    });
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 100,
+          child: PieChart(
+            PieChartData(
+              sections: sections,
+              centerSpaceRadius: 28,
+              sectionsSpace: 1,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        // Leyenda compacta
+        Wrap(
+          spacing: 8,
+          runSpacing: 2,
+          children: List.generate(5, (i) {
+            if (zones[i] == 0) return const SizedBox.shrink();
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                        color: _zoneColors[i], shape: BoxShape.circle)),
+                const SizedBox(width: 3),
+                Text(_zoneLabels[i],
+                    style: AppText.grotesk(
+                        size: 8, color: AppColors.white(0.5))),
+              ],
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  /// Gauge de calorías: arco que muestra calorías vs récord personal.
+  Widget _calorieGauge(double calories, double record) {
+    final pct = record > 0 ? (calories / record).clamp(0.0, 1.0) : 0.0;
+    final color = pct >= 1.0
+        ? kGold
+        : (pct >= 0.7
+            ? AppColors.accent
+            : AppColors.white(0.4));
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 100,
+          width: 100,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                height: 80,
+                width: 80,
+                child: CircularProgressIndicator(
+                  value: pct > 0 ? pct : 0.001,
+                  strokeWidth: 8,
+                  backgroundColor: AppColors.white(0.08),
+                  valueColor: AlwaysStoppedAnimation(color),
+                  strokeCap: StrokeCap.round,
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('${calories.round()}',
+                      style: AppText.archivo(
+                          size: 22,
+                          weight: FontWeight.w900,
+                          color: color)),
+                  Text('kcal',
+                      style: AppText.grotesk(
+                          size: 9, color: AppColors.white(0.4))),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(record > 0 ? 'Récord: ${record.round()}' : 'Sin récord',
+            style: AppText.grotesk(size: 8, color: AppColors.white(0.4))),
       ],
     );
   }
@@ -662,6 +797,28 @@ class _ShareCard extends StatelessWidget {
                   color: s.points > 0 ? AppColors.accent : null),
             ],
           ),
+          // Stats del usuario (3pt, 2pt, TL).
+          if (s.userTriples != null || s.userDoubles != null || s.userFreeThrows != null) ...[
+            const SizedBox(height: 52),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (s.userTriples != null && s.userTriples! > 0)
+                  _shareUserStat('${s.userTriples}', '3PT'),
+                if (s.userTriples != null && s.userTriples! > 0 &&
+                    s.userDoubles != null && s.userDoubles! > 0)
+                  const SizedBox(width: 48),
+                if (s.userDoubles != null && s.userDoubles! > 0)
+                  _shareUserStat('${s.userDoubles}', '2PT'),
+                if ((s.userTriples != null && s.userTriples! > 0 ||
+                    s.userDoubles != null && s.userDoubles! > 0) &&
+                    s.userFreeThrows != null && s.userFreeThrows! > 0)
+                  const SizedBox(width: 48),
+                if (s.userFreeThrows != null && s.userFreeThrows! > 0)
+                  _shareUserStat('${s.userFreeThrows}', 'TL'),
+              ],
+            ),
+          ],
           // Salud: todas las métricas disponibles.
           if (s.hasHealth) ...[
             const SizedBox(height: 72),
@@ -685,6 +842,11 @@ class _ShareCard extends StatelessWidget {
                   ),
               ],
             ),
+            // Mini barra de zonas cardíacas.
+            if (s.hrZones != null && s.hrZones!.any((z) => z > 0)) ...[
+              const SizedBox(height: 48),
+              _shareZoneBar(s.hrZones!),
+            ],
           ],
           const Spacer(),
           // Disclaimer de origen de datos.
@@ -754,6 +916,23 @@ class _ShareCard extends StatelessWidget {
     );
   }
 
+  Widget _shareUserStat(String value, String label) {
+    return Column(
+      children: [
+        Text(value,
+            style: AppText.archivo(
+                size: 52, weight: FontWeight.w900, color: Colors.white)),
+        const SizedBox(height: 6),
+        Text(label,
+            style: AppText.grotesk(
+                size: 18,
+                weight: FontWeight.w700,
+                color: AppColors.white(0.4),
+                letterSpacing: 0.1)),
+      ],
+    );
+  }
+
   Widget _shareMiniStat(IconData icon, String text) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -766,6 +945,66 @@ class _ShareCard extends StatelessWidget {
       ],
     );
   }
+
+  /// Mini barra horizontal de zonas cardíacas para la share card.
+  static const _zoneColors = [
+    Color(0xFF22C55E),
+    Color(0xFFEAB308),
+    Color(0xFFF97316),
+    Color(0xFFEF4444),
+    Color(0xFF991B1B),
+  ];
+
+  Widget _shareZoneBar(List<int> zones) {
+    final total = zones.fold(0, (s, z) => s + z);
+    if (total == 0) return const SizedBox.shrink();
+    return Column(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: SizedBox(
+            height: 20,
+            child: Row(
+              children: List.generate(5, (i) {
+                final pct = zones[i] / total;
+                if (pct <= 0) return const SizedBox.shrink();
+                return Expanded(
+                  flex: (pct * 1000).round(),
+                  child: Container(color: _zoneColors[i]),
+                );
+              }),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(5, (i) {
+            if (zones[i] == 0) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                          color: _zoneColors[i], shape: BoxShape.circle)),
+                  const SizedBox(width: 5),
+                  Text(_zoneLabels[i],
+                      style: AppText.grotesk(
+                          size: 16, color: AppColors.white(0.5))),
+                ],
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  static const _zoneLabels = ['Calentamiento', 'Quema', 'Cardio', 'Pico', 'Máximo'];
 
   static String _fmtDate(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';

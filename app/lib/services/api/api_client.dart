@@ -195,8 +195,8 @@ class ApiClient {
 
   // ── Perfiles públicos ──────────────────────────────────────────────────
 
-  Future<List<Map<String, dynamic>>> profiles() =>
-      _list(_send('GET', '/profiles'));
+  Future<List<Map<String, dynamic>>> profiles({String? fields}) =>
+      _list(_send('GET', '/profiles', query: fields != null ? {'fields': fields} : null));
 
   /// 404 si no existe (ApiException.statusCode == 404).
   Future<Map<String, dynamic>> profileByHandle(String handle) =>
@@ -234,6 +234,46 @@ class ApiClient {
   /// Dueño de la reseña o admin (403 si no).
   Future<void> deleteReview(String pageId) =>
       _send('DELETE', '/reviews/$pageId');
+
+  // ── Publicaciones de cancha ─────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> courtPosts(
+    String courtId, {
+    int limit = 20,
+    String? cursor,
+  }) =>
+      _map(_send('GET', '/courts/$courtId/posts', query: {
+        'limit': limit.toString(),
+        if (cursor != null) 'cursor': cursor,
+      }));
+
+  Future<Map<String, dynamic>> createPost(
+    String courtId, {
+    required String content,
+  }) =>
+      _map(_send('POST', '/courts/$courtId/posts', body: {
+        'content': content,
+      }));
+
+  Future<void> deletePost(String postId) =>
+      _send('DELETE', '/posts/$postId');
+
+  Future<Map<String, dynamic>> togglePostLike(String postId) =>
+      _map(_send('POST', '/posts/$postId/like'));
+
+  Future<Map<String, dynamic>> addPostComment(
+    String postId, {
+    required String content,
+  }) =>
+      _map(_send('POST', '/posts/$postId/comments', body: {
+        'content': content,
+      }));
+
+  Future<void> deletePostComment(String commentId) =>
+      _send('DELETE', '/comments/$commentId');
+
+  Future<Map<String, dynamic>> toggleCommentLike(String commentId) =>
+      _map(_send('POST', '/comments/$commentId/like'));
 
   // ── Amistades ──────────────────────────────────────────────────────────
 

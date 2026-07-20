@@ -115,12 +115,85 @@ export class ProfilesService {
   }
 
   /** Todos los perfiles (para resolver proponentes y presencia "jugando").
-   * Mismo tope de 100 que tenía la query simple del gateway. */
-  async getAll(): Promise<Profile[]> {
+   * Mismo tope de 100 que tenía la query simple del gateway.
+   * [fields] permite seleccionar solo campos específicos para reducir payload. */
+  async getAll(fields?: string[]): Promise<Record<string, any>[]> {
+    // Mapeo de nombres de wire → columnas de Prisma.
+    const fieldMap: Record<string, string> = {
+      pageId: 'id',
+      name: 'name',
+      handle: 'handle',
+      phone: 'phone',
+      city: 'city',
+      lat: 'lat',
+      lng: 'lng',
+      avatar: 'avatar',
+      position: 'position',
+      height: 'height',
+      games: 'games',
+      courts: 'courts',
+      streak: 'streak',
+      points: 'points',
+      rating: 'rating',
+      userEmail: 'userEmail',
+      birthdate: 'birthdate',
+      clan: 'clan',
+      avatarColor: 'avatarColor',
+      clanTextColor: 'clanTextColor',
+      clanFont: 'clanFont',
+      avatarFrame: 'avatarFrame',
+      title: 'title',
+      level: 'level',
+      unlockedBadges: 'unlockedBadges',
+      playSeconds: 'playSeconds',
+      playTimeByCourt: 'playTimeByCourt',
+      shareStatus: 'shareStatus',
+      shareCourt: 'shareCourt',
+      shareTime: 'shareTime',
+      playing: 'playing',
+      playingCourtId: 'playingCourtId',
+      playingSince: 'playingSince',
+      lastPlayedCourtId: 'lastPlayedCourtId',
+      lastPlayedAt: 'lastPlayedAt',
+      showLastPlayed: 'showLastPlayed',
+      clanJoinedAt: 'clanJoinedAt',
+    };
+
+    // Si se piden campos específicos, usar select; si no, traer todo.
+    const select = fields
+      ? Object.fromEntries(
+          fields
+            .filter((f) => fieldMap[f])
+            .map((f) => [fieldMap[f], true]),
+        )
+      : undefined;
+
     const rows = await this.prisma.profile.findMany({
       where: { archived: false },
       take: 100,
+      ...(select ? { select: { id: true, ...select } } : {}),
     });
+
+    // Si se usó select, mapear manualmente; si no, usar profileWire.
+    if (select) {
+      return rows.map((r) => {
+        const out: Record<string, any> = {};
+        for (const [wireField, dbCol] of Object.entries(fieldMap)) {
+          if (wireField === 'pageId') {
+            out[wireField] = r.id;
+          } else if ((r as any)[dbCol] !== undefined) {
+            out[wireField] = (r as any)[dbCol];
+          }
+        }
+        // Fechas ISO
+        if (r.birthdate) out.birthdate = r.birthdate.toISOString();
+        if (r.playingSince) out.playingSince = r.playingSince.toISOString();
+        if (r.lastPlayedAt) out.lastPlayedAt = r.lastPlayedAt.toISOString();
+        if (r.clanJoinedAt) out.clanJoinedAt = r.clanJoinedAt.toISOString();
+        return out;
+      });
+    }
+
     return rows.map(profileWire);
   }
 

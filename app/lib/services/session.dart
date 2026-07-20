@@ -34,9 +34,10 @@ class Session extends ChangeNotifier {
   String _profileBg = '';
   String _defaultTab = 'home';
   bool _restoring = true;
-  // Hay cambios de perfil (stats, nivel, título, clan, privacidad, tiempo,
-  // logros) staged localmente sin subir. El batch los sube juntos en flush().
-  bool _dirty = false;
+  // Campos del perfil modificados localmente sin subir. El batch los sube
+  // juntos en flush(). Usar un Set en vez de bool permite enviar solo los
+  // campos que realmente cambiaron (PATCH parcial), reduciendo el payload.
+  final Set<String> _dirtyFields = {};
   // Evita flushes concurrentes (timer + lifecycle pueden disparar a la vez).
   bool _flushing = false;
 
@@ -311,7 +312,7 @@ class Session extends ChangeNotifier {
     if (c.length > 4) return 'La insignia no puede superar los 4 caracteres.';
 
     // Se guarda localmente y se sube en el próximo batch.
-    _dirty = true;
+    _dirtyFields.addAll(['clan', 'avatarColor', 'clanTextColor', 'clanFont', 'avatarFrame']);
     await _persist(
       email,
       prof.copyWith(
@@ -331,7 +332,7 @@ class Session extends ChangeNotifier {
     final prof = _profile;
     final email = _email;
     if (prof == null || email == null) return 'No hay sesión activa.';
-    _dirty = true;
+    _dirtyFields.add('title');
     await _persist(email, prof.copyWith(title: title));
     return null;
   }
@@ -347,7 +348,10 @@ class Session extends ChangeNotifier {
     final prof = _profile;
     final email = _email;
     if (prof == null || email == null) return 'No hay sesión activa.';
-    _dirty = true;
+    if (shareStatus != null) _dirtyFields.add('shareStatus');
+    if (shareCourt != null) _dirtyFields.add('shareCourt');
+    if (shareTime != null) _dirtyFields.add('shareTime');
+    if (showLastPlayed != null) _dirtyFields.add('showLastPlayed');
     await _persist(
       email,
       prof.copyWith(
@@ -370,7 +374,7 @@ class Session extends ChangeNotifier {
     final prof = _profile;
     final email = _email;
     if (prof == null || email == null) return;
-    _dirty = true;
+    _dirtyFields.addAll(['lastPlayedCourtId', 'lastPlayedAt']);
     await _persist(
       email,
       prof.copyWith(
@@ -410,8 +414,8 @@ class Session extends ChangeNotifier {
       );
     } catch (_) {
       // Falló la subida inmediata → marcamos dirty para que flush() la reintente
-      // cada 2 min (con todo el perfil) hasta que entre.
-      _dirty = true;
+      // cada 2 min (solo los campos de presencia) hasta que entre.
+      _dirtyFields.addAll(['playing', 'playingCourtId', 'playingSince']);
     }
   }
 
@@ -474,7 +478,10 @@ class Session extends ChangeNotifier {
         prof.playTimeByCourt == playTimeByCourt &&
         listEquals(prof.unlockedBadges, unlockedBadges);
     if (unchanged) return;
-    _dirty = true;
+    _dirtyFields.addAll([
+      'games', 'courts', 'streak', 'points', 'level',
+      'unlockedBadges', 'playSeconds', 'playTimeByCourt',
+    ]);
     await _persist(
       email,
       prof.copyWith(
@@ -490,20 +497,28 @@ class Session extends ChangeNotifier {
     );
   }
 
-  /// Sube TODO el perfil al backend en UNA sola petición, si hay cambios
-  /// staged. Lo dispara el batch (cada ~2 min / al pausar / cerrar la app).
-  /// Junta en una llamada las stats, el tiempo jugado, los logros, el nivel,
-  /// el título, el clan y la privacidad acumulados desde la última subida.
+  /// Sube SOLO los campos modificados al backend en UNA sola petición, si hay
+  /// cambios staged. Lo dispara el batch (cada ~2 min / al pausar / cerrar la
+  /// app). Junta en una llamada las stats, el tiempo jugado, los logros, el
+  /// nivel, el título, el clan y la privacidad acumulados desde la última subida.
   Future<void> flush() async {
-    if (_flushing || !_dirty) return;
+    if (_flushing || _dirtyFields.isEmpty) return;
     final prof = _profile;
     if (prof == null || !_api.isConfigured || !_api.hasToken) return;
     _flushing = true;
     try {
-      await _api.updateMe(prof.toJson());
-      _dirty = false;
+      // Enviar solo los campos que cambiaron (PATCH parcial).
+      final patch = <String, dynamic>{};
+      final json = prof.toJson();
+      for (final field in _dirtyFields) {
+        if (json.containsKey(field)) patch[field] = json[field];
+      }
+      if (patch.isNotEmpty) {
+        await _api.updateMe(patch);
+      }
+      _dirtyFields.clear();
     } catch (_) {
-      /* sin red: dirty queda en true → se reintenta en el próximo flush */
+      /* sin red: dirtyFields queda intacto → se reintenta en el próximo flush */
     } finally {
       _flushing = false;
     }
@@ -521,7 +536,7 @@ class Session extends ChangeNotifier {
 
     String? firstError;
     // Cortamos el batch para que no re-suba el perfil que vamos a borrar.
-    _dirty = false;
+    _dirtyFields.clear();
     try {
       await _api.deleteMe();
     } catch (e) {
@@ -549,7 +564,7 @@ class Session extends ChangeNotifier {
     if (flushFirst) {
       await flush(); // subir lo que haya quedado pendiente antes de cerrar
     }
-    _dirty = false;
+    _dirtyFields.clear();
     await _api.clearToken();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kEmail);

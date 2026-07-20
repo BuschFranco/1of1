@@ -6,6 +6,7 @@ import { CourtsModule } from './courts/courts.module';
 import { HealthModule } from './health/health.module';
 import { FriendsModule } from './friends/friends.module';
 import { MatchesModule } from './matches/matches.module';
+import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PickupsModule } from './pickups/pickups.module';
 import { ProfilesModule } from './profiles/profiles.module';
@@ -19,6 +20,7 @@ import { UploadsModule } from './uploads/uploads.module';
     AuthModule,
     ProfilesModule,
     CourtsModule,
+    PostsModule,
     PickupsModule,
     FriendsModule,
     MatchesModule,

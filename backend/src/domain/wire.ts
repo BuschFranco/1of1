@@ -368,3 +368,64 @@ export function friendWire(f: DbFriend): Friend {
     friendEmail: f.friendEmail,
   };
 }
+
+// ── Court Post / Comment ────────────────────────────────────────────────────
+
+export interface CourtPost {
+  pageId: string;
+  courtId: string;
+  userEmail: string;
+  userHandle: string;
+  content: string;
+  createdAt: string | null;
+  likeCount: number;
+  likedByMe: boolean;
+  comments?: PostComment[];
+}
+
+export function courtPostWire(
+  p: { id: string; courtId: string; userEmail: string; userHandle: string; content: string; createdAt: Date | null },
+  likeCount: number,
+  likedByMe: boolean,
+  comments?: PostComment[],
+): CourtPost {
+  return {
+    pageId: p.id,
+    courtId: p.courtId,
+    userEmail: p.userEmail,
+    userHandle: p.userHandle,
+    content: p.content,
+    createdAt: isoOr(p.createdAt, null),
+    likeCount,
+    likedByMe,
+    ...(comments !== undefined ? { comments } : {}),
+  };
+}
+
+export interface PostComment {
+  pageId: string;
+  postId: string;
+  userEmail: string;
+  userHandle: string;
+  content: string;
+  createdAt: string | null;
+  likeCount: number;
+  likedByMe: boolean;
+}
+
+export function postCommentWire(
+  c: { id: string; postId: string; userEmail: string; userHandle: string; content: string; createdAt: Date | null },
+  likeCount: number,
+  likedByMe: boolean,
+): PostComment {
+  return {
+    pageId: c.id,
+    postId: c.postId,
+    userEmail: c.userEmail,
+    userHandle: c.userHandle,
+    content: c.content,
+    createdAt: isoOr(c.createdAt, null),
+    likeCount,
+    likedByMe,
+  };
+}

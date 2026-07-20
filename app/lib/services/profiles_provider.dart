@@ -55,7 +55,9 @@ class ProfilesProvider extends ChangeNotifier {
     _loading = true;
     notifyListeners();
     try {
-      final rows = await _api.profiles();
+      final rows = await _api.profiles(
+        fields: 'userEmail,handle,clan,name,avatarColor,clanTextColor,clanFont,avatarFrame,playing,playingCourtId,playingSince,lastPlayedAt,lastPlayedCourtId,showLastPlayed,title',
+      );
       final map = <String, Profile>{};
       for (final row in rows) {
         final p = Profile.fromJson(row);

@@ -475,6 +475,16 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         .fold(0, (sum, e) => sum + e.points);
   }
 
+  /// Puntos en un rango de fechas custom (inclusivo start, exclusivo end).
+  int pointsInRange(DateTime start, DateTime end) {
+    final startMs = start.millisecondsSinceEpoch;
+    final endMs = end.millisecondsSinceEpoch;
+    return _log
+        .where((e) =>
+            e.endedAtMillis >= startMs && e.endedAtMillis < endMs)
+        .fold(0, (sum, e) => sum + e.points);
+  }
+
   /// Mejor racha alcanzada (la actual o la más alta del historial).
   int get bestStreak {
     var best = _streak;
@@ -483,6 +493,66 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     }
     return best;
   }
+
+  // ── Stats de salud agregadas (derivadas del log) ─────────────────────────
+
+  /// Cantidad de partidos con datos de salud (desde reloj/anillo).
+  int get healthMatches => _log.where((s) => s.hasHealth).length;
+
+  /// Suma total de calorías quemadas en todos los partidos con datos.
+  double get totalCalories =>
+      _log.fold(0.0, (sum, s) => sum + s.calories);
+
+  /// Suma total de pasos registrados.
+  int get totalSteps => _log.fold(0, (sum, s) => sum + s.steps);
+
+  /// Suma total de distancia en metros.
+  double get totalDistanceMeters =>
+      _log.fold(0.0, (sum, s) => sum + s.distance);
+
+  /// Promedio de frecuencia cardíaca (solo partidos que tienen avgHr).
+  int? get avgHeartRate {
+    final withHr = _log.where((s) => s.avgHr != null).toList();
+    if (withHr.isEmpty) return null;
+    final sum = withHr.fold(0, (acc, s) => acc + s.avgHr!);
+    return (sum / withHr.length).round();
+  }
+
+  /// Frecuencia cardíaca máxima registrada.
+  int get maxHeartRate =>
+      _log.fold(0, (m, s) => s.maxHr != null && s.maxHr! > m ? s.maxHr! : m);
+
+  /// True si hay stats de salud para mostrar (health activo + al menos un partido con datos).
+  bool get hasHealthStats => _healthEnabled && healthMatches > 0;
+
+  // ── Stats de juego ingresadas por el usuario (derivadas del log) ────────
+
+  /// Partidos que tienen stats de juego ingresadas.
+  int get userStatsMatches =>
+      _log.where((s) => s.userPoints != null).length;
+
+  /// Suma total de puntos anotados.
+  int get totalUserPoints =>
+      _log.fold(0, (sum, s) => sum + (s.userPoints ?? 0));
+
+  /// Suma total de triples.
+  int get totalUserTriples =>
+      _log.fold(0, (sum, s) => sum + (s.userTriples ?? 0));
+
+  /// Suma total de dobles.
+  int get totalUserDoubles =>
+      _log.fold(0, (sum, s) => sum + (s.userDoubles ?? 0));
+
+  /// Suma total de tiros libres.
+  int get totalUserFreeThrows =>
+      _log.fold(0, (sum, s) => sum + (s.userFreeThrows ?? 0));
+
+  /// Promedio de puntos por partido (solo partidos con stats).
+  double get avgUserPoints =>
+      userStatsMatches > 0 ? totalUserPoints / userStatsMatches : 0;
+
+  /// True si hay stats de juego para mostrar.
+  bool get hasUserStats => userStatsMatches > 0;
 
   bool get isPlaying => _startedAt != null;
   String? get courtName => _courtName;
@@ -1774,7 +1844,13 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// Registra el resultado elegido por el usuario para el partido pendiente.
   /// Win extiende la racha; loss la corta (y la guarda en el historial de
   /// rachas); el resto (empate / no contó / entrenamiento) no afecta la racha.
-  Future<void> resolvePending(PlayResult result) async {
+  Future<void> resolvePending(
+    PlayResult result, {
+    int? userPoints,
+    int? userTriples,
+    int? userDoubles,
+    int? userFreeThrows,
+  }) async {
     final p = _pendingSession;
     if (p == null) return;
 
@@ -1875,6 +1951,11 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         maxHr: hm?.maxHr,
         steps: hm?.steps ?? 0,
         distance: hm?.distance ?? 0,
+        hrZones: hm?.hrZones,
+        userPoints: userPoints,
+        userTriples: userTriples,
+        userDoubles: userDoubles,
+        userFreeThrows: userFreeThrows,
         calorieRecord: newCalorieRecord,
         fromWorkout: hm?.fromWorkout ?? false,
       ),
@@ -2480,6 +2561,19 @@ class PlaySession {
   final int steps;
   /// Distancia recorrida durante el partido, en metros.
   final double distance;
+  /// Distribución de tiempo en zonas cardíacas: [calentamiento, quemaGrasa,
+  /// cardio, pico, maximo] — segundos en cada zona. Null si sin datos HR.
+  final List<int>? hrZones;
+
+  // ── Estadísticas ingresadas por el usuario (opcionales) ──────────────────
+  /// Puntos anotados por el usuario en este partido.
+  final int? userPoints;
+  /// Triples anotados (tiros de 3 puntos).
+  final int? userTriples;
+  /// Dobles anotados (tiros de 2 puntos).
+  final int? userDoubles;
+  /// Tiros libres anotados (tiros de 1 punto).
+  final int? userFreeThrows;
 
   /// ¿Este partido marcó un récord personal de calorías? (para destacarlo).
   final bool calorieRecord;
@@ -2500,6 +2594,11 @@ class PlaySession {
     this.maxHr,
     this.steps = 0,
     this.distance = 0,
+    this.hrZones,
+    this.userPoints,
+    this.userTriples,
+    this.userDoubles,
+    this.userFreeThrows,
     this.calorieRecord = false,
     this.fromWorkout = false,
   });
@@ -2530,6 +2629,11 @@ class PlaySession {
     int? maxHr,
     int steps = 0,
     double distance = 0,
+    List<int>? hrZones,
+    int? userPoints,
+    int? userTriples,
+    int? userDoubles,
+    int? userFreeThrows,
     bool calorieRecord = false,
     bool fromWorkout = false,
   }) =>
@@ -2545,6 +2649,11 @@ class PlaySession {
         maxHr: maxHr,
         steps: steps,
         distance: distance,
+        hrZones: hrZones,
+        userPoints: userPoints,
+        userTriples: userTriples,
+        userDoubles: userDoubles,
+        userFreeThrows: userFreeThrows,
         calorieRecord: calorieRecord,
         fromWorkout: fromWorkout,
       );
@@ -2566,6 +2675,11 @@ class PlaySession {
         maxHr: maxHr ?? hm.maxHr,
         steps: steps > 0 ? steps : hm.steps,
         distance: distance > 0 ? distance : hm.distance,
+        hrZones: hrZones ?? hm.hrZones,
+        userPoints: userPoints,
+        userTriples: userTriples,
+        userDoubles: userDoubles,
+        userFreeThrows: userFreeThrows,
         calorieRecord: calorieRecord,
         fromWorkout: fromWorkout || hm.fromWorkout,
       );
@@ -2584,6 +2698,11 @@ class PlaySession {
         maxHr: maxHr,
         steps: steps,
         distance: distance ?? this.distance,
+        hrZones: hrZones,
+        userPoints: userPoints,
+        userTriples: userTriples,
+        userDoubles: userDoubles,
+        userFreeThrows: userFreeThrows,
         calorieRecord: calorieRecord,
         fromWorkout: fromWorkout,
       );
@@ -2600,6 +2719,11 @@ class PlaySession {
         'maxHr': maxHr,
         'steps': steps,
         'distance': distance,
+        'hrZones': hrZones,
+        'uPts': userPoints,
+        'u3': userTriples,
+        'u2': userDoubles,
+        'uFT': userFreeThrows,
         'calorieRecord': calorieRecord,
         'fromWorkout': fromWorkout,
       };
@@ -2616,6 +2740,13 @@ class PlaySession {
         maxHr: (j['maxHr'] as num?)?.toInt(),
         steps: (j['steps'] as num?)?.toInt() ?? 0,
         distance: (j['distance'] as num?)?.toDouble() ?? 0,
+        hrZones: (j['hrZones'] as List<dynamic>?)
+            ?.map((e) => (e as num).toInt())
+            .toList(),
+        userPoints: (j['uPts'] as num?)?.toInt(),
+        userTriples: (j['u3'] as num?)?.toInt(),
+        userDoubles: (j['u2'] as num?)?.toInt(),
+        userFreeThrows: (j['uFT'] as num?)?.toInt(),
         calorieRecord: (j['calorieRecord'] as bool?) ?? false,
         fromWorkout: (j['fromWorkout'] as bool?) ?? false,
       );

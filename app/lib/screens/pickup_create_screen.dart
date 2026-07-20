@@ -39,6 +39,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
   final List<String> _teamAMembers = [];
   final List<String> _teamBMembers = [];
   final _notesCtrl = TextEditingController();
+  final _titleCtrl = TextEditingController();
   bool _saving = false;
 
   // Fondo alineado al brand de la app (oscuro neobrutalista), no el violeta.
@@ -85,6 +86,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
   @override
   void dispose() {
     _notesCtrl.dispose();
+    _titleCtrl.dispose();
     super.dispose();
   }
 
@@ -98,10 +100,13 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
       final pickupsProvider = context.read<PickupsProvider>();
       final totalPlayers =
           _teamSize * 2 + _teamAMembers.length + _teamBMembers.length;
+      final customTitle = _titleCtrl.text.trim();
+      final pickupTitle =
+          customTitle.isNotEmpty ? customTitle : 'Pickup en ${_selected!.name}';
       // El código de invitación de 5 dígitos lo genera el SERVER (viene en el
       // pickup creado). Solo lo ve el creador dentro del chat del pickup.
       final created = await pickupsProvider.create(Pickup(
-        title: 'Pickup en ${_selected!.name}',
+        title: pickupTitle,
         courtId: _selected!.id,
         createdBy: _userEmail,
         dateTime: _when?.toIso8601String(),
@@ -119,7 +124,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
       ));
 
       final chat = CrewChat(
-        name: 'Pickup en ${_selected!.name}',
+        name: pickupTitle,
         pickupId: created.pageId,
         createdBy: _userEmail,
         date: _when?.toIso8601String() ?? DateTime.now().toIso8601String(),
@@ -208,6 +213,37 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                     const SizedBox(height: 16),
                     _label('Cuándo'),
                     _datePicker(),
+                    const SizedBox(height: 16),
+                    _label('Título (opcional)'),
+                    TextField(
+                      controller: _titleCtrl,
+                      maxLength: 40,
+                      style: AppText.grotesk(size: 14, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Pickup en ${_selected?.name ?? "cancha"}',
+                        hintStyle: AppText.grotesk(
+                            size: 14, color: AppColors.white(0.3)),
+                        counterStyle: AppText.grotesk(
+                            size: 10, color: AppColors.white(0.3)),
+                        filled: true,
+                        fillColor: AppColors.paper,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppShape.rChip),
+                          borderSide: BorderSide(color: AppColors.line),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppShape.rChip),
+                          borderSide: BorderSide(color: AppColors.line),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppShape.rChip),
+                          borderSide: BorderSide(
+                              color: AppColors.accent, width: 1.5),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                      ),
+                    ),
                   ],
                 ),
               ),

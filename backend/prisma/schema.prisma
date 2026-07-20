@@ -158,6 +158,35 @@ model Pickup {
   @@map("pickups")
 }
 
+/// Publicación en el feed de una cancha (1 por usuario por día por cancha).
+model CourtPost {
+  id          String   @id @default(uuid())
+  courtId     String   @map("court_id")
+  userEmail   String   @map("user_email")
+  userHandle  String   @default("") @map("user_handle")
+  content     String
+  createdAt   DateTime @default(now()) @map("created_at")
+  archived    Boolean  @default(false)
+
+  @@index([courtId, createdAt])
+  @@index([userEmail, courtId, createdAt])
+  @@map("court_posts")
+}
+
+/// Comentario en una publicación de cancha.
+model PostComment {
+  id          String   @id @default(uuid())
+  postId      String   @map("post_id")
+  userEmail   String   @map("user_email")
+  userHandle  String   @default("") @map("user_handle")
+  content     String
+  createdAt   DateTime @default(now()) @map("created_at")
+  archived    Boolean  @default(false)
+
+  @@index([postId, createdAt])
+  @@map("post_comments")
+}
+
 /// Amistad unidireccional (era DB Amistades).
 model Friend {
   id           String   @id @default(uuid())
@@ -224,4 +253,28 @@ model Chat {
 
   @@index([pickupId])
   @@map("chats")
+}
+
+/// Like en una publicación de cancha (1 por usuario por publicación).
+model PostLike {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  userEmail String   @map("user_email")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([postId, userEmail])
+  @@index([postId])
+  @@map("post_likes")
+}
+
+/// Like en un comentario (1 por usuario por comentario).
+model CommentLike {
+  id        String   @id @default(uuid())
+  commentId String   @map("comment_id")
+  userEmail String   @map("user_email")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([commentId, userEmail])
+  @@index([commentId])
+  @@map("comment_likes")
 }

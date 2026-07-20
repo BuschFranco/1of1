@@ -122,6 +122,84 @@ class Review {
 
 }
 
+/// Publicación en el feed de una cancha.
+class CourtPost {
+  final String pageId;
+  final String courtId;
+  final String userEmail;
+  final String userHandle;
+  final String content;
+  final String? createdAt;
+  final int likeCount;
+  final bool likedByMe;
+  final List<PostComment> comments;
+
+  const CourtPost({
+    this.pageId = '',
+    required this.courtId,
+    required this.userEmail,
+    this.userHandle = '',
+    required this.content,
+    this.createdAt,
+    this.likeCount = 0,
+    this.likedByMe = false,
+    this.comments = const [],
+  });
+
+  factory CourtPost.fromApi(Map<String, dynamic> json) {
+    return CourtPost(
+      pageId: json['pageId'] as String? ?? '',
+      courtId: json['courtId'] as String? ?? '',
+      userEmail: json['userEmail'] as String? ?? '',
+      userHandle: json['userHandle'] as String? ?? '',
+      content: json['content'] as String? ?? '',
+      createdAt: json['createdAt'] as String?,
+      likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
+      likedByMe: json['likedByMe'] as bool? ?? false,
+      comments: (json['comments'] as List<dynamic>?)
+              ?.map((c) => PostComment.fromApi(c as Map<String, dynamic>))
+              .toList() ??
+          const [],
+    );
+  }
+}
+
+/// Comentario en una publicación de cancha.
+class PostComment {
+  final String pageId;
+  final String postId;
+  final String userEmail;
+  final String userHandle;
+  final String content;
+  final String? createdAt;
+  final int likeCount;
+  final bool likedByMe;
+
+  const PostComment({
+    this.pageId = '',
+    required this.postId,
+    required this.userEmail,
+    this.userHandle = '',
+    required this.content,
+    this.createdAt,
+    this.likeCount = 0,
+    this.likedByMe = false,
+  });
+
+  factory PostComment.fromApi(Map<String, dynamic> json) {
+    return PostComment(
+      pageId: json['pageId'] as String? ?? '',
+      postId: json['postId'] as String? ?? '',
+      userEmail: json['userEmail'] as String? ?? '',
+      userHandle: json['userHandle'] as String? ?? '',
+      content: json['content'] as String? ?? '',
+      createdAt: json['createdAt'] as String?,
+      likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
+      likedByMe: json['likedByMe'] as bool? ?? false,
+    );
+  }
+}
+
 /// Amistad (base Amistades). Relación unidireccional: el dueño (owner) agregó
 /// a un amigo. No requiere aceptación del otro usuario.
 class Friend {

@@ -18,6 +18,11 @@ class HealthMetrics {
   /// Actividad de la sesión de entrenamiento (p.ej. "BASKETBALL"), si la hubo.
   final String? workoutActivity;
 
+  /// Distribución de tiempo en zonas cardíacas: [calentamiento, quemaGrasa,
+  /// cardio, pico, maximo] — cada valor son segundos acumulados en esa zona.
+  /// Null si no hay datos de pulso.
+  final List<int>? hrZones;
+
   const HealthMetrics({
     this.calories = 0,
     this.avgHr,
@@ -26,6 +31,7 @@ class HealthMetrics {
     this.distance = 0,
     this.fromWorkout = false,
     this.workoutActivity,
+    this.hrZones,
   });
 
   /// ¿Hay algo que valga la pena registrar? (sin wearable suele venir todo en 0)
@@ -256,6 +262,8 @@ class HealthService {
     int steps = 0;
     double distance = 0;
     final hrs = <double>[];
+    // Muestras crudas de HR con timestamps para calcular zonas.
+    final hrTimestamps = <DateTime>[];
     for (final t in _types) {
       if (t == HealthDataType.WORKOUT) continue; // se maneja aparte (arriba)
       try {
@@ -282,7 +290,10 @@ class HealthService {
               distance += n.toDouble();
               break;
             case HealthDataType.HEART_RATE:
-              if (n > 0) hrs.add(n.toDouble());
+              if (n > 0) {
+                hrs.add(n.toDouble());
+                hrTimestamps.add(p.dateFrom);
+              }
               break;
             default:
               break;
@@ -293,9 +304,12 @@ class HealthService {
 
     int? avgHr;
     int? maxHr;
+    List<int>? hrZones;
     if (hrs.isNotEmpty) {
       avgHr = (hrs.reduce((a, b) => a + b) / hrs.length).round();
       maxHr = hrs.reduce((a, b) => a > b ? a : b).round();
+      // Calcular distribución de zonas cardíacas (segundos por zona).
+      hrZones = _computeHrZones(hrs, hrTimestamps, maxHr);
     }
 
     // 3) La sesión manda para calorías/distancia (coincide con lo que muestra
@@ -313,6 +327,39 @@ class HealthService {
       distance: workoutDist > 0 ? workoutDist : distance,
       fromWorkout: workout != null,
       workoutActivity: workout?.workoutActivityType.name,
+      hrZones: hrZones,
     );
+  }
+
+  /// Calcula la distribución de tiempo en zonas cardíacas a partir de las
+  /// muestras crutas y sus timestamps. Zonas basadas en % del HR máximo
+  /// observado: Calentamiento (<60%), Quema de grasa (60-70%), Cardio (70-80%),
+  /// Pico (80-90%), Máximo (>90%). Devuelve lista de 5 enteros (segundos).
+  static List<int> _computeHrZones(
+      List<double> hrs, List<DateTime> timestamps, int maxHr) {
+    final zones = List.filled(5, 0);
+    if (hrs.length < 2) return zones;
+    // Estimar duración entre muestras consecutivas.
+    for (var i = 0; i < hrs.length; i++) {
+      int sec;
+      if (i < hrs.length - 1) {
+        sec = timestamps[i + 1].difference(timestamps[i]).inSeconds;
+      } else {
+        // Última muestra: usar el promedio de intervalos anteriores.
+        sec = timestamps.isNotEmpty && timestamps.length >= 2
+            ? (timestamps.last.difference(timestamps.first).inSeconds ~/
+                (timestamps.length - 1))
+            : 5;
+      }
+      if (sec <= 0 || sec > 60) sec = 5; // Sanity check.
+      final pct = hrs[i] / maxHr;
+      final zi = pct < 0.6
+          ? 0
+          : (pct < 0.7
+              ? 1
+              : (pct < 0.8 ? 2 : (pct < 0.9 ? 3 : 4)));
+      zones[zi] += sec;
+    }
+    return zones;
   }
 }

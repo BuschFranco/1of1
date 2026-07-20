@@ -72,8 +72,11 @@ export class ProfilesController {
   constructor(private readonly profiles: ProfilesService) {}
 
   @Get()
-  all() {
-    return this.profiles.getAll();
+  all(@Query('fields') fields?: string) {
+    const fieldList = fields
+      ? fields.split(',').map((f) => f.trim()).filter(Boolean)
+      : undefined;
+    return this.profiles.getAll(fieldList);
   }
 
   @Get('by-handle')

@@ -36,6 +36,13 @@ class AvatarFrame {
 const List<AvatarFrame> kFrames = [
   AvatarFrame(id: 'none', name: 'Sin marco', unlockLevel: 1),
   AvatarFrame(
+    id: 'gris',
+    name: 'Gris',
+    unlockLevel: 1,
+    ring: [Color(0xFF9CA3AF), Color(0xFF6B7280)],
+    glow: Color(0xFF9CA3AF),
+  ),
+  AvatarFrame(
     id: 'bronce',
     name: 'Bronce',
     unlockLevel: 3,
@@ -50,9 +57,16 @@ const List<AvatarFrame> kFrames = [
     glow: Color(0xFFC0C6CE),
   ),
   AvatarFrame(
+    id: 'cobre',
+    name: 'Cobre',
+    unlockLevel: 7,
+    ring: [Color(0xFFB87333), Color(0xFF8B4513)],
+    glow: Color(0xFFB87333),
+  ),
+  AvatarFrame(
     id: 'oro',
     name: 'Oro',
-    unlockLevel: 8,
+    unlockLevel: 9,
     ring: [Color(0xFFF9D976), Color(0xFFE9B949)],
     glow: Color(0xFFE9B949),
   ),
@@ -80,9 +94,16 @@ const List<AvatarFrame> kFrames = [
   AvatarFrame(
     id: 'amatista',
     name: 'Amatista',
-    unlockLevel: 26,
+    unlockLevel: 24,
     ring: [Color(0xFFD8B4FE), Color(0xFF9333EA)],
     glow: Color(0xFFA855F7),
+  ),
+  AvatarFrame(
+    id: 'diamante',
+    name: 'Diamante',
+    unlockLevel: 28,
+    ring: [Color(0xFFE0F2FE), Color(0xFF7DD3FC), Color(0xFF38BDF8)],
+    glow: Color(0xFF7DD3FC),
   ),
   AvatarFrame(
     id: 'fenix',
@@ -90,6 +111,13 @@ const List<AvatarFrame> kFrames = [
     unlockLevel: 32,
     ring: [Color(0xFFFFD166), Color(0xFFFF6B1A), Color(0xFFEF4444)],
     glow: Color(0xFFFF6B1A),
+  ),
+  AvatarFrame(
+    id: 'cosmico',
+    name: 'Cósmico',
+    unlockLevel: 36,
+    ring: [Color(0xFF818CF8), Color(0xFFC084FC), Color(0xFFF472B6)],
+    glow: Color(0xFFC084FC),
   ),
   AvatarFrame(
     id: 'legendario',
@@ -187,14 +215,19 @@ const List<CosmeticColor> kBgColors = [
   CosmeticColor('14B8A6'), // teal
   CosmeticColor('EC4899'), // rosa
   CosmeticColor('EAB308'), // amarillo
+  CosmeticColor('6366F1'), // índigo
+  CosmeticColor('F97316'), // naranja claro
   // Desbloqueables.
-  CosmeticColor('F97316', 4),
-  CosmeticColor('06B6D4', 7),
-  CosmeticColor('8B5CF6', 10),
-  CosmeticColor('F43F5E', 14),
-  CosmeticColor('10B981', 18),
-  CosmeticColor('0EA5E9', 24),
-  CosmeticColor('FACC15', 30),
+  CosmeticColor('06B6D4', 4),
+  CosmeticColor('8B5CF6', 6),
+  CosmeticColor('F43F5E', 9),
+  CosmeticColor('10B981', 12),
+  CosmeticColor('0EA5E9', 15),
+  CosmeticColor('D946EF', 18),
+  CosmeticColor('84CC16', 21),
+  CosmeticColor('FACC15', 25),
+  CosmeticColor('FB923C', 29),
+  CosmeticColor('2DD4BF', 33),
 ];
 
 /// Colores de las letras del clan. Base (blanco/negro + acentos) + extras.
@@ -207,10 +240,15 @@ const List<CosmeticColor> kTextColors = [
   CosmeticColor('3B82F6'),
   CosmeticColor('EF4444'),
   CosmeticColor('A855F7'),
+  CosmeticColor('F97316'),
+  CosmeticColor('14B8A6'),
   // Desbloqueables.
-  CosmeticColor('06B6D4', 6),
-  CosmeticColor('EC4899', 12),
-  CosmeticColor('F9D976', 22),
+  CosmeticColor('06B6D4', 5),
+  CosmeticColor('EC4899', 9),
+  CosmeticColor('6366F1', 13),
+  CosmeticColor('F43F5E', 17),
+  CosmeticColor('FACC15', 22),
+  CosmeticColor('34D399', 27),
 ];
 
 /// Tipografía cosmética: familia de Google Fonts + nivel de desbloqueo.
@@ -229,10 +267,13 @@ const List<CosmeticFont> kFonts = [
   CosmeticFont('Russo One'),
   CosmeticFont('Orbitron'),
   CosmeticFont('Black Ops One'),
+  CosmeticFont('Oswald'),
   // Desbloqueables.
-  CosmeticFont('Teko', 5),
-  CosmeticFont('Bungee', 9),
-  CosmeticFont('Press Start 2P', 14),
+  CosmeticFont('Teko', 4),
+  CosmeticFont('Bungee', 8),
+  CosmeticFont('Righteous', 12),
+  CosmeticFont('Press Start 2P', 16),
   CosmeticFont('Faster One', 20),
-  CosmeticFont('Monoton', 28),
+  CosmeticFont('Monoton', 26),
+  CosmeticFont('Rubik Mono One', 32),
 ];

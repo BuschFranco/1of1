@@ -19,6 +19,7 @@ import 'detail_screen.dart';
 import 'filters_screen.dart';
 import 'home_screen.dart';
 import 'list_screen.dart';
+import 'match_detail_screen.dart';
 import 'profile_screen.dart';
 
 /// ValueNotifier global para el badge de activity en el tab de crew.
@@ -361,8 +362,67 @@ class _MainShellState extends State<MainShell> {
         ),
       ),
     );
-    await play.resolvePending(chosen ?? PlayResult.notCounted);
+
+    // Si el usuario eligió un resultado, preguntar stats (opcional).
+    if (chosen != null && mounted) {
+      final stats = await _showMatchStats(s);
+      await play.resolvePending(
+        chosen,
+        userPoints: stats?['pts'],
+        userTriples: stats?['t3'],
+        userDoubles: stats?['t2'],
+        userFreeThrows: stats?['tl'],
+      );
+      // Si el usuario tocó "Ver resultado", navegar al detalle.
+      if (stats?['viewDetail'] == true && mounted) {
+        // Obtener la sesión actualizada del log.
+        final updated = play.log.firstWhere(
+          (e) => e.endedAtMillis == s.endedAtMillis,
+          orElse: () => s,
+        );
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MatchDetailScreen(session: updated),
+            ),
+          );
+        }
+      }
+    } else {
+      await play.resolvePending(chosen ?? PlayResult.notCounted);
+    }
     if (mounted) setState(() => _resultPromptOpen = false);
+  }
+
+  /// Muestra un bottom sheet para ingresar stats del partido (opcional).
+  /// Devuelve un map con los valores o null si el usuario omitió.
+  Future<Map<String, dynamic>?> _showMatchStats(PlaySession s) async {
+    final ptsCtrl = TextEditingController();
+    final t3Ctrl = TextEditingController();
+    final t2Ctrl = TextEditingController();
+    final tlCtrl = TextEditingController();
+
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _MatchStatsSheet(
+        courtName: s.courtName,
+        duration: PlaySessionService.fmt(s.seconds),
+        session: s,
+        ptsCtrl: ptsCtrl,
+        t3Ctrl: t3Ctrl,
+        t2Ctrl: t2Ctrl,
+        tlCtrl: tlCtrl,
+      ),
+    );
+
+    ptsCtrl.dispose();
+    t3Ctrl.dispose();
+    t2Ctrl.dispose();
+    tlCtrl.dispose();
+    return result;
   }
 
   @override
@@ -543,6 +603,291 @@ class _MainShellState extends State<MainShell> {
           Positioned.fill(child: AppLoader(visible: loaderVisible)),
         ],
       ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet para ingresar estadísticas del partido (opcional).
+/// Se muestra después de elegir el resultado.
+class _MatchStatsSheet extends StatefulWidget {
+  final String courtName;
+  final String duration;
+  final PlaySession session;
+  final TextEditingController ptsCtrl;
+  final TextEditingController t3Ctrl;
+  final TextEditingController t2Ctrl;
+  final TextEditingController tlCtrl;
+
+  const _MatchStatsSheet({
+    required this.courtName,
+    required this.duration,
+    required this.session,
+    required this.ptsCtrl,
+    required this.t3Ctrl,
+    required this.t2Ctrl,
+    required this.tlCtrl,
+  });
+
+  @override
+  State<_MatchStatsSheet> createState() => _MatchStatsSheetState();
+}
+
+class _MatchStatsSheetState extends State<_MatchStatsSheet> {
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+
+    Widget field(String label, TextEditingController ctrl, {String? hint}) {
+      return Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label.toUpperCase(),
+                style: AppText.grotesk(
+                    size: 10,
+                    weight: FontWeight.w600,
+                    color: AppColors.white(0.4),
+                    letterSpacing: 0.08)),
+            const SizedBox(height: 6),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.white(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.white(0.08)),
+              ),
+              child: TextField(
+                controller: ctrl,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                style: AppText.archivo(size: 18, weight: FontWeight.w800),
+                cursorColor: AppColors.accent,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(3),
+                ],
+                decoration: InputDecoration(
+                  hintText: hint ?? '0',
+                  hintStyle: AppText.archivo(
+                      size: 18,
+                      weight: FontWeight.w800,
+                      color: AppColors.white(0.2)),
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.7,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.bgElev,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: AnimatedPadding(
+        duration: const Duration(milliseconds: 200),
+        padding: EdgeInsets.only(bottom: bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.white(0.15),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Tus estadísticas',
+                            style: AppText.archivo(
+                                size: 18, weight: FontWeight.w800)),
+                        const SizedBox(height: 4),
+                        Text(
+                            '${widget.courtName.isEmpty ? 'Cancha' : widget.courtName} · ${widget.duration}',
+                            style: AppText.grotesk(
+                                size: 12, color: AppColors.white(0.45))),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(Icons.close_rounded,
+                        color: AppColors.white(0.5), size: 22),
+                    splashRadius: 20,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                        'Estos datos se guardan localmente y te ayudan a medir tu progreso.',
+                        style: AppText.grotesk(
+                            size: 12, color: AppColors.white(0.4))),
+                    const SizedBox(height: 16),
+                    // Puntos (ancho completo)
+                    Text('PUNTOS ANOTADOS',
+                        style: AppText.grotesk(
+                            size: 10,
+                            weight: FontWeight.w600,
+                            color: AppColors.white(0.4),
+                            letterSpacing: 0.08)),
+                    const SizedBox(height: 6),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.white(0.05),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.white(0.08)),
+                      ),
+                      child: TextField(
+                        controller: widget.ptsCtrl,
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                        style:
+                            AppText.archivo(size: 22, weight: FontWeight.w800),
+                        cursorColor: AppColors.accent,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(3),
+                        ],
+                        decoration: InputDecoration(
+                          hintText: '0',
+                          hintStyle: AppText.archivo(
+                              size: 22,
+                              weight: FontWeight.w800,
+                              color: AppColors.white(0.2)),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Triples y Dobles en fila
+                    Row(
+                      children: [
+                        field('Triples (3pts)', widget.t3Ctrl),
+                        const SizedBox(width: 12),
+                        field('Dobles (2pts)', widget.t2Ctrl),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Tiros libres
+                    Row(
+                      children: [
+                        field('Tiros libres (1pt)', widget.tlCtrl),
+                        const SizedBox(width: 12),
+                        const Expanded(child: SizedBox()),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
+            ),
+            // Botones de acción
+            Container(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+              decoration: const BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: AppColors.line, width: 1),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () {
+                        final pts = int.tryParse(widget.ptsCtrl.text);
+                        final t3 = int.tryParse(widget.t3Ctrl.text);
+                        final t2 = int.tryParse(widget.t2Ctrl.text);
+                        final tl = int.tryParse(widget.tlCtrl.text);
+                        Navigator.pop(context, {
+                          'pts': pts,
+                          't3': t3,
+                          't2': t2,
+                          'tl': tl,
+                          'viewDetail': false,
+                        });
+                      },
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppShape.rChip),
+                          side: BorderSide(
+                              color: AppColors.white(0.12), width: 1),
+                        ),
+                      ),
+                      child: Text('Listo',
+                          style: AppText.grotesk(
+                              size: 14,
+                              weight: FontWeight.w700,
+                              color: AppColors.white(0.8))),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: TextButton(
+                      onPressed: () {
+                        final pts = int.tryParse(widget.ptsCtrl.text);
+                        final t3 = int.tryParse(widget.t3Ctrl.text);
+                        final t2 = int.tryParse(widget.t2Ctrl.text);
+                        final tl = int.tryParse(widget.tlCtrl.text);
+                        Navigator.pop(context, {
+                          'pts': pts,
+                          't3': t3,
+                          't2': t2,
+                          'tl': tl,
+                          'viewDetail': true,
+                        });
+                      },
+                      style: TextButton.styleFrom(
+                        backgroundColor: AppColors.accent,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppShape.rChip),
+                        ),
+                      ),
+                      child: Text('Ver resultado',
+                          style: AppText.grotesk(
+                              size: 14,
+                              weight: FontWeight.w700,
+                              color: Colors.white)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

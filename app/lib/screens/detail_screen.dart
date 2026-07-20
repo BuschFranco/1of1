@@ -152,6 +152,8 @@ class DetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 24),
                     _ReviewsSection(courtId: court.id),
+                    const SizedBox(height: 24),
+                    _PostsSection(courtId: court.id),
                     if (context.read<Session>().isAdmin) ...[
                       const SizedBox(height: 24),
                       _adminDeleteCourt(context, court),
@@ -928,15 +930,15 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
                 decoration: InputDecoration(
                   hintText: 'Contá tu experiencia...',
                   hintStyle: AppText.grotesk(size: 13, color: AppColors.white(0.35)),
+                  filled: true,
+                  fillColor: AppColors.glass,
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppShape.rBtn),
-                    borderSide:
-                        BorderSide(color: AppColors.white(0.25), width: 1.5),
+                    borderSide: BorderSide.none,
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppShape.rBtn),
-                    borderSide:
-                        const BorderSide(color: AppColors.accent, width: 1),
+                    borderSide: const BorderSide(color: AppColors.accent, width: 1),
                   ),
                 ),
               ),
@@ -1352,6 +1354,604 @@ class _MyCourtHistory extends StatelessWidget {
                     AppText.grotesk(size: 10, color: AppColors.white(0.45))),
           ],
         ],
+      ),
+    );
+  }
+}
+
+// ── Publicaciones de la cancha ──────────────────────────────────────────────
+
+class _PostsSection extends StatefulWidget {
+  final String courtId;
+  const _PostsSection({required this.courtId});
+
+  @override
+  State<_PostsSection> createState() => _PostsSectionState();
+}
+
+class _PostsSectionState extends State<_PostsSection> {
+  late Future<List<CourtPost>> _future;
+  List<CourtPost> posts = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _fetch();
+  }
+
+  Future<List<CourtPost>> _fetch() async {
+    try {
+      final data = await ApiClient().courtPosts(widget.courtId);
+      final List rows = (data['items'] as List?) ?? [];
+      final list = rows.map<CourtPost>((r) => CourtPost.fromApi(r)).toList();
+      if (mounted) setState(() => posts = list);
+      return list;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  void _refresh() => setState(() => _future = _fetch());
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionTitle(
+          title: 'Publicaciones',
+          right: 'Publicar',
+          onRight: () => _openPostDialog(context),
+        ),
+        FutureBuilder<List<CourtPost>>(
+          future: _future,
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppColors.white(0.4)),
+                  ),
+                ),
+              );
+            }
+            final blocked = context.watch<BlockedProvider>();
+            final posts = (snap.data ?? [])
+                .where((p) => !blocked.isBlocked(p.userEmail))
+                .toList();
+            if (posts.isEmpty) {
+              return Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(AppShape.rCard),
+                ),
+                child: Text(
+                  'Todavía no hay publicaciones. ¡Sé el primero!',
+                  style:
+                      AppText.grotesk(size: 13, color: AppColors.white(0.5)),
+                ),
+              );
+            }
+            return Column(
+              children: [for (final p in posts) _postCard(p)],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _postCard(CourtPost p) {
+    final session = context.read<Session>();
+    final isAdmin = session.isAdmin;
+    final myEmail = (session.email ?? '').trim().toLowerCase();
+    final isMine = p.userEmail.trim().toLowerCase() == myEmail;
+    final date = p.createdAt != null ? _fmtDate(p.createdAt!) : '';
+    return StatefulBuilder(
+      builder: (context, setLocal) => Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(AppShape.rCard),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header: autor + fecha + menú.
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        p.userHandle.isNotEmpty ? p.userHandle : 'Anon',
+                        style: AppText.grotesk(
+                            size: 13, weight: FontWeight.w700),
+                      ),
+                      if (date.isNotEmpty)
+                        Text(date,
+                            style: AppText.grotesk(
+                                size: 10, color: AppColors.white(0.4))),
+                    ],
+                  ),
+                ),
+                if (!isMine && p.userEmail.isNotEmpty)
+                  PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    color: AppColors.bgElev,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(Icons.more_horiz,
+                          size: 16, color: AppColors.white(0.4)),
+                    ),
+                    onSelected: (v) async {
+                      if (v == 'report') {
+                        await ReportService.report(
+                          tipo: 'publicación',
+                          referencia: '${p.userHandle} — ${p.pageId}',
+                          detalle: 'Publicación reportada desde detalle de cancha',
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Publicación reportada',
+                                  style: AppText.grotesk(size: 13)),
+                              backgroundColor: AppColors.bgElev,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: 'report',
+                        child: Text('Reportar',
+                            style: AppText.grotesk(size: 13)),
+                      ),
+                    ],
+                  )
+                else if (isMine || isAdmin)
+                  PressableWidget(
+                    onTap: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          title: Text('Eliminar publicación',
+                              style: AppText.archivo(
+                                  size: 16, weight: FontWeight.w800)),
+                          content: Text('¿Seguro que querés eliminar esta publicación?',
+                              style: AppText.grotesk(size: 13)),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: Text('Cancelar',
+                                  style: AppText.grotesk(
+                                      size: 13, color: AppColors.white(0.6))),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              child: Text('Eliminar',
+                                  style: AppText.grotesk(
+                                      size: 13, color: _danger)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        try {
+                          await ApiClient().deletePost(p.pageId);
+                          _refresh();
+                        } catch (_) {}
+                      }
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(Icons.delete_outline,
+                          size: 16, color: _danger),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // Contenido.
+            Text(
+              p.content,
+              style: AppText.grotesk(
+                  size: 13, color: AppColors.white(0.85), height: 1.5),
+            ),
+            // Comentarios.
+            if (p.comments.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              ...p.comments.map((c) => _commentRow(c)),
+            ],
+            // Like + Comentar.
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                PressableWidget(
+                  onTap: () async {
+                    try {
+                      final res = await ApiClient().togglePostLike(p.pageId);
+                      setLocal(() {
+                        // Actualizar localmente sin recargar todo.
+                        final idx = posts.indexWhere((x) => x.pageId == p.pageId);
+                        if (idx >= 0) {
+                          final old = posts[idx];
+                          posts[idx] = CourtPost(
+                            pageId: old.pageId,
+                            courtId: old.courtId,
+                            userEmail: old.userEmail,
+                            userHandle: old.userHandle,
+                            content: old.content,
+                            createdAt: old.createdAt,
+                            likeCount: (res['likeCount'] as num?)?.toInt() ?? 0,
+                            likedByMe: res['likedByMe'] as bool? ?? false,
+                            comments: old.comments,
+                          );
+                        }
+                      });
+                    } catch (_) {}
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        p.likedByMe ? Icons.favorite : Icons.favorite_border,
+                        size: 16,
+                        color: p.likedByMe ? AppColors.accent : AppColors.white(0.45),
+                      ),
+                      if (p.likeCount > 0) ...[
+                        const SizedBox(width: 4),
+                        Text(
+                          '${p.likeCount}',
+                          style: AppText.grotesk(
+                              size: 11,
+                              color: p.likedByMe ? AppColors.accent : AppColors.white(0.45)),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                PressableWidget(
+                  onTap: () => _openCommentDialog(context, p),
+                  child: Text(
+                    'Comentar',
+                    style: AppText.grotesk(
+                        size: 11,
+                        weight: FontWeight.w600,
+                        color: AppColors.accent),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _commentRow(PostComment c) {
+    final date = c.createdAt != null ? _fmtDate(c.createdAt!) : '';
+    return StatefulBuilder(
+      builder: (context, setLocal) => Container(
+        margin: const EdgeInsets.only(top: 6),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppColors.white(0.04),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    c.userHandle.isNotEmpty ? c.userHandle : 'Anon',
+                    style: AppText.grotesk(
+                        size: 11, weight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    c.content,
+                    style: AppText.grotesk(
+                        size: 12,
+                        color: AppColors.white(0.7),
+                        height: 1.4),
+                  ),
+                  const SizedBox(height: 4),
+                  PressableWidget(
+                    onTap: () async {
+                      try {
+                        final res = await ApiClient().toggleCommentLike(c.pageId);
+                        setLocal(() {
+                          // Actualizar el comentario localmente.
+                          final postIdx = posts.indexWhere((p) => p.comments.any((x) => x.pageId == c.pageId));
+                          if (postIdx >= 0) {
+                            final post = posts[postIdx];
+                            final commentIdx = post.comments.indexWhere((x) => x.pageId == c.pageId);
+                            if (commentIdx >= 0) {
+                              final old = post.comments[commentIdx];
+                              final newComments = List<PostComment>.from(post.comments);
+                              newComments[commentIdx] = PostComment(
+                                pageId: old.pageId,
+                                postId: old.postId,
+                                userEmail: old.userEmail,
+                                userHandle: old.userHandle,
+                                content: old.content,
+                                createdAt: old.createdAt,
+                                likeCount: (res['likeCount'] as num?)?.toInt() ?? 0,
+                                likedByMe: res['likedByMe'] as bool? ?? false,
+                              );
+                              posts[postIdx] = CourtPost(
+                                pageId: post.pageId,
+                                courtId: post.courtId,
+                                userEmail: post.userEmail,
+                                userHandle: post.userHandle,
+                                content: post.content,
+                                createdAt: post.createdAt,
+                                likeCount: post.likeCount,
+                                likedByMe: post.likedByMe,
+                                comments: newComments,
+                              );
+                            }
+                          }
+                        });
+                      } catch (_) {}
+                    },
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          c.likedByMe ? Icons.favorite : Icons.favorite_border,
+                          size: 12,
+                          color: c.likedByMe ? AppColors.accent : AppColors.white(0.35),
+                        ),
+                        if (c.likeCount > 0) ...[
+                          const SizedBox(width: 3),
+                          Text(
+                            '${c.likeCount}',
+                            style: AppText.grotesk(
+                                size: 10,
+                                color: c.likedByMe ? AppColors.accent : AppColors.white(0.35)),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (date.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Text(date,
+                    style: AppText.grotesk(
+                        size: 9, color: AppColors.white(0.3))),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _fmtDate(String iso) {
+    final d = DateTime.tryParse(iso);
+    if (d == null) return '';
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+  }
+
+  // ── Dialog: nueva publicación ────────────────────────────────────────────
+
+  Future<void> _openPostDialog(BuildContext context) async {
+    final session = context.read<Session>();
+    if (session.email == null) return;
+    // Solo puede publicar quien jugó al menos una vez en la cancha.
+    final played =
+        context.read<PlaySessionService>().secondsForCourt(widget.courtId) > 0;
+    if (!played) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Jugá al menos una vez en esta cancha para publicar.',
+            style: AppText.grotesk(size: 13),
+          ),
+          backgroundColor: AppColors.bgElev,
+        ),
+      );
+      return;
+    }
+    final ctrl = TextEditingController();
+    bool saving = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text('Nueva publicación',
+              style: AppText.archivo(size: 18, weight: FontWeight.w800)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Una publicación por día en esta cancha.',
+                style: AppText.grotesk(size: 12, color: AppColors.white(0.45)),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                maxLines: 4,
+                maxLength: 300,
+                style: AppText.grotesk(size: 14),
+                cursorColor: AppColors.accent,
+                decoration: InputDecoration(
+                  hintText: '¿Qué pasó en la cancha?',
+                  hintStyle: AppText.grotesk(
+                      size: 13, color: AppColors.white(0.35)),
+                  filled: true,
+                  fillColor: AppColors.glass,
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                    borderSide: const BorderSide(
+                        color: AppColors.accent, width: 1),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(ctx),
+              child: Text('Cancelar',
+                  style: AppText.grotesk(
+                      size: 13, color: AppColors.white(0.6))),
+            ),
+            TextButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final text = ctrl.text.trim();
+                      if (text.isEmpty) return;
+                      setLocal(() => saving = true);
+                      try {
+                        await ApiClient().createPost(widget.courtId,
+                            content: text);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        _refresh();
+                      } catch (e) {
+                        setLocal(() => saving = false);
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                e.toString().contains('Ya publicaste hoy')
+                                    ? 'Ya publicaste hoy en esta cancha.'
+                                    : 'Error al publicar.',
+                                style: AppText.grotesk(size: 13),
+                              ),
+                              backgroundColor: AppColors.bgElev,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              child: saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.accent))
+                  : Text('Publicar',
+                      style: AppText.grotesk(
+                          size: 13,
+                          weight: FontWeight.w700,
+                          color: AppColors.accent)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Dialog: comentar ─────────────────────────────────────────────────────
+
+  Future<void> _openCommentDialog(BuildContext context, CourtPost post) async {
+    final session = context.read<Session>();
+    if (session.email == null) return;
+    final ctrl = TextEditingController();
+    bool saving = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text('Comentar',
+              style: AppText.archivo(size: 18, weight: FontWeight.w800)),
+          content: TextField(
+            controller: ctrl,
+            maxLines: 3,
+            maxLength: 300,
+            style: AppText.grotesk(size: 14),
+            cursorColor: AppColors.accent,
+            decoration: InputDecoration(
+              hintText: 'Escribí tu comentario...',
+              hintStyle:
+                  AppText.grotesk(size: 13, color: AppColors.white(0.35)),
+              filled: true,
+              fillColor: AppColors.glass,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppShape.rBtn),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppShape.rBtn),
+                borderSide:
+                    const BorderSide(color: AppColors.accent, width: 1),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(ctx),
+              child: Text('Cancelar',
+                  style: AppText.grotesk(
+                      size: 13, color: AppColors.white(0.6))),
+            ),
+            TextButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final text = ctrl.text.trim();
+                      if (text.isEmpty) return;
+                      setLocal(() => saving = true);
+                      try {
+                        await ApiClient().addPostComment(post.pageId,
+                            content: text);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        _refresh();
+                      } catch (_) {
+                        setLocal(() => saving = false);
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(
+                              content: Text('Error al comentar.',
+                                  style: AppText.grotesk(size: 13)),
+                              backgroundColor: AppColors.bgElev,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              child: saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.accent))
+                  : Text('Enviar',
+                      style: AppText.grotesk(
+                          size: 13,
+                          weight: FontWeight.w700,
+                          color: AppColors.accent)),
+            ),
+          ],
+        ),
       ),
     );
   }
