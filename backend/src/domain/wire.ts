@@ -160,7 +160,7 @@ export function profileWire(p: DbProfile): Profile {
     games: p.games,
     courts: p.courts,
     streak: p.streak,
-    points: p.points,
+    points: p.exp, // clave JSON "points" (compat app) desde la columna "exp"
     rating: p.rating,
     userEmail: p.userEmail,
     birthdate: isoOr(p.birthdate, ''),
@@ -198,8 +198,8 @@ export function profilePatchToData(pr: Record<string, any>): Record<string, any>
   const num = (k: string) => {
     if (typeof pr[k] === 'number' && isFinite(pr[k])) out[k] = pr[k];
   };
-  const int = (k: string) => {
-    if (typeof pr[k] === 'number' && isFinite(pr[k])) out[k] = Math.round(pr[k]);
+  const int = (k: string, col = k) => {
+    if (typeof pr[k] === 'number' && isFinite(pr[k])) out[col] = Math.round(pr[k]);
   };
   const bool = (k: string) => {
     if (typeof pr[k] === 'boolean') out[k] = pr[k];
@@ -219,7 +219,7 @@ export function profilePatchToData(pr: Record<string, any>): Record<string, any>
   int('games');
   int('courts');
   int('streak');
-  int('points');
+  int('points', 'exp'); // wire "points" -> columna "exp"
   num('rating');
   date('birthdate');
   str('clan');

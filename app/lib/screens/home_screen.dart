@@ -2792,7 +2792,7 @@ class _LivePointsState extends State<_LivePoints>
         duration: const Duration(milliseconds: 600),
         curve: Curves.easeOut,
         builder: (_, v, _) => Text(
-          '+${v.round()} pts',
+          '+${v.round()} EXP',
           style: AppText.archivo(
             size: 12,
             weight: FontWeight.w900,

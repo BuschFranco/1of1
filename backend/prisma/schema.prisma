@@ -45,7 +45,7 @@ model Profile {
   games           Int       @default(0)
   courts          Int       @default(0)
   streak          Int       @default(0)
-  points          Int       @default(0) // acumulado de por vida (nivel/logros)
+  exp             Int       @default(0) // EXP acumulada de por vida (nivel/logros)
   rating          Float     @default(0)
   userEmail       String    @default("") @map("user_email")
   birthdate       DateTime?
@@ -206,7 +206,7 @@ model Friend {
 model Match {
   id        String   @id @default(uuid())
   email     String
-  points    Int      @default(0)
+  exp       Int      @default(0) // EXP ganada en el partido (progresión/ranking)
   endedAt   DateTime @map("ended_at")
   courtId   String   @default("") @map("court_id")
   courtName String   @default("") @map("court_name")

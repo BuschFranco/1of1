@@ -133,7 +133,7 @@ export class ProfilesService {
       games: 'games',
       courts: 'courts',
       streak: 'streak',
-      points: 'points',
+      points: 'exp', // clave de wire "points" -> columna "exp"
       rating: 'rating',
       userEmail: 'userEmail',
       birthdate: 'birthdate',

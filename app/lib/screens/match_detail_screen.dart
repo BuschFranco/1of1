@@ -123,6 +123,11 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                         const SizedBox(height: 22),
                         // Franja de stats (duración · fecha · hora).
                         _statStrip(s, ended),
+                        // Lo que anotó el usuario (total + desglose 3PT/2PT/TL).
+                        if (s.hasUserStats) ...[
+                          const SizedBox(height: 22),
+                          _userStatsSection(s),
+                        ],
                         // Salud (todas las métricas disponibles).
                         if (s.hasHealth) ...[
                           const SizedBox(height: 22),
@@ -242,7 +247,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                 height: 1.0,
                 color: has ? AppColors.accent : AppColors.white(0.4))),
         const SizedBox(height: 2),
-        Text('PUNTOS GANADOS',
+        Text('EXP GANADA',
             style: AppText.grotesk(
                 size: 10.5,
                 weight: FontWeight.w700,
@@ -278,6 +283,76 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
   Widget _vDivider() =>
       Container(width: 1, height: 30, color: AppColors.white(0.1));
 
+  /// Lo que anotó el usuario en "¿Cómo te fue?": total de puntos + desglose
+  /// 3PT/2PT/TL. Distinto de los "PUNTOS GANADOS" que otorga la app.
+  Widget _userStatsSection(PlaySession s) {
+    final pts = s.userPoints ?? 0;
+    final t3 = s.userTriples ?? 0;
+    final t2 = s.userDoubles ?? 0;
+    final tl = s.userFreeThrows ?? 0;
+    final fieldGoals = t3 + t2; // tiros de campo (canastas de juego)
+    // Ritmo de anotación: puntos por minuto (métrica derivada).
+    final ppm = (pts > 0 && s.seconds > 0) ? pts / (s.seconds / 60) : null;
+
+    // Fila compacta: desglose + derivadas (solo lo que tiene valor).
+    final items = <Widget>[
+      if (t3 > 0) _inlineStat('3PT', '$t3'),
+      if (t2 > 0) _inlineStat('2PT', '$t2'),
+      if (tl > 0) _inlineStat('TL', '$tl'),
+      if (fieldGoals > 0) _inlineStat('CANASTAS', '$fieldGoals'),
+      if (ppm != null) _inlineStat('PTS/MIN', ppm.toStringAsFixed(1)),
+    ];
+    final row = <Widget>[];
+    for (var i = 0; i < items.length; i++) {
+      if (i > 0) row.add(_vDivider());
+      row.add(Expanded(child: items[i]));
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        border: Border.all(color: AppColors.line, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.sports_basketball, size: 13, color: AppColors.accent),
+              const SizedBox(width: 6),
+              Text('PUNTUACIÓN',
+                  style: AppText.grotesk(
+                      size: 10.5,
+                      weight: FontWeight.w700,
+                      color: AppColors.white(0.5),
+                      letterSpacing: 0.12)),
+              if (pts > 0) ...[
+                const Spacer(),
+                Text('$pts',
+                    style: AppText.archivo(
+                        size: 20,
+                        weight: FontWeight.w900,
+                        color: AppColors.accent)),
+                const SizedBox(width: 4),
+                Text('PTS',
+                    style: AppText.grotesk(
+                        size: 10,
+                        weight: FontWeight.w700,
+                        color: AppColors.white(0.4))),
+              ],
+            ],
+          ),
+          if (row.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Row(children: row),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _inlineStat(String label, String value) {
     return Column(
       children: [
@@ -298,17 +373,26 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
 
   /// "Tu estado": todas las métricas de salud disponibles, como chips.
   Widget _healthStrip(PlaySession s) {
-    final pills = <Widget>[
+    // Métricas planas con color por tipo (sin cajas grises). Solo las que tienen
+    // dato: lo que esté en 0/null no aparece.
+    final metrics = <Widget>[
       if (s.calories > 0)
-        _healthPill(Icons.local_fire_department, '${s.calories.round()} kcal'),
-      if (s.steps > 0) _healthPill(Icons.directions_walk, '${s.steps} pasos'),
-      if (s.avgHr != null) _healthPill(Icons.favorite_border, '${s.avgHr} bpm'),
+        _healthMetric(Icons.local_fire_department, const Color(0xFFFF6B1A),
+            '${s.calories.round()}', 'kcal'),
+      if (s.steps > 0)
+        _healthMetric(Icons.directions_walk, const Color(0xFF22C55E),
+            '${s.steps}', 'pasos'),
+      if (s.avgHr != null)
+        _healthMetric(
+            Icons.favorite, const Color(0xFFEF4444), '${s.avgHr}', 'bpm'),
       if (s.distance > 0)
-        _healthPill(
+        _healthMetric(
             Icons.straighten,
+            const Color(0xFF3B82F6),
             s.distance >= 1000
-                ? '${(s.distance / 1000).toStringAsFixed(2)} km'
-                : '${s.distance.round()} m'),
+                ? (s.distance / 1000).toStringAsFixed(2)
+                : '${s.distance.round()}',
+            s.distance >= 1000 ? 'km' : 'm'),
     ];
     final hasZones = s.hrZones != null &&
         s.hrZones!.any((z) => z > 0);
@@ -321,36 +405,12 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
           children: [
             Icon(Icons.monitor_heart_outlined, size: 13, color: AppColors.accent),
             const SizedBox(width: 6),
-            Text('TU ESTADO',
+            Text('ESTADO',
                 style: AppText.grotesk(
                     size: 10.5,
                     weight: FontWeight.w700,
                     color: AppColors.white(0.5),
                     letterSpacing: 0.12)),
-            if (s.fromWorkout) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.accent.withAlpha(38),
-                  borderRadius: BorderRadius.circular(AppShape.rChip),
-                  border: Border.all(color: AppColors.accent),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.sports_basketball,
-                        size: 11, color: AppColors.accent),
-                    const SizedBox(width: 3),
-                    Text('DE TU RELOJ',
-                        style: AppText.grotesk(
-                            size: 8.5,
-                            weight: FontWeight.w800,
-                            color: AppColors.accent)),
-                  ],
-                ),
-              ),
-            ],
             if (s.calorieRecord) ...[
               const Spacer(),
               Container(
@@ -388,7 +448,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
           ),
           const SizedBox(height: 12),
         ],
-        Wrap(spacing: 8, runSpacing: 8, children: pills),
+        Wrap(spacing: 22, runSpacing: 14, children: metrics),
       ],
     );
   }
@@ -510,23 +570,23 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     );
   }
 
-  Widget _healthPill(IconData icon, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(AppShape.rChip),
-        border: Border.all(color: AppColors.line, width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: AppColors.accent),
-          const SizedBox(width: 6),
-          Text(value,
-              style: AppText.archivo(size: 13, weight: FontWeight.w800)),
-        ],
-      ),
+  /// Métrica de salud plana (sin caja): ícono a color + valor + unidad chica.
+  Widget _healthMetric(IconData icon, Color color, String value, String unit) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 8),
+        Text(value,
+            style: AppText.archivo(
+                size: 17, weight: FontWeight.w900, color: AppColors.ink)),
+        const SizedBox(width: 3),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 1),
+          child: Text(unit,
+              style: AppText.grotesk(size: 10, color: AppColors.white(0.4))),
+        ),
+      ],
     );
   }
 
@@ -793,31 +853,32 @@ class _ShareCard extends StatelessWidget {
             children: [
               _shareStat('DURACIÓN', PlaySessionService.fmt(s.seconds)),
               _shareDivider(),
-              _shareStat('PUNTOS', s.points > 0 ? '+${s.points}' : '—',
+              _shareStat('EXP', s.points > 0 ? '+${s.points}' : '—',
                   color: s.points > 0 ? AppColors.accent : null),
             ],
           ),
-          // Stats del usuario (3pt, 2pt, TL).
-          if (s.userTriples != null || s.userDoubles != null || s.userFreeThrows != null) ...[
+          // Stats del usuario: total anotado (PTS) + desglose 3PT/2PT/TL.
+          if (s.hasUserStats) ...[
             const SizedBox(height: 52),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (s.userTriples != null && s.userTriples! > 0)
+            Builder(builder: (_) {
+              final stats = <Widget>[
+                if ((s.userPoints ?? 0) > 0)
+                  _shareUserStat('${s.userPoints}', 'PTS'),
+                if ((s.userTriples ?? 0) > 0)
                   _shareUserStat('${s.userTriples}', '3PT'),
-                if (s.userTriples != null && s.userTriples! > 0 &&
-                    s.userDoubles != null && s.userDoubles! > 0)
-                  const SizedBox(width: 48),
-                if (s.userDoubles != null && s.userDoubles! > 0)
+                if ((s.userDoubles ?? 0) > 0)
                   _shareUserStat('${s.userDoubles}', '2PT'),
-                if ((s.userTriples != null && s.userTriples! > 0 ||
-                    s.userDoubles != null && s.userDoubles! > 0) &&
-                    s.userFreeThrows != null && s.userFreeThrows! > 0)
-                  const SizedBox(width: 48),
-                if (s.userFreeThrows != null && s.userFreeThrows! > 0)
+                if ((s.userFreeThrows ?? 0) > 0)
                   _shareUserStat('${s.userFreeThrows}', 'TL'),
-              ],
-            ),
+              ];
+              final row = <Widget>[];
+              for (var i = 0; i < stats.length; i++) {
+                if (i > 0) row.add(const SizedBox(width: 48));
+                row.add(stats[i]);
+              }
+              return Row(
+                  mainAxisAlignment: MainAxisAlignment.center, children: row);
+            }),
           ],
           // Salud: todas las métricas disponibles.
           if (s.hasHealth) ...[

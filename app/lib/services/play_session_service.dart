@@ -526,6 +526,54 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// True si hay stats de salud para mostrar (health activo + al menos un partido con datos).
   bool get hasHealthStats => _healthEnabled && healthMatches > 0;
 
+  /// Evolución de los stats físicos de los últimos 7 días: una entrada por día
+  /// (más viejo → más nuevo, hoy inclusive), agregando los partidos con datos
+  /// del reloj ([PlaySession.hasHealth]) de ese día. Base del gráfico semanal
+  /// del perfil.
+  List<DailyHealth> lastWeekDailyHealth() {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final out = <DailyHealth>[];
+    for (var i = 6; i >= 0; i--) {
+      final dayStart = todayStart.subtract(Duration(days: i));
+      final startMs = dayStart.millisecondsSinceEpoch;
+      final endMs =
+          dayStart.add(const Duration(days: 1)).millisecondsSinceEpoch;
+      double cal = 0, dist = 0;
+      int steps = 0, count = 0, hrSum = 0, hrCount = 0;
+      for (final s in _log) {
+        if (!s.hasHealth) continue;
+        if (s.endedAtMillis < startMs || s.endedAtMillis >= endMs) continue;
+        cal += s.calories;
+        dist += s.distance;
+        steps += s.steps;
+        count++;
+        if (s.avgHr != null) {
+          hrSum += s.avgHr!;
+          hrCount++;
+        }
+      }
+      out.add(DailyHealth(
+        day: dayStart,
+        calories: cal,
+        avgHr: hrCount > 0 ? (hrSum / hrCount).round() : null,
+        steps: steps,
+        distance: dist,
+        matches: count,
+      ));
+    }
+    return out;
+  }
+
+  /// Días con datos del reloj en los últimos 7 días.
+  int get activeHealthDaysThisWeek =>
+      lastWeekDailyHealth().where((d) => d.hasData).length;
+
+  /// Datos suficientes para dibujar la evolución semanal (al menos 2 días con
+  /// datos, para que "evolución" tenga sentido).
+  bool get hasWeeklyHealthTrend =>
+      _healthEnabled && activeHealthDaysThisWeek >= 2;
+
   // ── Stats de juego ingresadas por el usuario (derivadas del log) ────────
 
   /// Partidos que tienen stats de juego ingresadas.
@@ -2549,6 +2597,28 @@ extension PlayResultX on PlayResult {
   }
 }
 
+/// Métricas físicas agregadas de UN día (para el gráfico de evolución semanal
+/// del perfil). `avgHr` es null si ningún partido del día tuvo pulso.
+class DailyHealth {
+  final DateTime day; // medianoche local del día
+  final double calories;
+  final int? avgHr;
+  final int steps;
+  final double distance; // metros
+  final int matches; // partidos con datos del reloj ese día
+
+  const DailyHealth({
+    required this.day,
+    this.calories = 0,
+    this.avgHr,
+    this.steps = 0,
+    this.distance = 0,
+    this.matches = 0,
+  });
+
+  bool get hasData => matches > 0;
+}
+
 /// Un partido terminado: cancha, duración, cuándo terminó y resultado.
 class PlaySession {
   final String courtId;
@@ -2614,23 +2684,38 @@ class PlaySession {
     this.fromWorkout = false,
   });
 
-  /// Si mostrar la franja de métricas físicas en el historial. Exige que haya
-  /// existido una SESIÓN DE ENTRENAMIENTO real del reloj ([fromWorkout]) —
-  /// no importa si fue básquet, otro tipo, o ninguna se detectó: sin sesión,
-  /// no hay "datos del reloj" confiables. Pasos/distancia/calorías pueden
-  /// venir del podómetro del propio celular (o de la estimación de último
-  /// recurso en [withEstimates]) sin ningún wearable conectado; mostrarlos
-  /// como si fueran del reloj sería engañoso.
+  /// Señal de que hubo un WEARABLE (reloj): pulso o zonas cardíacas —el celular
+  /// no mide pulso, solo un reloj lo hace— o una sesión de entrenamiento
+  /// detectada. Pasos/distancia/calorías por sí solos NO cuentan: pueden venir
+  /// del podómetro del celular o de la estimación de último recurso.
+  bool get _fromWearable =>
+      fromWorkout ||
+      avgHr != null ||
+      maxHr != null ||
+      (hrZones?.any((z) => z > 0) ?? false);
+
+  /// Si mostrar la franja de métricas físicas en el historial. Exige una señal
+  /// real de wearable ([_fromWearable]) para no mostrar datos solo-celular como
+  /// si fueran del reloj, pero YA NO exige una sesión de entrenamiento explícita:
+  /// alcanza con que el reloj haya registrado el pulso.
   bool get hasHealth =>
-      fromWorkout &&
+      _fromWearable &&
       (calories > 0 || steps > 0 || avgHr != null || distance > 0);
 
   /// ¿Faltan las métricas principales? El wearable sincroniza Health Connect
-  /// por partes: puede haber pasos/pulso ya escritos y calorías/distancia aún
+  /// por partes: puede haber pasos ya escritos y pulso/calorías/distancia aún
   /// no. Mientras falten, la re-lectura diferida sigue reintentando (gatear
-  /// con [hasHealth] dejaba 0 kcal / 0 m para siempre ante datos parciales).
+  /// con [hasHealth] dejaba datos parciales para siempre). Incluye el pulso:
+  /// sin él no se considera "del reloj", así que conviene seguir esperándolo.
   bool get healthIncomplete =>
-      seconds > 0 && (calories <= 0 || distance <= 0);
+      seconds > 0 && (calories <= 0 || distance <= 0 || avgHr == null);
+
+  /// Si el usuario anotó stats propias (puntos totales o desglose 3PT/2PT/TL).
+  bool get hasUserStats =>
+      (userPoints ?? 0) > 0 ||
+      (userTriples ?? 0) > 0 ||
+      (userDoubles ?? 0) > 0 ||
+      (userFreeThrows ?? 0) > 0;
 
   PlaySession withResult(
     PlayResult r, {

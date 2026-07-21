@@ -79,7 +79,7 @@ class ClansService {
   ): Promise<Map<string, number>> {
     const rows = await this.prisma.match.findMany({
       where: { ...where, archived: false },
-      select: { email: true, clan: true, points: true },
+      select: { email: true, clan: true, exp: true },
     });
     const points = new Map<string, number>();
     for (const r of rows) {
@@ -87,7 +87,7 @@ class ClansService {
         ClansService.clanKey(r.clan) ||
         byEmail.get(r.email.trim().toLowerCase());
       if (!clan) continue;
-      points.set(clan, (points.get(clan) ?? 0) + r.points);
+      points.set(clan, (points.get(clan) ?? 0) + r.exp);
     }
     return points;
   }
@@ -101,14 +101,14 @@ class ClansService {
       // Total: los Points acumulados viven en el propio perfil.
       const rows = await this.prisma.profile.findMany({
         where: { clan: { not: '' }, archived: false },
-        select: { clan: true, points: true },
+        select: { clan: true, exp: true },
       });
       const points = new Map<string, number>();
       const members = new Map<string, number>();
       for (const r of rows) {
         const clan = ClansService.clanKey(r.clan);
         if (!clan) continue;
-        points.set(clan, (points.get(clan) ?? 0) + r.points);
+        points.set(clan, (points.get(clan) ?? 0) + r.exp);
         members.set(clan, (members.get(clan) ?? 0) + 1);
       }
       return ClansService.toSorted(points, members);

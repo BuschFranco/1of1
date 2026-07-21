@@ -1069,7 +1069,7 @@ class _CourtOwnerCardState extends State<_CourtOwnerCard> {
                       color: AppColors.accent)),
             ),
             const SizedBox(width: 8),
-            Text('$_points pts',
+            Text('$_points EXP',
                 style:
                     AppText.grotesk(size: 10, color: AppColors.white(0.35))),
           ],
@@ -1162,7 +1162,7 @@ class _CourtKingCardState extends State<_CourtKingCard> {
                       color: AppColors.accent)),
             ),
             const SizedBox(width: 8),
-            Text('$_points pts',
+            Text('$_points EXP',
                 style:
                     AppText.grotesk(size: 10, color: AppColors.white(0.35))),
           ],
@@ -1277,9 +1277,9 @@ class _MyCourtStatsState extends State<_MyCourtStats> {
           row(Icons.timer_outlined, 'Jugaste acá',
               PlaySessionService.fmt(secs)),
           divider(),
-          row(Icons.military_tech, 'Puntos esta temporada', '$seasonPts pts'),
+          row(Icons.military_tech, 'EXP esta temporada', '$seasonPts EXP'),
           divider(),
-          row(Icons.star_rounded, 'Puntos históricos', '$pts pts'),
+          row(Icons.star_rounded, 'EXP histórica', '$pts EXP'),
         ],
       ),
     );
@@ -1386,7 +1386,7 @@ class _MyCourtHistory extends StatelessWidget {
                     weight: FontWeight.w900,
                     color: AppColors.accent)),
             const SizedBox(width: 1),
-            Text('pts',
+            Text('EXP',
                 style:
                     AppText.grotesk(size: 10, color: AppColors.white(0.45))),
           ],

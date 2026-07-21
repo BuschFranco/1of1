@@ -69,7 +69,7 @@ class RankingsService {
     const ids = await this.identities();
     const rows = await this.prisma.match.findMany({
       where: { endedAt: { gte: since }, archived: false },
-      select: { email: true, clan: true, points: true },
+      select: { email: true, clan: true, exp: true },
     });
 
     // Una sola pasada por los partidos alimenta ambos agregados.
@@ -78,11 +78,11 @@ class RankingsService {
     for (const r of rows) {
       const email = r.email.trim().toLowerCase();
       if (!email) continue;
-      byPlayer.set(email, (byPlayer.get(email) ?? 0) + r.points);
+      byPlayer.set(email, (byPlayer.get(email) ?? 0) + r.exp);
       // El clan sale de la FILA (estampado al jugar): cambiar de clan no muda
       // los puntos ya aportados. Filas legadas sin clan → clan actual del autor.
       const clan = RankingsService.clanKey(r.clan) || ids.get(email)?.clan;
-      if (clan) byClan.set(clan, (byClan.get(clan) ?? 0) + r.points);
+      if (clan) byClan.set(clan, (byClan.get(clan) ?? 0) + r.exp);
     }
 
     // Jugadores: orden points desc → email asc (estable). El nombre/handle

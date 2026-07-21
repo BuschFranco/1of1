@@ -74,7 +74,7 @@ class MatchesService {
         await this.prisma.match.create({
           data: {
             email,
-            points: m.points,
+            exp: m.points, // wire "points" -> columna "exp"
             endedAt,
             courtId: m.courtId ?? '',
             courtName: m.courtName ?? '',
@@ -111,12 +111,12 @@ class MatchesService {
     const top = await this.prisma.match.groupBy({
       by: ['email'],
       where: { courtId, endedAt: { gte: seasonStart() }, archived: false },
-      _sum: { points: true },
-      orderBy: { _sum: { points: 'desc' } },
+      _sum: { exp: true },
+      orderBy: { _sum: { exp: 'desc' } },
       take: 1,
     });
     const email = top[0]?.email ?? '';
-    const points = top[0]?._sum.points ?? 0;
+    const points = top[0]?._sum.exp ?? 0;
     if (!email || points <= 0) return { king: null };
     const p = await this.prisma.profile.findFirst({
       where: { userEmail: email, archived: false },
@@ -148,15 +148,15 @@ class MatchesService {
     const season = seasonStart();
     const rows = await this.prisma.match.findMany({
       where: { email, courtId, archived: false },
-      select: { points: true, endedAt: true },
+      select: { exp: true, endedAt: true },
     });
     let points = 0;
     let seasonPoints = 0;
     let seasonMatches = 0;
     for (const r of rows) {
-      points += r.points;
+      points += r.exp;
       if (r.endedAt >= season) {
-        seasonPoints += r.points;
+        seasonPoints += r.exp;
         seasonMatches++;
       }
     }
@@ -179,9 +179,9 @@ class MatchesService {
         endedAt: { gte: start },
         archived: false,
       },
-      _sum: { points: true },
+      _sum: { exp: true },
     });
-    return rows.map((r) => ({ email: r.email, points: r._sum.points ?? 0 }));
+    return rows.map((r) => ({ email: r.email, points: r._sum.exp ?? 0 }));
   }
 }
 

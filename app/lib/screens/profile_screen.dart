@@ -561,6 +561,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: _healthTrendsCard(ps),
             ),
           ),
+          if (ps.hasWeeklyHealthTrend) ...[
+            const SizedBox(height: 16),
+            RevealOnScroll(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _weeklyHealthCard(ps),
+              ),
+            ),
+          ],
         ],
         if (ps.hasUserStats) ...[
           const SizedBox(height: 16),
@@ -704,7 +713,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Text('Nivel $lvl',
                   style: AppText.archivo(size: 16, weight: FontWeight.w800)),
               const Spacer(),
-              Text('$pts pts',
+              Text('$pts EXP',
                   style: AppText.grotesk(
                       size: 13,
                       weight: FontWeight.w700,
@@ -732,7 +741,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Faltan ${next - pts} pts para el nivel ${lvl + 1}',
+            'Faltan ${next - pts} EXP para el nivel ${lvl + 1}',
             style: AppText.grotesk(size: 11, color: AppColors.white(0.45)),
           ),
         ],
@@ -859,7 +868,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 size: 14, weight: FontWeight.w900, color: AppColors.accent),
           ),
           const SizedBox(width: 1),
-          Text('pts',
+          Text('EXP',
               style: AppText.grotesk(size: 10, color: AppColors.white(0.45))),
         ],
       ),
@@ -1128,6 +1137,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return '$steps';
     }
 
+    // Solo métricas con dato (lo que esté en 0/null no se muestra).
+    final cells = <Widget>[
+      if (ps.totalCalories > 0)
+        stat('Calorías', '${ps.totalCalories.round()}',
+            Icons.local_fire_department, const Color(0xFFFF6B1A)),
+      if (ps.avgHeartRate != null)
+        stat('Prom. cardíaco', '${ps.avgHeartRate}', Icons.favorite,
+            const Color(0xFFEF4444)),
+      if (ps.maxHeartRate > 0)
+        stat('Máx. cardíaco', '${ps.maxHeartRate}', Icons.monitor_heart,
+            const Color(0xFFF43F5E)),
+      if (ps.totalSteps > 0)
+        stat('Pasos', fmtSteps(ps.totalSteps), Icons.directions_walk,
+            const Color(0xFF22C55E)),
+      if (ps.totalDistanceMeters > 0)
+        stat('Distancia', fmtDistance(ps.totalDistanceMeters),
+            Icons.straighten, const Color(0xFF3B82F6)),
+    ];
+    if (cells.isEmpty) return const SizedBox.shrink();
+
+    // Filas de a 2 (la última puede quedar con una sola, a ancho completo).
+    final rows = <Widget>[];
+    for (var i = 0; i < cells.length; i += 2) {
+      if (rows.isNotEmpty) rows.add(hDiv());
+      if (i + 1 < cells.length) {
+        rows.add(IntrinsicHeight(
+          child: Row(children: [
+            Expanded(child: cells[i]),
+            Container(width: 1, color: AppColors.white(0.06)),
+            Expanded(child: cells[i + 1]),
+          ]),
+        ));
+      } else {
+        rows.add(Row(children: [
+          Expanded(child: cells[i]),
+          const Expanded(child: SizedBox()),
+        ]));
+      }
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.card,
@@ -1149,62 +1198,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         color: AppColors.white(0.5),
                         letterSpacing: 0.1)),
                 const Spacer(),
-                Text(
-                    '${ps.healthMatches} de ${ps.totalPlays}',
+                Text('${ps.healthMatches} con reloj',
                     style: AppText.grotesk(
-                        size: 11,
-                        color: AppColors.white(0.35))),
+                        size: 11, color: AppColors.white(0.35))),
               ],
             ),
           ),
           const SizedBox(height: 8),
-          IntrinsicHeight(
-            child: Row(
-              children: [
-                Expanded(
-                    child: stat('Calorías',
-                        '${ps.totalCalories.round()}', Icons.local_fire_department,
-                        const Color(0xFFFF6B1A))),
-                Container(width: 1, color: AppColors.white(0.06)),
-                Expanded(
-                    child: stat('Prom. cardíaco',
-                        ps.avgHeartRate != null ? '${ps.avgHeartRate}' : '—',
-                        Icons.favorite,
-                        const Color(0xFFEF4444))),
-              ],
-            ),
-          ),
-          hDiv(),
-          IntrinsicHeight(
-            child: Row(
-              children: [
-                Expanded(
-                    child: stat('Máx. cardíaco',
-                        ps.maxHeartRate > 0 ? '${ps.maxHeartRate}' : '—',
-                        Icons.monitor_heart,
-                        const Color(0xFFF43F5E))),
-                Container(width: 1, color: AppColors.white(0.06)),
-                Expanded(
-                    child: stat('Pasos',
-                        fmtSteps(ps.totalSteps),
-                        Icons.directions_walk,
-                        const Color(0xFF22C55E))),
-              ],
-            ),
-          ),
-          hDiv(),
-          IntrinsicHeight(
-            child: Row(
-              children: [
-                Expanded(
-                    child: stat('Distancia',
-                        fmtDistance(ps.totalDistanceMeters),
-                        Icons.straighten,
-                        const Color(0xFF3B82F6))),
-                const Expanded(child: SizedBox()),
-              ],
-            ),
-          ),
+          ...rows,
         ],
       ),
     );
@@ -1248,6 +1249,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     }
     final hasLine = hrSpots.length >= 2;
+    final hasCal = maxCal > 0; // no mostrar el chart de calorías si están en 0
+    // Promedio y tendencia del pulso (primera vs última muestra).
+    int? hrAvg;
+    double hrFirst = 0, hrLast = 0;
+    if (hrSpots.isNotEmpty) {
+      final vals = hrSpots.map((s) => s.y).toList();
+      hrAvg = (vals.reduce((a, b) => a + b) / vals.length).round();
+      hrFirst = vals.first;
+      hrLast = vals.last;
+    }
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1271,36 +1282,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          // Calorías: barras
-          Text('CALORÍAS',
-              style: AppText.grotesk(
-                  size: 9,
-                  weight: FontWeight.w600,
-                  color: AppColors.white(0.35),
-                  letterSpacing: 0.1)),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 80,
-            child: BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceAround,
-                maxY: 110,
-                titlesData: const FlTitlesData(show: false),
-                borderData: FlBorderData(show: false),
-                gridData: const FlGridData(show: false),
-                barGroups: calBars,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // BPM: línea
-          if (hasLine) ...[
-            Text('PROMEDIO CARDÍACO',
+          // Calorías: barras (solo si hay calorías > 0)
+          if (hasCal) ...[
+            Text('CALORÍAS',
                 style: AppText.grotesk(
                     size: 9,
                     weight: FontWeight.w600,
                     color: AppColors.white(0.35),
                     letterSpacing: 0.1)),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 80,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: 110,
+                  titlesData: const FlTitlesData(show: false),
+                  borderData: FlBorderData(show: false),
+                  gridData: const FlGridData(show: false),
+                  barGroups: calBars,
+                ),
+              ),
+            ),
+            if (hasLine) const SizedBox(height: 16),
+          ],
+          // BPM: línea + promedio y tendencia
+          if (hasLine) ...[
+            Row(
+              children: [
+                Text('PROMEDIO CARDÍACO',
+                    style: AppText.grotesk(
+                        size: 9,
+                        weight: FontWeight.w600,
+                        color: AppColors.white(0.35),
+                        letterSpacing: 0.1)),
+                const Spacer(),
+                if (hrAvg != null)
+                  Text('$hrAvg bpm',
+                      style: AppText.grotesk(
+                          size: 11,
+                          weight: FontWeight.w700,
+                          color: AppColors.white(0.6))),
+                const SizedBox(width: 6),
+                _trendDelta(hrLast, hrFirst),
+              ],
+            ),
             const SizedBox(height: 8),
             SizedBox(
               height: 80,
@@ -1338,6 +1364,286 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ],
       ),
+    );
+  }
+
+  /// Evolución de los stats físicos en los últimos 7 días: barras de calorías
+  /// por día (hoy resaltado), línea de pulso promedio por día, y el delta de la
+  /// semana vs los 7 días previos. Solo aparece con datos suficientes
+  /// (`ps.hasWeeklyHealthTrend`).
+  Widget _weeklyHealthCard(PlaySessionService ps) {
+    final days = ps.lastWeekDailyHealth();
+    final activeDays = days.where((d) => d.hasData).length;
+    if (activeDays < 2) return const SizedBox.shrink();
+
+    // Totales de esta semana (7 días) vs los 7 previos, para el delta.
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final weekStartMs =
+        todayStart.subtract(const Duration(days: 6)).millisecondsSinceEpoch;
+    final prevStartMs =
+        todayStart.subtract(const Duration(days: 13)).millisecondsSinceEpoch;
+    double calThis = 0, calPrev = 0;
+    int hrSumT = 0, hrCntT = 0, hrSumP = 0, hrCntP = 0;
+    for (final s in ps.log) {
+      if (!s.hasHealth) continue;
+      if (s.endedAtMillis >= weekStartMs) {
+        calThis += s.calories;
+        if (s.avgHr != null) {
+          hrSumT += s.avgHr!;
+          hrCntT++;
+        }
+      } else if (s.endedAtMillis >= prevStartMs) {
+        calPrev += s.calories;
+        if (s.avgHr != null) {
+          hrSumP += s.avgHr!;
+          hrCntP++;
+        }
+      }
+    }
+    final avgHrThis = hrCntT > 0 ? (hrSumT / hrCntT).round() : null;
+    final avgHrPrev = hrCntP > 0 ? (hrSumP / hrCntP).round() : null;
+
+    // Barras de calorías por día (normalizadas a 100; hoy en acento).
+    final maxCal = days.fold<double>(0, (m, d) => d.calories > m ? d.calories : m);
+    final calBars = List.generate(days.length, (i) {
+      final d = days[i];
+      final h = maxCal > 0 ? (d.calories / maxCal) * 100 : 0.0;
+      final isToday = i == days.length - 1;
+      return BarChartGroupData(x: i, barRods: [
+        BarChartRodData(
+          toY: h,
+          color: !d.hasData
+              ? AppColors.white(0.06)
+              : (isToday ? AppColors.accent : AppColors.white(0.25)),
+          width: 16,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+        ),
+      ]);
+    });
+
+    // Línea de pulso promedio por día (solo días con pulso).
+    final hrSpots = <FlSpot>[];
+    for (var i = 0; i < days.length; i++) {
+      if (days[i].avgHr != null) {
+        hrSpots.add(FlSpot(i.toDouble(), days[i].avgHr!.toDouble()));
+      }
+    }
+    final hasHrLine = hrSpots.length >= 2;
+
+    const dow = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+    Widget dowTitle(double value, TitleMeta meta) {
+      final i = value.toInt();
+      if (i < 0 || i >= days.length) return const SizedBox.shrink();
+      final isToday = i == days.length - 1;
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Text(
+          dow[days[i].day.weekday - 1],
+          style: AppText.grotesk(
+              size: 9,
+              weight: isToday ? FontWeight.w800 : FontWeight.w600,
+              color: isToday ? AppColors.accent : AppColors.white(0.4)),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.calendar_view_week, size: 14, color: AppColors.accent),
+              const SizedBox(width: 8),
+              Text('ÚLTIMA SEMANA',
+                  style: AppText.grotesk(
+                      size: 11,
+                      weight: FontWeight.w700,
+                      color: AppColors.white(0.5),
+                      letterSpacing: 0.1)),
+              const Spacer(),
+              Text('$activeDays ${activeDays == 1 ? 'día' : 'días'}',
+                  style:
+                      AppText.grotesk(size: 11, color: AppColors.white(0.35))),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // Resumen con delta vs semana previa (solo métricas con dato).
+          Builder(builder: (_) {
+            final summaryCells = <Widget>[
+              if (calThis > 0)
+                _weeklySummaryCell('CALORÍAS', '${calThis.round()}', 'kcal',
+                    _trendDelta(calThis, calPrev)),
+              if (avgHrThis != null)
+                _weeklySummaryCell(
+                    'PROM. CARDÍACO',
+                    '$avgHrThis',
+                    'bpm',
+                    avgHrPrev != null
+                        ? _trendDelta(
+                            avgHrThis.toDouble(), avgHrPrev.toDouble())
+                        : const SizedBox.shrink()),
+            ];
+            if (summaryCells.isEmpty) return const SizedBox.shrink();
+            if (summaryCells.length == 1) {
+              return Align(
+                  alignment: Alignment.centerLeft, child: summaryCells.first);
+            }
+            return IntrinsicHeight(
+              child: Row(
+                children: [
+                  Expanded(child: summaryCells[0]),
+                  Container(width: 1, color: AppColors.white(0.06)),
+                  Expanded(child: summaryCells[1]),
+                ],
+              ),
+            );
+          }),
+          if (maxCal > 0) ...[
+            const SizedBox(height: 18),
+            Text('CALORÍAS POR DÍA',
+                style: AppText.grotesk(
+                    size: 9,
+                    weight: FontWeight.w600,
+                    color: AppColors.white(0.35),
+                    letterSpacing: 0.1)),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 90,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: 110,
+                  titlesData: FlTitlesData(
+                    leftTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 20,
+                        getTitlesWidget: dowTitle,
+                      ),
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  gridData: const FlGridData(show: false),
+                  barGroups: calBars,
+                ),
+              ),
+            ),
+          ],
+          if (hasHrLine) ...[
+            const SizedBox(height: 16),
+            Text('PULSO PROMEDIO POR DÍA',
+                style: AppText.grotesk(
+                    size: 9,
+                    weight: FontWeight.w600,
+                    color: AppColors.white(0.35),
+                    letterSpacing: 0.1)),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 70,
+              child: LineChart(
+                LineChartData(
+                  minX: 0,
+                  maxX: (days.length - 1).toDouble(),
+                  minY: 0,
+                  maxY: 200,
+                  titlesData: const FlTitlesData(show: false),
+                  borderData: FlBorderData(show: false),
+                  gridData: const FlGridData(show: false),
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: hrSpots,
+                      isCurved: true,
+                      color: const Color(0xFFEF4444),
+                      barWidth: 2.5,
+                      dotData: FlDotData(
+                        show: true,
+                        getDotPainter: (spot, a, b, c) => FlDotCirclePainter(
+                          radius: 3,
+                          color: const Color(0xFFEF4444),
+                          strokeColor: Colors.white,
+                          strokeWidth: 1,
+                        ),
+                      ),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        color: const Color(0xFFEF4444).withAlpha(30),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Celda del resumen semanal: label + valor + unidad + chip de delta.
+  Widget _weeklySummaryCell(
+      String label, String value, String unit, Widget delta) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: AppText.grotesk(
+                  size: 9.5,
+                  weight: FontWeight.w700,
+                  color: AppColors.white(0.45),
+                  letterSpacing: 0.1)),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(value,
+                  style: AppText.archivo(
+                      size: 22, weight: FontWeight.w900, color: AppColors.ink)),
+              const SizedBox(width: 3),
+              Text(unit,
+                  style:
+                      AppText.grotesk(size: 10, color: AppColors.white(0.4))),
+              const SizedBox(width: 8),
+              delta,
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Chip de tendencia (↑/↓ %) de un valor vs el período previo. Vacío si no hay
+  /// base de comparación o el cambio es 0.
+  Widget _trendDelta(double current, double previous) {
+    if (previous <= 0) return const SizedBox.shrink();
+    final pct = ((current - previous) / previous * 100).round();
+    if (pct == 0) return const SizedBox.shrink();
+    final up = pct > 0;
+    final color = up ? AppColors.accent : AppColors.white(0.4);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(up ? Icons.arrow_upward : Icons.arrow_downward,
+            size: 11, color: color),
+        Text('${pct.abs()}%',
+            style: AppText.grotesk(
+                size: 10, weight: FontWeight.w700, color: color)),
+      ],
     );
   }
 
@@ -1397,11 +1703,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         color: AppColors.white(0.5),
                         letterSpacing: 0.1)),
                 const Spacer(),
-                Text(
-                    '${ps.userStatsMatches} de ${ps.totalPlays}',
+                Text('${ps.userStatsMatches} cargados',
                     style: AppText.grotesk(
-                        size: 11,
-                        color: AppColors.white(0.35))),
+                        size: 11, color: AppColors.white(0.35))),
               ],
             ),
           ),
@@ -1854,7 +2158,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       weight: FontWeight.w900,
                       color: AppColors.accent)),
               const SizedBox(width: 1),
-              Text('pts',
+              Text('EXP',
                   style:
                       AppText.grotesk(size: 10, color: AppColors.white(0.45))),
               const SizedBox(width: 6),
@@ -2787,10 +3091,10 @@ class _RankingSheetState extends State<_RankingSheet> {
   }
 
   String _subtitle(_RankPeriod p) => switch (p) {
-        _RankPeriod.week => 'Puntos de esta semana',
-        _RankPeriod.month => 'Puntos de este mes',
-        _RankPeriod.season => 'Puntos de la temporada (semestre)',
-        _RankPeriod.total => 'Puntos totales',
+        _RankPeriod.week => 'EXP de esta semana',
+        _RankPeriod.month => 'EXP de este mes',
+        _RankPeriod.season => 'EXP de la temporada (semestre)',
+        _RankPeriod.total => 'EXP total',
         _RankPeriod.custom => _customFrom != null && _customTo != null
             ? '${_fmtShort(_customFrom!)} — ${_fmtShort(_customTo!)}'
             : 'Elegí un rango de fechas',
@@ -2992,7 +3296,7 @@ class _RankingSheetState extends State<_RankingSheet> {
                   weight: FontWeight.w800,
                   color: e.isMe ? AppColors.accent : AppColors.ink)),
           const SizedBox(width: 4),
-          Text('pts',
+          Text('EXP',
               style:
                   AppText.grotesk(size: 10, color: AppColors.white(0.35))),
         ],

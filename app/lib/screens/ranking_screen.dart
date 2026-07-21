@@ -418,7 +418,7 @@ class _RankingScreenState extends State<RankingScreen> {
       return Center(
         child: Text(
           clans
-              ? 'Sin clanes con puntos en este período'
+              ? 'Sin clanes con EXP en este período'
               : 'Sin partidos en este período',
           style: AppText.grotesk(size: 13, color: AppColors.white(0.4)),
         ),
@@ -482,7 +482,7 @@ class _RankingScreenState extends State<RankingScreen> {
                   weight: FontWeight.w800,
                   color: highlight ? AppColors.accent : AppColors.ink)),
           const SizedBox(width: 4),
-          Text('pts',
+          Text('EXP',
               style: AppText.grotesk(size: 10, color: AppColors.white(0.35))),
         ],
       );
@@ -616,7 +616,7 @@ class _RankingScreenState extends State<RankingScreen> {
             cell(
               'Tu posición',
               playerRank != null ? '#$playerRank' : '—',
-              playerRank != null ? '$playerPoints pts' : 'Sin partidos',
+              playerRank != null ? '$playerPoints EXP' : 'Sin partidos',
             ),
             Container(width: 1, color: AppColors.white(0.06)),
             cell(
@@ -625,8 +625,8 @@ class _RankingScreenState extends State<RankingScreen> {
               clan.isEmpty
                   ? 'Sin clan'
                   : clanRank != null
-                      ? '$clanPoints pts'
-                      : 'Sin puntos',
+                      ? '$clanPoints EXP'
+                      : 'Sin EXP',
             ),
           ],
         ),
