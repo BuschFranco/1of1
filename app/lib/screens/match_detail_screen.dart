@@ -287,25 +287,12 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
   /// 3PT/2PT/TL. Distinto de los "PUNTOS GANADOS" que otorga la app.
   Widget _userStatsSection(PlaySession s) {
     final pts = s.userPoints ?? 0;
-    final t3 = s.userTriples ?? 0;
-    final t2 = s.userDoubles ?? 0;
-    final tl = s.userFreeThrows ?? 0;
-    final fieldGoals = t3 + t2; // tiros de campo (canastas de juego)
-    // Ritmo de anotación: puntos por minuto (métrica derivada).
-    final ppm = (pts > 0 && s.seconds > 0) ? pts / (s.seconds / 60) : null;
-
-    // Fila compacta: desglose + derivadas (solo lo que tiene valor).
-    final items = <Widget>[
-      if (t3 > 0) _inlineStat('3PT', '$t3'),
-      if (t2 > 0) _inlineStat('2PT', '$t2'),
-      if (tl > 0) _inlineStat('TL', '$tl'),
-      if (fieldGoals > 0) _inlineStat('CANASTAS', '$fieldGoals'),
-      if (ppm != null) _inlineStat('PTS/MIN', ppm.toStringAsFixed(1)),
-    ];
+    // Métricas desde la fuente única (compartida con la imagen, no se desincroniza).
+    final items = _userStatItems(s);
     final row = <Widget>[];
     for (var i = 0; i < items.length; i++) {
       if (i > 0) row.add(_vDivider());
-      row.add(Expanded(child: items[i]));
+      row.add(Expanded(child: _inlineStat(items[i].label, items[i].value)));
     }
 
     return Container(
@@ -777,6 +764,25 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 }
 
+/// Métricas derivadas de lo que anotó el usuario (desglose 3PT/2PT/TL + canastas
+/// de campo + puntos por minuto). FUENTE ÚNICA: la usan tanto el registro en
+/// pantalla como la imagen de compartir, así las dos SIEMPRE muestran lo mismo.
+List<({String label, String value})> _userStatItems(PlaySession s) {
+  final pts = s.userPoints ?? 0;
+  final t3 = s.userTriples ?? 0;
+  final t2 = s.userDoubles ?? 0;
+  final tl = s.userFreeThrows ?? 0;
+  final fieldGoals = t3 + t2;
+  final ppm = (pts > 0 && s.seconds > 0) ? pts / (s.seconds / 60) : null;
+  return [
+    if (t3 > 0) (label: '3PT', value: '$t3'),
+    if (t2 > 0) (label: '2PT', value: '$t2'),
+    if (tl > 0) (label: 'TL', value: '$tl'),
+    if (fieldGoals > 0) (label: 'CANASTAS', value: '$fieldGoals'),
+    if (ppm != null) (label: 'PTS/MIN', value: ppm.toStringAsFixed(1)),
+  ];
+}
+
 /// Widget optimizado para captura como imagen (9:16, Instagram Stories).
 class _ShareCard extends StatelessWidget {
   final PlaySession session;
@@ -857,28 +863,21 @@ class _ShareCard extends StatelessWidget {
                   color: s.points > 0 ? AppColors.accent : null),
             ],
           ),
-          // Stats del usuario: total anotado (PTS) + desglose 3PT/2PT/TL.
+          // Stats del usuario: total (PTS) + las MISMAS métricas del registro
+          // (3PT/2PT/TL/CANASTAS/PTS/MIN). Wrap para que no se desborde a lo ancho.
           if (s.hasUserStats) ...[
             const SizedBox(height: 52),
-            Builder(builder: (_) {
-              final stats = <Widget>[
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 48,
+              runSpacing: 40,
+              children: [
                 if ((s.userPoints ?? 0) > 0)
                   _shareUserStat('${s.userPoints}', 'PTS'),
-                if ((s.userTriples ?? 0) > 0)
-                  _shareUserStat('${s.userTriples}', '3PT'),
-                if ((s.userDoubles ?? 0) > 0)
-                  _shareUserStat('${s.userDoubles}', '2PT'),
-                if ((s.userFreeThrows ?? 0) > 0)
-                  _shareUserStat('${s.userFreeThrows}', 'TL'),
-              ];
-              final row = <Widget>[];
-              for (var i = 0; i < stats.length; i++) {
-                if (i > 0) row.add(const SizedBox(width: 48));
-                row.add(stats[i]);
-              }
-              return Row(
-                  mainAxisAlignment: MainAxisAlignment.center, children: row);
-            }),
+                for (final it in _userStatItems(s))
+                  _shareUserStat(it.value, it.label),
+              ],
+            ),
           ],
           // Salud: todas las métricas disponibles.
           if (s.hasHealth) ...[

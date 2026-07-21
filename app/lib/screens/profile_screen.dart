@@ -1085,10 +1085,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   PlayStats _stats() => _statsOf(context.watch<PlaySessionService>());
 
+  /// Header de card con ícono + título + subtítulo chico (origen de los datos).
+  Widget _cardHeader(IconData icon, String title, String subtitle) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: AppColors.accent),
+              const SizedBox(width: 8),
+              Text(title,
+                  style: AppText.grotesk(
+                      size: 11,
+                      weight: FontWeight.w700,
+                      color: AppColors.white(0.5),
+                      letterSpacing: 0.1)),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(subtitle,
+              style: AppText.grotesk(size: 9, color: AppColors.white(0.3))),
+        ],
+      ),
+    );
+  }
+
   /// Card de stats de salud: muestra métricas agregadas del reloj/anillo.
   /// Solo visible si hay health habilitado y al menos un partido con datos.
   Widget _healthStatsCard(PlaySessionService ps) {
-    Widget stat(String label, String value, IconData icon, Color color) {
+    // [qualifier] aclara qué es el número: 'total' (acumulado), 'prom' o 'máx'.
+    Widget stat(
+        String label, String value, String qualifier, IconData icon, Color color) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Column(
@@ -1108,12 +1137,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
             const SizedBox(height: 6),
-            Text(value,
-                style: AppText.archivo(
-                    size: 20,
-                    weight: FontWeight.w900,
-                    height: 1.0,
-                    color: AppColors.ink)),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(value,
+                    style: AppText.archivo(
+                        size: 20,
+                        weight: FontWeight.w900,
+                        height: 1.0,
+                        color: AppColors.ink)),
+                const SizedBox(width: 5),
+                Text(qualifier.toUpperCase(),
+                    style: AppText.grotesk(
+                        size: 8,
+                        weight: FontWeight.w700,
+                        color: AppColors.white(0.3),
+                        letterSpacing: 0.06)),
+              ],
+            ),
           ],
         ),
       );
@@ -1140,19 +1182,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Solo métricas con dato (lo que esté en 0/null no se muestra).
     final cells = <Widget>[
       if (ps.totalCalories > 0)
-        stat('Calorías', '${ps.totalCalories.round()}',
+        stat('Calorías', '${ps.totalCalories.round()}', 'total',
             Icons.local_fire_department, const Color(0xFFFF6B1A)),
       if (ps.avgHeartRate != null)
-        stat('Prom. cardíaco', '${ps.avgHeartRate}', Icons.favorite,
+        stat('Cardíaco', '${ps.avgHeartRate}', 'prom', Icons.favorite,
             const Color(0xFFEF4444)),
       if (ps.maxHeartRate > 0)
-        stat('Máx. cardíaco', '${ps.maxHeartRate}', Icons.monitor_heart,
+        stat('Cardíaco', '${ps.maxHeartRate}', 'máx', Icons.monitor_heart,
             const Color(0xFFF43F5E)),
       if (ps.totalSteps > 0)
-        stat('Pasos', fmtSteps(ps.totalSteps), Icons.directions_walk,
+        stat('Pasos', fmtSteps(ps.totalSteps), 'total', Icons.directions_walk,
             const Color(0xFF22C55E)),
       if (ps.totalDistanceMeters > 0)
-        stat('Distancia', fmtDistance(ps.totalDistanceMeters),
+        stat('Distancia', fmtDistance(ps.totalDistanceMeters), 'total',
             Icons.straighten, const Color(0xFF3B82F6)),
     ];
     if (cells.isEmpty) return const SizedBox.shrink();
@@ -1185,25 +1227,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-            child: Row(
-              children: [
-                Icon(Icons.favorite, size: 14, color: AppColors.accent),
-                const SizedBox(width: 8),
-                Text('SALUD',
-                    style: AppText.grotesk(
-                        size: 11,
-                        weight: FontWeight.w700,
-                        color: AppColors.white(0.5),
-                        letterSpacing: 0.1)),
-                const Spacer(),
-                Text('${ps.healthMatches} con reloj',
-                    style: AppText.grotesk(
-                        size: 11, color: AppColors.white(0.35))),
-              ],
-            ),
-          ),
+          _cardHeader(Icons.favorite, 'ESTADO', 'Así te movés en los partidos'),
           const SizedBox(height: 8),
           ...rows,
         ],
@@ -1250,15 +1274,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     final hasLine = hrSpots.length >= 2;
     final hasCal = maxCal > 0; // no mostrar el chart de calorías si están en 0
-    // Promedio y tendencia del pulso (primera vs última muestra).
-    int? hrAvg;
-    double hrFirst = 0, hrLast = 0;
+    // Promedio del pulso: mes actual vs mes anterior (mes calendario). El delta
+    // se calcula entre esos dos promedios; si falta el mes previo, no se muestra.
+    final now = DateTime.now();
+    final thisMonthMs = DateTime(now.year, now.month, 1).millisecondsSinceEpoch;
+    final prevMonthMs =
+        DateTime(now.year, now.month - 1, 1).millisecondsSinceEpoch;
+    int hrSumThis = 0, hrCntThis = 0, hrSumPrev = 0, hrCntPrev = 0;
+    for (final s in ps.log) {
+      if (s.avgHr == null || !s.hasHealth) continue;
+      if (s.endedAtMillis >= thisMonthMs) {
+        hrSumThis += s.avgHr!;
+        hrCntThis++;
+      } else if (s.endedAtMillis >= prevMonthMs) {
+        hrSumPrev += s.avgHr!;
+        hrCntPrev++;
+      }
+    }
+    final hrMonthAvg = hrCntThis > 0 ? (hrSumThis / hrCntThis).round() : null;
+    final hrPrevAvg = hrCntPrev > 0 ? (hrSumPrev / hrCntPrev).round() : null;
+    // Fallback para el número grande si no hay partidos este mes: promedio de la
+    // muestra visible.
+    int? hrAvgAll;
     if (hrSpots.isNotEmpty) {
       final vals = hrSpots.map((s) => s.y).toList();
-      hrAvg = (vals.reduce((a, b) => a + b) / vals.length).round();
-      hrFirst = vals.first;
-      hrLast = vals.last;
+      hrAvgAll = (vals.reduce((a, b) => a + b) / vals.length).round();
     }
+    final hrShown = hrMonthAvg ?? hrAvgAll;
+    final hasMonthDelta = hrMonthAvg != null && hrPrevAvg != null;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1306,7 +1349,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             if (hasLine) const SizedBox(height: 16),
           ],
-          // BPM: línea + promedio y tendencia
+          // BPM: línea + promedio del mes y tendencia vs mes anterior
           if (hasLine) ...[
             Row(
               children: [
@@ -1317,15 +1360,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         color: AppColors.white(0.35),
                         letterSpacing: 0.1)),
                 const Spacer(),
-                if (hrAvg != null)
-                  Text('$hrAvg bpm',
+                if (hrShown != null)
+                  Text('$hrShown bpm',
                       style: AppText.grotesk(
                           size: 11,
                           weight: FontWeight.w700,
                           color: AppColors.white(0.6))),
-                const SizedBox(width: 6),
-                _trendDelta(hrLast, hrFirst),
+                if (hasMonthDelta) ...[
+                  const SizedBox(width: 6),
+                  _trendDelta(hrMonthAvg.toDouble(), hrPrevAvg.toDouble()),
+                ],
               ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                  hrMonthAvg != null
+                      ? (hasMonthDelta
+                          ? 'Promedio de este mes vs el anterior'
+                          : 'Promedio de este mes')
+                      : 'Promedio de tus últimos partidos',
+                  style: AppText.grotesk(size: 8, color: AppColors.white(0.3))),
             ),
             const SizedBox(height: 8),
             SizedBox(
@@ -1682,6 +1737,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     Widget hDiv() => Container(height: 1, color: AppColors.white(0.06));
 
+    // Puntos totales y promedio siempre (son el titular); el desglose solo si > 0.
+    final cells = <Widget>[
+      stat('Puntos totales', '${ps.totalUserPoints}', Icons.score,
+          const Color(0xFFFF6B1A)),
+      stat('Prom. por partido', ps.avgUserPoints.toStringAsFixed(1),
+          Icons.trending_up, const Color(0xFF22C55E)),
+      if (ps.totalUserTriples > 0)
+        stat('Triples', '${ps.totalUserTriples}', Icons.add_circle_outline,
+            const Color(0xFF3B82F6)),
+      if (ps.totalUserDoubles > 0)
+        stat('Dobles', '${ps.totalUserDoubles}', Icons.add_circle,
+            const Color(0xFFA855F7)),
+      if (ps.totalUserFreeThrows > 0)
+        stat('Tiros libres', '${ps.totalUserFreeThrows}',
+            Icons.free_cancellation, const Color(0xFFEAB308)),
+    ];
+    final rows = <Widget>[];
+    for (var i = 0; i < cells.length; i += 2) {
+      if (rows.isNotEmpty) rows.add(hDiv());
+      if (i + 1 < cells.length) {
+        rows.add(IntrinsicHeight(
+          child: Row(children: [
+            Expanded(child: cells[i]),
+            Container(width: 1, color: AppColors.white(0.06)),
+            Expanded(child: cells[i + 1]),
+          ]),
+        ));
+      } else {
+        rows.add(Row(children: [
+          Expanded(child: cells[i]),
+          const Expanded(child: SizedBox()),
+        ]));
+      }
+    }
+
+    // Distribución de puntos: de dónde salen tus puntos (3PT/2PT/TL).
+    final pts3 = ps.totalUserTriples * 3;
+    final pts2 = ps.totalUserDoubles * 2;
+    final ptsTl = ps.totalUserFreeThrows; // 1 c/u
+    final fromBreakdown = pts3 + pts2 + ptsTl;
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.card,
@@ -1690,72 +1786,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-            child: Row(
-              children: [
-                Icon(Icons.sports_basketball, size: 14, color: AppColors.accent),
-                const SizedBox(width: 8),
-                Text('ESTADÍSTICAS DE JUEGO',
-                    style: AppText.grotesk(
-                        size: 11,
-                        weight: FontWeight.w700,
-                        color: AppColors.white(0.5),
-                        letterSpacing: 0.1)),
-                const Spacer(),
-                Text('${ps.userStatsMatches} cargados',
-                    style: AppText.grotesk(
-                        size: 11, color: AppColors.white(0.35))),
-              ],
-            ),
-          ),
+          _cardHeader(Icons.sports_basketball, 'ESTADÍSTICAS DE JUEGO',
+              'Datos de tus últimos partidos'),
           const SizedBox(height: 8),
-          IntrinsicHeight(
-            child: Row(
-              children: [
-                Expanded(
-                    child: stat('Puntos totales',
-                        '${ps.totalUserPoints}', Icons.score,
-                        const Color(0xFFFF6B1A))),
-                Container(width: 1, color: AppColors.white(0.06)),
-                Expanded(
-                    child: stat('Prom. por partido',
-                        ps.avgUserPoints.toStringAsFixed(1),
-                        Icons.trending_up,
-                        const Color(0xFF22C55E))),
-              ],
+          ...rows,
+          if (fromBreakdown > 0) ...[
+            hDiv(),
+            _pointsDistribution(pts3, pts2, ptsTl, fromBreakdown),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// De dónde vienen tus puntos: barra apilada + leyenda con % de 3PT/2PT/TL.
+  Widget _pointsDistribution(int pts3, int pts2, int ptsTl, int total) {
+    const c3 = Color(0xFF3B82F6); // 3PT azul
+    const c2 = Color(0xFFA855F7); // 2PT violeta
+    const cTl = Color(0xFFEAB308); // TL dorado
+    int pct(int v) => (v / total * 100).round();
+
+    Widget seg(int v, Color c) =>
+        v > 0 ? Expanded(flex: v, child: Container(color: c)) : const SizedBox();
+    Widget legend(Color c, String label, int v) {
+      if (v <= 0) return const SizedBox.shrink();
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text('$label ${pct(v)}%',
+              style: AppText.grotesk(
+                  size: 10,
+                  weight: FontWeight.w600,
+                  color: AppColors.white(0.6))),
+        ],
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('DE DÓNDE VIENEN TUS PUNTOS',
+              style: AppText.grotesk(
+                  size: 9.5,
+                  weight: FontWeight.w700,
+                  color: AppColors.white(0.45),
+                  letterSpacing: 0.1)),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: SizedBox(
+              height: 10,
+              child: Row(children: [seg(pts3, c3), seg(pts2, c2), seg(ptsTl, cTl)]),
             ),
           ),
-          hDiv(),
-          IntrinsicHeight(
-            child: Row(
-              children: [
-                Expanded(
-                    child: stat('Triples',
-                        '${ps.totalUserTriples}',
-                        Icons.add_circle_outline,
-                        const Color(0xFF3B82F6))),
-                Container(width: 1, color: AppColors.white(0.06)),
-                Expanded(
-                    child: stat('Dobles',
-                        '${ps.totalUserDoubles}',
-                        Icons.add_circle,
-                        const Color(0xFFA855F7))),
-              ],
-            ),
-          ),
-          hDiv(),
-          IntrinsicHeight(
-            child: Row(
-              children: [
-                Expanded(
-                    child: stat('Tiros libres',
-                        '${ps.totalUserFreeThrows}',
-                        Icons.free_cancellation,
-                        const Color(0xFFEAB308))),
-                const Expanded(child: SizedBox()),
-              ],
-            ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 16,
+            runSpacing: 6,
+            children: [
+              legend(c3, '3PT', pts3),
+              legend(c2, '2PT', pts2),
+              legend(cTl, 'TL', ptsTl),
+            ],
           ),
         ],
       ),

@@ -316,18 +316,30 @@ class _MainShellState extends State<MainShell> {
         behavior: HitTestBehavior.opaque,
         child: Container(
           margin: const EdgeInsets.only(top: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            color: AppColors.white(0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.white(0.08)),
+            color: AppColors.white(0.04),
+            borderRadius: BorderRadius.circular(14),
           ),
           child: Row(
             children: [
-              Icon(icon, size: 18, color: color),
+              Container(
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: color.withAlpha(38),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, size: 18, color: color),
+              ),
               const SizedBox(width: 12),
-              Text(r.label,
-                  style: AppText.grotesk(size: 14, weight: FontWeight.w600)),
+              Expanded(
+                child: Text(r.label,
+                    style:
+                        AppText.grotesk(size: 14, weight: FontWeight.w700)),
+              ),
+              Icon(Icons.chevron_right, size: 18, color: AppColors.white(0.25)),
             ],
           ),
         ),
@@ -638,47 +650,49 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
 
-    Widget field(String label, TextEditingController ctrl, {String? hint}) {
+    // Input numérico compacto (plano: filled sin borde, foco en acento).
+    InputDecoration numDecoration(double size) => InputDecoration(
+          hintText: '0',
+          hintStyle: AppText.archivo(
+              size: size, weight: FontWeight.w800, color: AppColors.white(0.2)),
+          filled: true,
+          fillColor: AppColors.white(0.05),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+          ),
+        );
+
+    Widget field(String label, TextEditingController ctrl) {
       return Expanded(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(label.toUpperCase(),
                 style: AppText.grotesk(
-                    size: 10,
-                    weight: FontWeight.w600,
+                    size: 9.5,
+                    weight: FontWeight.w700,
                     color: AppColors.white(0.4),
                     letterSpacing: 0.08)),
             const SizedBox(height: 6),
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.white(0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.white(0.08)),
-              ),
-              child: TextField(
-                controller: ctrl,
-                keyboardType: TextInputType.number,
-                textAlign: TextAlign.center,
-                style: AppText.archivo(size: 18, weight: FontWeight.w800),
-                cursorColor: AppColors.accent,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(3),
-                ],
-                decoration: InputDecoration(
-                  hintText: hint ?? '0',
-                  hintStyle: AppText.archivo(
-                      size: 18,
-                      weight: FontWeight.w800,
-                      color: AppColors.white(0.2)),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
+            TextField(
+              controller: ctrl,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              style: AppText.archivo(size: 16, weight: FontWeight.w800),
+              cursorColor: AppColors.accent,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(3),
+              ],
+              decoration: numDecoration(16),
             ),
           ],
         ),
@@ -744,65 +758,62 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                        'Estos datos se guardan localmente y te ayudan a medir tu progreso.',
-                        style: AppText.grotesk(
-                            size: 12, color: AppColors.white(0.4))),
-                    const SizedBox(height: 16),
-                    // Puntos (ancho completo)
+                    // Por qué cargar esto (tono relajado: es para promedios).
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withAlpha(20),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline,
+                              size: 16, color: AppColors.accent),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Sirve para llevar el registro de tu progreso. Si no te acordás los números exactos, no pasa nada: se usan para sacar un promedio, así que con que te acerques alcanza.',
+                              style: AppText.grotesk(
+                                  size: 12,
+                                  color: AppColors.white(0.7),
+                                  height: 1.35),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    // Puntos totales (ancho completo).
                     Text('PUNTOS ANOTADOS',
                         style: AppText.grotesk(
                             size: 10,
-                            weight: FontWeight.w600,
+                            weight: FontWeight.w700,
                             color: AppColors.white(0.4),
                             letterSpacing: 0.08)),
                     const SizedBox(height: 6),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.white(0.05),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.white(0.08)),
-                      ),
-                      child: TextField(
-                        controller: widget.ptsCtrl,
-                        keyboardType: TextInputType.number,
-                        textAlign: TextAlign.center,
-                        style:
-                            AppText.archivo(size: 22, weight: FontWeight.w800),
-                        cursorColor: AppColors.accent,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(3),
-                        ],
-                        decoration: InputDecoration(
-                          hintText: '0',
-                          hintStyle: AppText.archivo(
-                              size: 22,
-                              weight: FontWeight.w800,
-                              color: AppColors.white(0.2)),
-                          border: InputBorder.none,
-                          isDense: true,
-                          contentPadding:
-                              const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    // Triples y Dobles en fila
-                    Row(
-                      children: [
-                        field('Triples (3pts)', widget.t3Ctrl),
-                        const SizedBox(width: 12),
-                        field('Dobles (2pts)', widget.t2Ctrl),
+                    TextField(
+                      controller: widget.ptsCtrl,
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.center,
+                      style: AppText.archivo(size: 20, weight: FontWeight.w800),
+                      cursorColor: AppColors.accent,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(3),
                       ],
+                      decoration: numDecoration(20),
                     ),
                     const SizedBox(height: 16),
-                    // Tiros libres
+                    // Desglose: 3PT / 2PT / TL en una sola fila.
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        field('Tiros libres (1pt)', widget.tlCtrl),
-                        const SizedBox(width: 12),
-                        const Expanded(child: SizedBox()),
+                        field('3PT', widget.t3Ctrl),
+                        const SizedBox(width: 10),
+                        field('2PT', widget.t2Ctrl),
+                        const SizedBox(width: 10),
+                        field('TL', widget.tlCtrl),
                       ],
                     ),
                     const SizedBox(height: 24),
