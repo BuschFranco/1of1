@@ -63,6 +63,7 @@ class AppShape {
   static const double rCard = 20;
   static const double rBtn = 100;
   static const double rChip = 100;
+  static const double rField = 16; // inputs de texto (rectángulo redondeado, no píldora)
 }
 
 class AppText {

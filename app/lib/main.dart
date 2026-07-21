@@ -3,6 +3,7 @@ import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_maps_flutter_android/google_maps_flutter_android.dart';
 import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
 import 'package:provider/provider.dart';
@@ -112,6 +113,14 @@ class OneOfOneApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         navigatorKey: navigatorKey,
         theme: buildAppTheme(),
+        // Localización: sin esto el date range picker de Material abre en blanco.
+        locale: const Locale('es'),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('es'), Locale('en')],
         // Blindaje: íconos de la barra de estado SIEMPRE claros (tema dark).
         // Sin esto, cualquier pantalla que pise el estilo lo deja pegado.
         builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(

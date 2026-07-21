@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../data/models.dart';
 import 'api/api_client.dart';
+import 'cache/api_cache.dart';
 
 /// Provee los pickups en los que el usuario está involucrado (como creador o
 /// invitado) y las operaciones de invitación/gestión: aceptar, rechazar, mover
@@ -21,11 +22,18 @@ class PickupsProvider extends ChangeNotifier {
   /// Carga los pickups donde el usuario es creador o está invitado. El filtro
   /// lo hace el server con el email del token; [email] se conserva para la
   /// lógica local (expiración/orden). Best-effort: ante error deja la lista.
-  Future<void> loadForUser(String email) async {
+  Future<void> loadForUser(String email, {bool force = false}) async {
     _email = email.trim().toLowerCase();
     if (_email.isEmpty || !_api.isConfigured || !_api.hasToken) {
       _pickups = [];
       notifyListeners();
+      return;
+    }
+    // Guarda TTL: si se cargó hace poco y ya hay datos, no refetch (evita el
+    // GET /pickups en cada apertura de Crew). `force` para el pull-to-refresh.
+    if (!force &&
+        _pickups.isNotEmpty &&
+        ApiCache.isFresh('pickups', ApiCache.ttlPickups)) {
       return;
     }
     _loading = true;
@@ -41,6 +49,7 @@ class PickupsProvider extends ChangeNotifier {
       _pickups = deduped.where((p) => !p.isExpired).toList();
       // Más recientes primero (los sin fecha, al final).
       _pickups.sort((a, b) => (b.dateTime ?? '').compareTo(a.dateTime ?? ''));
+      ApiCache.put('pickups', true); // marca de tiempo para la guarda TTL
       // Fire-and-forget: no bloquear la pantalla por la limpieza. Si falla,
       // igual quedan ocultos y se reintenta en la próxima carga.
       if (expired.isNotEmpty) unawaited(_cleanupExpired(expired));
@@ -173,8 +182,8 @@ class PickupsProvider extends ChangeNotifier {
     try {
       final json = await _api.joinPickup(c);
       final joined = Pickup.fromApi(json);
-      // El pickup no estaba en la lista local del que se une: recargar.
-      await loadForUser(e);
+      // El pickup no estaba en la lista local del que se une: recargar sí o sí.
+      await loadForUser(e, force: true);
       return (error: null, pickupId: joined.pageId);
     } on ApiException catch (ex) {
       if (ex.statusCode == 404) {

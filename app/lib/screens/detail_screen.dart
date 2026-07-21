@@ -6,6 +6,8 @@ import '../data/models.dart';
 import '../services/api/api_client.dart';
 import '../services/api/api_config.dart';
 import '../services/blocked_provider.dart';
+import '../services/cache/api_cache.dart';
+import '../services/court_owner_cache.dart';
 import '../services/court_rating_service.dart';
 import '../services/courts_provider.dart';
 import '../services/favorites_provider.dart';
@@ -631,6 +633,28 @@ class DetailScreen extends StatelessWidget {
   }
 }
 
+/// Decoración compartida de los inputs de texto de los diálogos (reseña,
+/// publicación, comentario). Rectángulo redondeado (no píldora), fondo hundido
+/// más oscuro que el diálogo para dar profundidad, borde sutil que se acenta al
+/// enfocar. Se centraliza acá para que los tres se vean igual.
+InputDecoration _dialogFieldDecoration(String hint) {
+  return InputDecoration(
+    hintText: hint,
+    hintStyle: AppText.grotesk(size: 13, color: AppColors.white(0.35)),
+    filled: true,
+    fillColor: AppColors.bg,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppShape.rField),
+      borderSide: BorderSide(color: AppColors.white(0.08)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppShape.rField),
+      borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+    ),
+  );
+}
+
 /// Sección de reseñas: lista las reseñas de la cancha desde Notion y permite
 /// agregar una nueva (rating + comentario).
 class _ReviewsSection extends StatefulWidget {
@@ -674,8 +698,13 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
         ),
         FutureBuilder<List<Review>>(
           future: _future,
+          // Semilla del cache: si ya se cargaron antes, se ven al instante
+          // (sin spinner) mientras se revalida en segundo plano.
+          initialData: ApiCache.peek<List<Review>>(
+              CourtRatingService.reviewsKey(widget.courtId)),
           builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
+            if (!snap.hasData &&
+                snap.connectionState == ConnectionState.waiting) {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Center(
@@ -927,20 +956,7 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
                 maxLines: 3,
                 style: AppText.grotesk(size: 14),
                 cursorColor: AppColors.accent,
-                decoration: InputDecoration(
-                  hintText: 'Contá tu experiencia...',
-                  hintStyle: AppText.grotesk(size: 13, color: AppColors.white(0.35)),
-                  filled: true,
-                  fillColor: AppColors.glass,
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppShape.rBtn),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppShape.rBtn),
-                    borderSide: const BorderSide(color: AppColors.accent, width: 1),
-                  ),
-                ),
+                decoration: _dialogFieldDecoration('Contá tu experiencia...'),
               ),
             ],
           ),
@@ -1001,17 +1017,21 @@ class _CourtOwnerCardState extends State<_CourtOwnerCard> {
     _load();
   }
 
+  void _apply(Map<String, dynamic>? owner) {
+    _clan = (owner?['clan'] ?? '').toString();
+    _points = (owner?['points'] as num?)?.round() ?? 0;
+  }
+
   Future<void> _load() async {
     if (!ApiConfig.isConfigured || !context.read<Session>().isLoggedIn) return;
-    try {
-      final r = await ApiClient().clanCourtOwner(widget.courtId);
-      final owner = r['owner'];
-      if (!mounted || owner is! Map) return;
-      setState(() {
-        _clan = (owner['clan'] ?? '').toString();
-        _points = (owner['points'] as num?)?.round() ?? 0;
-      });
-    } catch (_) {/* sin red: la card no aparece */}
+    // Pintar al instante lo cacheado (aunque esté viejo), sin spinner.
+    final cached = ApiCache.peek<Map<String, dynamic>?>(
+        CourtOwnerCache.ownerKey(widget.courtId));
+    if (cached != null) _apply(cached);
+    // Fresco → no toca la red; viejo/ausente → refresca en segundo plano.
+    final data = await CourtOwnerCache.ownerDataFor(widget.courtId);
+    if (!mounted) return;
+    setState(() => _apply(data));
   }
 
   @override
@@ -1083,18 +1103,20 @@ class _CourtKingCardState extends State<_CourtKingCard> {
     _load();
   }
 
+  void _apply(Map<String, dynamic>? king) {
+    _name = (king?['name'] ?? '').toString();
+    _handle = (king?['handle'] ?? '').toString();
+    _points = (king?['points'] as num?)?.round() ?? 0;
+  }
+
   Future<void> _load() async {
     if (!ApiConfig.isConfigured || !context.read<Session>().isLoggedIn) return;
-    try {
-      final r = await ApiClient().courtKing(widget.courtId);
-      final king = r['king'];
-      if (!mounted || king is! Map) return;
-      setState(() {
-        _name = (king['name'] ?? '').toString();
-        _handle = (king['handle'] ?? '').toString();
-        _points = (king['points'] as num?)?.round() ?? 0;
-      });
-    } catch (_) {/* sin red: la card no aparece */}
+    final cached = ApiCache.peek<Map<String, dynamic>?>(
+        CourtOwnerCache.kingKey(widget.courtId));
+    if (cached != null) _apply(cached);
+    final data = await CourtOwnerCache.kingDataFor(widget.courtId);
+    if (!mounted) return;
+    setState(() => _apply(data));
   }
 
   @override
@@ -1177,16 +1199,31 @@ class _MyCourtStatsState extends State<_MyCourtStats> {
     _load();
   }
 
+  void _apply(Map<String, dynamic> r) {
+    _dbPoints = (r['points'] as num?)?.toInt() ?? 0;
+    _dbSeasonPoints = (r['seasonPoints'] as num?)?.toInt() ?? 0;
+  }
+
   Future<void> _load() async {
     if (!ApiConfig.isConfigured || !context.read<Session>().isLoggedIn) return;
+    final key = 'mypoints::${widget.courtId}';
+    final cached = ApiCache.peek<Map<String, dynamic>>(key);
+    // Aplicar lo cacheado ANTES del primer build (sin setState: estamos en el
+    // flujo de initState). Si está fresco, no se toca la red.
+    if (cached != null) _apply(cached);
+    if (cached != null && ApiCache.isFresh(key, ApiCache.ttlMyPoints)) {
+      return;
+    }
     try {
       final r = await ApiClient().courtPoints(widget.courtId);
+      final data = <String, dynamic>{
+        'points': (r['points'] as num?)?.toInt() ?? 0,
+        'seasonPoints': (r['seasonPoints'] as num?)?.toInt() ?? 0,
+      };
+      ApiCache.put(key, data);
       if (!mounted) return;
-      setState(() {
-        _dbPoints = (r['points'] as num?)?.toInt() ?? 0;
-        _dbSeasonPoints = (r['seasonPoints'] as num?)?.toInt() ?? 0;
-      });
-    } catch (_) {/* sin red: queda el estimado local */}
+      setState(() => _apply(data));
+    } catch (_) {/* sin red: queda el estimado local o lo cacheado */}
   }
 
   @override
@@ -1373,29 +1410,47 @@ class _PostsSectionState extends State<_PostsSection> {
   late Future<List<CourtPost>> _future;
   List<CourtPost> posts = [];
 
+  String get _cacheKey => 'posts::${widget.courtId}';
+
   @override
   void initState() {
     super.initState();
+    // Semilla del cache para que los likes/comentarios tengan datos al toque.
+    final cached = ApiCache.peek<List<CourtPost>>(_cacheKey);
+    if (cached != null) posts = cached;
     _future = _fetch();
   }
 
-  Future<List<CourtPost>> _fetch() async {
+  Future<List<CourtPost>> _fetch({bool force = false}) async {
+    final cached = ApiCache.peek<List<CourtPost>>(_cacheKey);
+    if (!force && cached != null && ApiCache.isFresh(_cacheKey, ApiCache.ttlPosts)) {
+      posts = cached;
+      return cached;
+    }
     try {
       final data = await ApiClient().courtPosts(widget.courtId);
       final List rows = (data['items'] as List?) ?? [];
       final list = rows.map<CourtPost>((r) => CourtPost.fromApi(r)).toList();
+      ApiCache.put(_cacheKey, list);
       if (mounted) setState(() => posts = list);
       return list;
     } catch (e) {
-      // No tragar el error: relanzar para que el FutureBuilder muestre el
-      // estado de error (con reintento) en vez de confundirlo con "no hay
-      // publicaciones". Antes esto devolvía [] y ocultaba fallos reales.
       debugPrint('courtPosts fetch error: $e');
+      // Si hay algo cacheado (aunque viejo), mostrarlo en vez del error.
+      if (cached != null) {
+        posts = cached;
+        return cached;
+      }
+      // Nada que mostrar: relanzar para la tarjeta de error con "Reintentar".
       rethrow;
     }
   }
 
-  void _refresh() => setState(() => _future = _fetch());
+  // Tras crear/borrar/comentar: invalidar el cache y traer fresco.
+  void _refresh() {
+    ApiCache.invalidate(_cacheKey);
+    setState(() => _future = _fetch(force: true));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1409,8 +1464,11 @@ class _PostsSectionState extends State<_PostsSection> {
         ),
         FutureBuilder<List<CourtPost>>(
           future: _future,
+          // Semilla del cache: reentrar a la cancha muestra los posts al toque.
+          initialData: ApiCache.peek<List<CourtPost>>(_cacheKey),
           builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
+            if (!snap.hasData &&
+                snap.connectionState == ConnectionState.waiting) {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Center(
@@ -1498,8 +1556,17 @@ class _PostsSectionState extends State<_PostsSection> {
     final myEmail = (session.email ?? '').trim().toLowerCase();
     final isMine = p.userEmail.trim().toLowerCase() == myEmail;
     final date = p.createdAt != null ? _fmtDate(p.createdAt!) : '';
+    // Estado local del like: se captura por el StatefulBuilder y persiste entre
+    // rebuilds. Antes se actualizaba `posts[idx]` pero se renderizaba desde `p`
+    // (variable vieja), así que el ícono nunca cambiaba al dar like.
+    bool liked = p.likedByMe;
+    int likeCount = p.likeCount;
+    bool liking = false;
     return StatefulBuilder(
-      builder: (context, setLocal) => Container(
+      builder: (context, setLocal) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _openPostDetail(p),
+        child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
@@ -1606,188 +1673,156 @@ class _PostsSectionState extends State<_PostsSection> {
               ],
             ),
             const SizedBox(height: 8),
-            // Contenido.
+            // Contenido (truncado; el detalle muestra todo).
             Text(
               p.content,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
               style: AppText.grotesk(
                   size: 13, color: AppColors.white(0.85), height: 1.5),
             ),
-            // Comentarios.
-            if (p.comments.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              ...p.comments.map((c) => _commentRow(c)),
-            ],
-            // Like + Comentar.
-            const SizedBox(height: 8),
+            // Like + comentarios (abre el detalle).
+            const SizedBox(height: 4),
             Row(
               children: [
                 PressableWidget(
                   onTap: () async {
+                    if (liking) return;
+                    liking = true;
+                    // Optimista: reflejar el toque al instante.
+                    setLocal(() {
+                      liked = !liked;
+                      likeCount += liked ? 1 : -1;
+                      if (likeCount < 0) likeCount = 0;
+                    });
                     try {
                       final res = await ApiClient().togglePostLike(p.pageId);
+                      final serverCount = (res['likeCount'] as num?)?.toInt();
+                      final serverLiked = res['likedByMe'] as bool?;
                       setLocal(() {
-                        // Actualizar localmente sin recargar todo.
-                        final idx = posts.indexWhere((x) => x.pageId == p.pageId);
-                        if (idx >= 0) {
-                          final old = posts[idx];
-                          posts[idx] = CourtPost(
-                            pageId: old.pageId,
-                            courtId: old.courtId,
-                            userEmail: old.userEmail,
-                            userHandle: old.userHandle,
-                            content: old.content,
-                            createdAt: old.createdAt,
-                            likeCount: (res['likeCount'] as num?)?.toInt() ?? 0,
-                            likedByMe: res['likedByMe'] as bool? ?? false,
-                            comments: old.comments,
-                          );
-                        }
+                        if (serverCount != null) likeCount = serverCount;
+                        if (serverLiked != null) liked = serverLiked;
                       });
-                    } catch (_) {}
+                      // Mirror al listado para que un rebuild externo no revierta.
+                      final idx =
+                          posts.indexWhere((x) => x.pageId == p.pageId);
+                      if (idx >= 0) {
+                        final old = posts[idx];
+                        posts[idx] = CourtPost(
+                          pageId: old.pageId,
+                          courtId: old.courtId,
+                          userEmail: old.userEmail,
+                          userHandle: old.userHandle,
+                          content: old.content,
+                          createdAt: old.createdAt,
+                          likeCount: likeCount,
+                          likedByMe: liked,
+                          comments: old.comments,
+                        );
+                      }
+                    } catch (_) {
+                      // Revertir el optimismo si falló.
+                      setLocal(() {
+                        liked = !liked;
+                        likeCount += liked ? 1 : -1;
+                        if (likeCount < 0) likeCount = 0;
+                      });
+                    } finally {
+                      liking = false;
+                    }
                   },
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        p.likedByMe ? Icons.favorite : Icons.favorite_border,
-                        size: 16,
-                        color: p.likedByMe ? AppColors.accent : AppColors.white(0.45),
-                      ),
-                      if (p.likeCount > 0) ...[
-                        const SizedBox(width: 4),
-                        Text(
-                          '${p.likeCount}',
-                          style: AppText.grotesk(
-                              size: 11,
-                              color: p.likedByMe ? AppColors.accent : AppColors.white(0.45)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          liked ? Icons.favorite : Icons.favorite_border,
+                          size: 20,
+                          color: liked
+                              ? AppColors.accent
+                              : AppColors.white(0.5),
                         ),
+                        if (likeCount > 0) ...[
+                          const SizedBox(width: 5),
+                          Text(
+                            '$likeCount',
+                            style: AppText.grotesk(
+                                size: 12,
+                                weight: FontWeight.w600,
+                                color: liked
+                                    ? AppColors.accent
+                                    : AppColors.white(0.5)),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 4),
                 PressableWidget(
-                  onTap: () => _openCommentDialog(context, p),
-                  child: Text(
-                    'Comentar',
-                    style: AppText.grotesk(
-                        size: 11,
-                        weight: FontWeight.w600,
-                        color: AppColors.accent),
+                  onTap: () => _openPostDetail(p),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.mode_comment_outlined,
+                            size: 18, color: AppColors.white(0.5)),
+                        const SizedBox(width: 5),
+                        Text(
+                          p.comments.isEmpty
+                              ? 'Comentar'
+                              : '${p.comments.length} comentario${p.comments.length == 1 ? '' : 's'}',
+                          style: AppText.grotesk(
+                              size: 12,
+                              weight: FontWeight.w600,
+                              color: AppColors.white(0.5)),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
           ],
         ),
+        ),
       ),
     );
   }
 
-  Widget _commentRow(PostComment c) {
-    final date = c.createdAt != null ? _fmtDate(c.createdAt!) : '';
-    return StatefulBuilder(
-      builder: (context, setLocal) => Container(
-        margin: const EdgeInsets.only(top: 6),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: AppColors.white(0.04),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    c.userHandle.isNotEmpty ? c.userHandle : 'Anon',
-                    style: AppText.grotesk(
-                        size: 11, weight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    c.content,
-                    style: AppText.grotesk(
-                        size: 12,
-                        color: AppColors.white(0.7),
-                        height: 1.4),
-                  ),
-                  const SizedBox(height: 4),
-                  PressableWidget(
-                    onTap: () async {
-                      try {
-                        final res = await ApiClient().toggleCommentLike(c.pageId);
-                        setLocal(() {
-                          // Actualizar el comentario localmente.
-                          final postIdx = posts.indexWhere((p) => p.comments.any((x) => x.pageId == c.pageId));
-                          if (postIdx >= 0) {
-                            final post = posts[postIdx];
-                            final commentIdx = post.comments.indexWhere((x) => x.pageId == c.pageId);
-                            if (commentIdx >= 0) {
-                              final old = post.comments[commentIdx];
-                              final newComments = List<PostComment>.from(post.comments);
-                              newComments[commentIdx] = PostComment(
-                                pageId: old.pageId,
-                                postId: old.postId,
-                                userEmail: old.userEmail,
-                                userHandle: old.userHandle,
-                                content: old.content,
-                                createdAt: old.createdAt,
-                                likeCount: (res['likeCount'] as num?)?.toInt() ?? 0,
-                                likedByMe: res['likedByMe'] as bool? ?? false,
-                              );
-                              posts[postIdx] = CourtPost(
-                                pageId: post.pageId,
-                                courtId: post.courtId,
-                                userEmail: post.userEmail,
-                                userHandle: post.userHandle,
-                                content: post.content,
-                                createdAt: post.createdAt,
-                                likeCount: post.likeCount,
-                                likedByMe: post.likedByMe,
-                                comments: newComments,
-                              );
-                            }
-                          }
-                        });
-                      } catch (_) {}
-                    },
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          c.likedByMe ? Icons.favorite : Icons.favorite_border,
-                          size: 12,
-                          color: c.likedByMe ? AppColors.accent : AppColors.white(0.35),
-                        ),
-                        if (c.likeCount > 0) ...[
-                          const SizedBox(width: 3),
-                          Text(
-                            '${c.likeCount}',
-                            style: AppText.grotesk(
-                                size: 10,
-                                color: c.likedByMe ? AppColors.accent : AppColors.white(0.35)),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (date.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: Text(date,
-                    style: AppText.grotesk(
-                        size: 9, color: AppColors.white(0.3))),
-              ),
-          ],
-        ),
+  /// Abre el detalle de una publicación (fecha completa + lista de comentarios +
+  /// input) en una hoja modal. Los cambios (like, nuevo comentario) vuelven por
+  /// [onChanged] para mantener el listado en sync sin recargar todo.
+  Future<void> _openPostDetail(CourtPost p) async {
+    final session = context.read<Session>();
+    final isAdmin = session.isAdmin;
+    final myEmail = (session.email ?? '').trim().toLowerCase();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _PostDetailSheet(
+        post: p,
+        isAdmin: isAdmin,
+        myEmail: myEmail,
+        onChanged: _applyPostUpdate,
+        onDeleted: _refresh,
       ),
     );
+  }
+
+  /// Reemplaza una publicación en el listado (y en el cache) tras un cambio en
+  /// el detalle, y repinta.
+  void _applyPostUpdate(CourtPost updated) {
+    final idx = posts.indexWhere((x) => x.pageId == updated.pageId);
+    if (idx < 0) return;
+    posts[idx] = updated;
+    ApiCache.put(_cacheKey, posts);
+    if (mounted) setState(() {});
   }
 
   String _fmtDate(String iso) {
@@ -1840,22 +1875,7 @@ class _PostsSectionState extends State<_PostsSection> {
                 maxLength: 300,
                 style: AppText.grotesk(size: 14),
                 cursorColor: AppColors.accent,
-                decoration: InputDecoration(
-                  hintText: '¿Qué pasó en la cancha?',
-                  hintStyle: AppText.grotesk(
-                      size: 13, color: AppColors.white(0.35)),
-                  filled: true,
-                  fillColor: AppColors.glass,
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppShape.rBtn),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppShape.rBtn),
-                    borderSide: const BorderSide(
-                        color: AppColors.accent, width: 1),
-                  ),
-                ),
+                decoration: _dialogFieldDecoration('¿Qué pasó en la cancha?'),
               ),
             ],
           ),
@@ -1913,89 +1933,491 @@ class _PostsSectionState extends State<_PostsSection> {
     );
   }
 
-  // ── Dialog: comentar ─────────────────────────────────────────────────────
+}
 
-  Future<void> _openCommentDialog(BuildContext context, CourtPost post) async {
-    final session = context.read<Session>();
-    if (session.email == null) return;
-    final ctrl = TextEditingController();
-    bool saving = false;
+/// Fecha corta dd/mm de una publicación/comentario.
+String _fmtPostShortDate(String iso) {
+  final d = DateTime.tryParse(iso);
+  if (d == null) return '';
+  return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+}
 
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: Text('Comentar',
-              style: AppText.archivo(size: 18, weight: FontWeight.w800)),
-          content: TextField(
-            controller: ctrl,
-            maxLines: 3,
-            maxLength: 300,
-            style: AppText.grotesk(size: 14),
-            cursorColor: AppColors.accent,
-            decoration: InputDecoration(
-              hintText: 'Escribí tu comentario...',
-              hintStyle:
-                  AppText.grotesk(size: 13, color: AppColors.white(0.35)),
-              filled: true,
-              fillColor: AppColors.glass,
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppShape.rBtn),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppShape.rBtn),
-                borderSide:
-                    const BorderSide(color: AppColors.accent, width: 1),
-              ),
-            ),
+/// Fecha + hora completas (dd/mm/aaaa · hh:mm) para el detalle.
+String _fmtPostDateTime(String iso) {
+  final d = DateTime.tryParse(iso)?.toLocal();
+  if (d == null) return '';
+  final dd = d.day.toString().padLeft(2, '0');
+  final mm = d.month.toString().padLeft(2, '0');
+  final hh = d.hour.toString().padLeft(2, '0');
+  final min = d.minute.toString().padLeft(2, '0');
+  return '$dd/$mm/${d.year} · $hh:$min';
+}
+
+/// Hoja de detalle de una publicación: fecha completa, contenido, like y la
+/// lista completa de comentarios con su input. Comentar es optimista (aparece
+/// al instante). Los cambios vuelven al listado por [onChanged].
+class _PostDetailSheet extends StatefulWidget {
+  final CourtPost post;
+  final bool isAdmin;
+  final String myEmail;
+  final void Function(CourtPost updated) onChanged;
+  final VoidCallback onDeleted;
+  const _PostDetailSheet({
+    required this.post,
+    required this.isAdmin,
+    required this.myEmail,
+    required this.onChanged,
+    required this.onDeleted,
+  });
+
+  @override
+  State<_PostDetailSheet> createState() => _PostDetailSheetState();
+}
+
+class _PostDetailSheetState extends State<_PostDetailSheet> {
+  late List<PostComment> _comments;
+  late bool _liked;
+  late int _likeCount;
+  bool _liking = false;
+  bool _sending = false;
+  final _ctrl = TextEditingController();
+  final _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _comments = List.of(widget.post.comments);
+    _liked = widget.post.likedByMe;
+    _likeCount = widget.post.likeCount;
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  CourtPost get _current => CourtPost(
+        pageId: widget.post.pageId,
+        courtId: widget.post.courtId,
+        userEmail: widget.post.userEmail,
+        userHandle: widget.post.userHandle,
+        content: widget.post.content,
+        createdAt: widget.post.createdAt,
+        likeCount: _likeCount,
+        likedByMe: _liked,
+        comments: _comments,
+      );
+
+  Future<void> _toggleLike() async {
+    if (_liking) return;
+    _liking = true;
+    setState(() {
+      _liked = !_liked;
+      _likeCount += _liked ? 1 : -1;
+      if (_likeCount < 0) _likeCount = 0;
+    });
+    try {
+      final res = await ApiClient().togglePostLike(widget.post.pageId);
+      final c = (res['likeCount'] as num?)?.toInt();
+      final l = res['likedByMe'] as bool?;
+      setState(() {
+        if (c != null) _likeCount = c;
+        if (l != null) _liked = l;
+      });
+      widget.onChanged(_current);
+    } catch (_) {
+      setState(() {
+        _liked = !_liked;
+        _likeCount += _liked ? 1 : -1;
+        if (_likeCount < 0) _likeCount = 0;
+      });
+    } finally {
+      _liking = false;
+    }
+  }
+
+  Future<void> _send() async {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    try {
+      final json =
+          await ApiClient().addPostComment(widget.post.pageId, content: text);
+      final c = PostComment.fromApi(json);
+      setState(() {
+        _comments = [..._comments, c];
+        _ctrl.clear();
+        _sending = false;
+      });
+      widget.onChanged(_current);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scroll.hasClients) {
+          _scroll.animateTo(_scroll.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+        }
+      });
+    } catch (_) {
+      setState(() => _sending = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al comentar.',
+                style: AppText.grotesk(size: 13)),
+            backgroundColor: AppColors.bgElev,
           ),
-          actions: [
-            TextButton(
-              onPressed: saving ? null : () => Navigator.pop(ctx),
-              child: Text('Cancelar',
-                  style: AppText.grotesk(
-                      size: 13, color: AppColors.white(0.6))),
+        );
+      }
+    }
+  }
+
+  Future<void> _delete() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('Eliminar publicación',
+            style: AppText.archivo(size: 16, weight: FontWeight.w800)),
+        content: Text('¿Seguro que querés eliminar esta publicación?',
+            style: AppText.grotesk(size: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancelar',
+                style:
+                    AppText.grotesk(size: 13, color: AppColors.white(0.6))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Eliminar',
+                style: AppText.grotesk(size: 13, color: _danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      try {
+        await ApiClient().deletePost(widget.post.pageId);
+        if (mounted) Navigator.pop(context);
+        widget.onDeleted();
+      } catch (_) {}
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isMine = widget.post.userEmail.trim().toLowerCase() == widget.myEmail;
+    final dt =
+        widget.post.createdAt != null ? _fmtPostDateTime(widget.post.createdAt!) : '';
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        decoration: const BoxDecoration(
+          color: AppColors.bgElev,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(AppShape.rCard)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Manija.
+            Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 6),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.white(0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-            TextButton(
-              onPressed: saving
-                  ? null
-                  : () async {
-                      final text = ctrl.text.trim();
-                      if (text.isEmpty) return;
-                      setLocal(() => saving = true);
-                      try {
-                        await ApiClient().addPostComment(post.pageId,
-                            content: text);
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        _refresh();
-                      } catch (_) {
-                        setLocal(() => saving = false);
-                        if (ctx.mounted) {
-                          ScaffoldMessenger.of(ctx).showSnackBar(
-                            SnackBar(
-                              content: Text('Error al comentar.',
-                                  style: AppText.grotesk(size: 13)),
-                              backgroundColor: AppColors.bgElev,
-                            ),
-                          );
-                        }
-                      }
-                    },
-              child: saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.accent))
-                  : Text('Enviar',
-                      style: AppText.grotesk(
-                          size: 13,
-                          weight: FontWeight.w700,
-                          color: AppColors.accent)),
+            // Header: autor + fecha completa + eliminar.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.post.userHandle.isNotEmpty
+                              ? widget.post.userHandle
+                              : 'Anon',
+                          style: AppText.grotesk(
+                              size: 15, weight: FontWeight.w800),
+                        ),
+                        if (dt.isNotEmpty)
+                          Text(dt,
+                              style: AppText.grotesk(
+                                  size: 11, color: AppColors.white(0.4))),
+                      ],
+                    ),
+                  ),
+                  if (isMine || widget.isAdmin)
+                    PressableWidget(
+                      onTap: _delete,
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(Icons.delete_outline,
+                            size: 18, color: _danger),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Contenido completo.
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  widget.post.content,
+                  style: AppText.grotesk(
+                      size: 14, color: AppColors.white(0.9), height: 1.5),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Like.
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  PressableWidget(
+                    onTap: _toggleLike,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _liked ? Icons.favorite : Icons.favorite_border,
+                            size: 20,
+                            color: _liked
+                                ? AppColors.accent
+                                : AppColors.white(0.5),
+                          ),
+                          if (_likeCount > 0) ...[
+                            const SizedBox(width: 5),
+                            Text('$_likeCount',
+                                style: AppText.grotesk(
+                                    size: 12,
+                                    weight: FontWeight.w600,
+                                    color: _liked
+                                        ? AppColors.accent
+                                        : AppColors.white(0.5))),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              height: 1,
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              color: AppColors.white(0.06),
+            ),
+            // Título comentarios.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Comentarios (${_comments.length})',
+                    style: AppText.grotesk(
+                        size: 12,
+                        weight: FontWeight.w700,
+                        color: AppColors.white(0.5))),
+              ),
+            ),
+            // Lista.
+            Flexible(
+              child: _comments.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 24),
+                      child: Text('Todavía no hay comentarios. ¡Sé el primero!',
+                          style: AppText.grotesk(
+                              size: 13, color: AppColors.white(0.4))),
+                    )
+                  : ListView.builder(
+                      controller: _scroll,
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 4),
+                      itemCount: _comments.length,
+                      itemBuilder: (_, i) => _CommentTile(_comments[i]),
+                    ),
+            ),
+            // Input.
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                  12, 8, 12, 8 + MediaQuery.of(context).padding.bottom),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _ctrl,
+                      maxLength: 300,
+                      minLines: 1,
+                      maxLines: 4,
+                      style: AppText.grotesk(size: 14),
+                      cursorColor: AppColors.accent,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _send(),
+                      decoration: _dialogFieldDecoration('Escribí un comentario...')
+                          .copyWith(counterText: ''),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  PressableWidget(
+                    onTap: _sending ? null : _send,
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: AppColors.accent,
+                        borderRadius: BorderRadius.circular(AppShape.rField),
+                      ),
+                      child: _sending
+                          ? const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.black),
+                            )
+                          : const Icon(Icons.send_rounded,
+                              size: 20, color: Colors.black),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Un comentario en el detalle de la publicación, con su propio estado de like.
+class _CommentTile extends StatefulWidget {
+  final PostComment comment;
+  const _CommentTile(this.comment);
+
+  @override
+  State<_CommentTile> createState() => _CommentTileState();
+}
+
+class _CommentTileState extends State<_CommentTile> {
+  late bool _liked;
+  late int _likeCount;
+  bool _liking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _liked = widget.comment.likedByMe;
+    _likeCount = widget.comment.likeCount;
+  }
+
+  Future<void> _toggle() async {
+    if (_liking) return;
+    _liking = true;
+    setState(() {
+      _liked = !_liked;
+      _likeCount += _liked ? 1 : -1;
+      if (_likeCount < 0) _likeCount = 0;
+    });
+    try {
+      final res = await ApiClient().toggleCommentLike(widget.comment.pageId);
+      final c = (res['likeCount'] as num?)?.toInt();
+      final l = res['likedByMe'] as bool?;
+      setState(() {
+        if (c != null) _likeCount = c;
+        if (l != null) _liked = l;
+      });
+    } catch (_) {
+      setState(() {
+        _liked = !_liked;
+        _likeCount += _liked ? 1 : -1;
+        if (_likeCount < 0) _likeCount = 0;
+      });
+    } finally {
+      _liking = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.comment;
+    final date = c.createdAt != null ? _fmtPostShortDate(c.createdAt!) : '';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.white(0.04),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  c.userHandle.isNotEmpty ? c.userHandle : 'Anon',
+                  style: AppText.grotesk(size: 11, weight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  c.content,
+                  style: AppText.grotesk(
+                      size: 12, color: AppColors.white(0.7), height: 1.4),
+                ),
+                const SizedBox(height: 4),
+                PressableWidget(
+                  onTap: _toggle,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _liked ? Icons.favorite : Icons.favorite_border,
+                          size: 14,
+                          color:
+                              _liked ? AppColors.accent : AppColors.white(0.4),
+                        ),
+                        if (_likeCount > 0) ...[
+                          const SizedBox(width: 4),
+                          Text('$_likeCount',
+                              style: AppText.grotesk(
+                                  size: 10,
+                                  color: _liked
+                                      ? AppColors.accent
+                                      : AppColors.white(0.4))),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (date.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Text(date,
+                  style:
+                      AppText.grotesk(size: 9, color: AppColors.white(0.3))),
+            ),
+        ],
       ),
     );
   }

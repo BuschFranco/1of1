@@ -1,5 +1,6 @@
 import '../data/models.dart';
 import 'api/api_client.dart';
+import 'cache/api_cache.dart';
 
 /// Maneja amistades y búsqueda de perfiles por handle (vía backend).
 class FriendsService {
@@ -31,9 +32,21 @@ class FriendsService {
 
   /// Lista los amigos del usuario. El owner sale del token en el server:
   /// [ownerEmail] se conserva en la firma por compatibilidad con los callers.
-  Future<List<Friend>> listFriends(String ownerEmail) async {
+  /// Cacheado con TTL en [ApiCache] (como el servicio es stateless y cada caller
+  /// crea su instancia, el cache vive en ApiCache, no acá). `force` para el
+  /// pull-to-refresh; las mutaciones invalidan.
+  Future<List<Friend>> listFriends(String ownerEmail, {bool force = false}) async {
+    const key = 'friends';
+    if (!force) {
+      final cached = ApiCache.peek<List<Friend>>(key);
+      if (cached != null && ApiCache.isFresh(key, ApiCache.ttlFriends)) {
+        return cached;
+      }
+    }
     final rows = await _api.friends();
-    return rows.map(Friend.fromApi).toList();
+    final list = rows.map(Friend.fromApi).toList();
+    ApiCache.put(key, list);
+    return list;
   }
 
   /// Agrega un amigo (sin requerir aceptación). Devuelve el Friend creado.
@@ -43,11 +56,15 @@ class FriendsService {
       friendName: friend.name,
       friendEmail: friend.userEmail,
     );
+    ApiCache.invalidate('friends'); // la lista cambió
+    ApiCache.invalidatePrefix('ranking'); // el ranking incluye a los amigos
     return Friend.fromApi(json);
   }
 
   /// Elimina una amistad por su page id.
   Future<void> removeFriend(String pageId) async {
     await _api.removeFriend(pageId);
+    ApiCache.invalidate('friends');
+    ApiCache.invalidatePrefix('ranking');
   }
 }

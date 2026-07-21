@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../data/courts.dart';
 import '../data/models.dart';
 import 'api/api_client.dart';
+import 'cache/api_cache.dart';
 
 /// Cache de perfiles indexado por email (inmutable). Permite resolver en vivo
 /// el handle y la insignia de clan de quien propuso una cancha, de modo que si
@@ -50,8 +51,17 @@ class ProfilesProvider extends ChangeNotifier {
     return (handle: handle, clan: clan);
   }
 
-  Future<void> load() async {
+  /// Recarga los perfiles. Con guarda TTL: si ya se cargaron hace poco no vuelve
+  /// a pegar a la red (evita un `GET /profiles` en cada apertura de detalle).
+  /// `force: true` para el pull-to-refresh. La marca se limpia en el logout con
+  /// `ApiCache.clear()`.
+  Future<void> load({bool force = false}) async {
     if (!_api.isConfigured || !_api.hasToken) return;
+    if (!force &&
+        _byEmail.isNotEmpty &&
+        ApiCache.isFresh('profiles', ApiCache.ttlProfiles)) {
+      return;
+    }
     _loading = true;
     notifyListeners();
     try {
@@ -64,6 +74,7 @@ class ProfilesProvider extends ChangeNotifier {
         if (p.userEmail.isNotEmpty) map[p.userEmail.toLowerCase()] = p;
       }
       _byEmail = map;
+      ApiCache.put('profiles', true); // marca de tiempo para la guarda TTL
     } catch (_) {
       // mantener el cache previo si falla la red
     } finally {

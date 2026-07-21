@@ -158,7 +158,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
 
       // Refrescar la lista de pickups para que aparezca al instante en Crew.
       if (mounted) {
-        unawaited(pickupsProvider.loadForUser(_userEmail));
+        unawaited(pickupsProvider.loadForUser(_userEmail, force: true));
         Navigator.pop(context);
       }
     } catch (_) {
@@ -219,25 +219,22 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                       controller: _titleCtrl,
                       maxLength: 40,
                       style: AppText.grotesk(size: 14, color: Colors.white),
+                      cursorColor: AppColors.accent,
                       decoration: InputDecoration(
                         hintText: 'Pickup en ${_selected?.name ?? "cancha"}',
                         hintStyle: AppText.grotesk(
-                            size: 14, color: AppColors.white(0.3)),
+                            size: 14, color: AppColors.white(0.35)),
                         counterStyle: AppText.grotesk(
                             size: 10, color: AppColors.white(0.3)),
                         filled: true,
-                        fillColor: AppColors.paper,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppShape.rChip),
-                          borderSide: BorderSide(color: AppColors.line),
-                        ),
+                        fillColor: AppColors.white(0.05),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppShape.rChip),
-                          borderSide: BorderSide(color: AppColors.line),
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppShape.rChip),
-                          borderSide: BorderSide(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
                               color: AppColors.accent, width: 1.5),
                         ),
                         contentPadding: const EdgeInsets.symmetric(
@@ -256,46 +253,27 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                   children: [
                     _label('Formato'),
                     const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        for (var n = 1; n <= 5; n++) ...[
-                          _chip('${n}v$n', _teamSize == n,
-                              () => setState(() => _teamSize = n)),
-                          if (n < 5) const SizedBox(width: 8),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 16),
+                    _segmented([
+                      for (var n = 1; n <= 5; n++)
+                        (
+                          label: '${n}v$n',
+                          active: _teamSize == n,
+                          onTap: () => setState(() => _teamSize = n),
+                        ),
+                    ]),
+                    const SizedBox(height: 18),
                     _label('Puntuación objetivo'),
                     const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        for (final s in [11, 15, 21, 31]) ...[
-                          _chip('$s', _targetScore == s,
-                              () => setState(() => _targetScore = s)),
-                          if (s != 31) const SizedBox(width: 8),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _smallBtn(Icons.remove, () {
-                            if (_targetScore > 1) setState(() => _targetScore--);
-                          }),
-                          const SizedBox(width: 16),
-                          Text('$_targetScore',
-                              style: AppText.archivo(
-                                  size: 22, weight: FontWeight.w800, color: Colors.white)),
-                          const SizedBox(width: 16),
-                          _smallBtn(Icons.add, () {
-                            if (_targetScore < 99) setState(() => _targetScore++);
-                          }),
-                        ],
-                      ),
-                    ),
+                    _segmented([
+                      for (final s in [11, 15, 21, 31])
+                        (
+                          label: '$s',
+                          active: _targetScore == s,
+                          onTap: () => setState(() => _targetScore = s),
+                        ),
+                    ]),
+                    const SizedBox(height: 12),
+                    Center(child: _scoreStepper()),
                   ],
                 ),
               ),
@@ -776,25 +754,85 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
         ),
       );
 
-  static Widget _chip(String label, bool active, VoidCallback onTap) {
-    return PressableWidget(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        // Chip plano: acento pleno si está activo, fill sutil si no (sin borde).
-        decoration: BoxDecoration(
-          color: active ? AppColors.accent : AppColors.white(0.06),
-          borderRadius: BorderRadius.circular(AppShape.rChip),
-        ),
-        child: Text(
-          label,
-          style: AppText.grotesk(
-            size: 13,
-            weight: FontWeight.w700,
-            color: active ? Colors.white : AppColors.white(0.6),
+  /// Selector segmentado: una sola barra con opciones de igual ancho, la activa
+  /// tintada con el acento. Reemplaza los chips sueltos (que se amontonaban y
+  /// desbordaban) por un control cohesivo, alineado al brand.
+  static Widget _segmented(
+      List<({String label, bool active, VoidCallback onTap})> segments) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.white(0.05),
+        borderRadius: BorderRadius.circular(AppShape.rChip),
+      ),
+      child: Row(
+        children: [
+          for (final s in segments)
+            Expanded(
+              child: PressableWidget(
+                onTap: s.onTap,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: s.active ? AppColors.accent : Colors.transparent,
+                    borderRadius: BorderRadius.circular(AppShape.rChip),
+                  ),
+                  child: Text(
+                    s.label,
+                    style: AppText.grotesk(
+                      size: 13,
+                      weight: FontWeight.w700,
+                      color: s.active ? Colors.white : AppColors.white(0.55),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Ajuste fino de la puntuación (para valores que no son preset). Pill con
+  /// [−] valor pts [+], en la misma lengua visual que el resto.
+  Widget _scoreStepper() {
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: AppColors.white(0.05),
+        borderRadius: BorderRadius.circular(AppShape.rBtn),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _smallBtn(Icons.remove, () {
+            if (_targetScore > 1) setState(() => _targetScore--);
+          }),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text('$_targetScore',
+                    style: AppText.archivo(
+                        size: 24,
+                        weight: FontWeight.w900,
+                        color: Colors.white)),
+                const SizedBox(width: 4),
+                Text('pts',
+                    style:
+                        AppText.grotesk(size: 11, color: AppColors.white(0.4))),
+              ],
+            ),
           ),
-        ),
+          _smallBtn(Icons.add, () {
+            if (_targetScore < 99) setState(() => _targetScore++);
+          }),
+        ],
       ),
     );
   }

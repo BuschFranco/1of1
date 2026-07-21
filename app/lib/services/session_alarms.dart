@@ -94,7 +94,7 @@ const Duration _kRadarEvery = Duration(minutes: 15);
 // detector tras descartar (el celu probablemente sigue en el radio).
 const Duration _kConfirmAfter = Duration(hours: 2);
 const Duration _kConfirmTimeout = Duration(minutes: 20);
-const Duration _kDwellSnooze = Duration(hours: 1);
+const Duration _kDwellSnooze = Duration(hours: 2, minutes: 30);
 
 String _nsKey(String base, String uk) => uk.isEmpty ? base : '$base::$uk';
 
@@ -635,7 +635,7 @@ Future<void> alarmHardEndCallback() async {
 
 /// Descarta el partido en curso POR COMPLETO desde background (timeout de la
 /// pregunta): sin pendiente, sin puntos, sin historial. Silencia el detector
-/// de esa cancha 1h (el celu probablemente sigue dentro del radio: sin snooze
+/// de esa cancha 2:30hs (el celu probablemente sigue dentro del radio: sin snooze
 /// el dwell re-arrancaría enseguida) y avisa por notificación.
 Future<void> _discardActive(
     SharedPreferences prefs, String uk, Map<String, dynamic> a) async {

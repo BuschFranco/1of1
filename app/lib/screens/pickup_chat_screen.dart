@@ -7,6 +7,7 @@ import '../data/cosmetics.dart';
 import '../data/courts.dart';
 import '../data/models.dart';
 import '../services/api/api_client.dart';
+import '../services/cache/api_cache.dart';
 import '../services/courts_provider.dart';
 import '../services/pickups_provider.dart';
 import '../services/profiles_provider.dart';
@@ -45,9 +46,23 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
   String get _myEmail =>
       (context.read<Session>().email ?? '').trim().toLowerCase();
 
+  String get _cacheKey => 'chat::${widget.pickupId}';
+
   @override
   void initState() {
     super.initState();
+    // Semilla del cache: reabrir un chat ya visto muestra los mensajes al
+    // instante (sin flash vacío ni recarga total). El polling sigue desde el
+    // último mensaje cacheado (sinceIso), así solo trae lo nuevo.
+    final cached = ApiCache.peek<List<ChatMessage>>(_cacheKey);
+    if (cached != null && cached.isNotEmpty) {
+      _messages.addAll(cached);
+      for (final m in cached) {
+        _seenIds.add(m.id);
+        if (m.createdAt.compareTo(_lastIso) > 0) _lastIso = m.createdAt;
+      }
+      _loadingMsgs = false;
+    }
     _loadMessages(initial: true);
     // Polling incremental cada 4s mientras la pantalla está montada. Sin
     // websockets: consistente con la arquitectura REST y suficiente para beta.
@@ -60,9 +75,19 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
   @override
   void dispose() {
     _poll?.cancel();
+    _cacheMessages();
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  /// Guarda los últimos ~50 mensajes en [ApiCache] para la próxima apertura.
+  void _cacheMessages() {
+    if (_messages.isEmpty) return;
+    final tail = _messages.length > 50
+        ? _messages.sublist(_messages.length - 50)
+        : _messages;
+    ApiCache.put(_cacheKey, List<ChatMessage>.from(tail));
   }
 
   Future<void> _loadMessages({bool initial = false}) async {
@@ -83,7 +108,10 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
       }
       if (initial || added) {
         setState(() => _loadingMsgs = false);
-        if (added) _scrollToBottom();
+        if (added) {
+          _cacheMessages();
+          _scrollToBottom();
+        }
       } else if (_loadingMsgs) {
         setState(() => _loadingMsgs = false);
       }

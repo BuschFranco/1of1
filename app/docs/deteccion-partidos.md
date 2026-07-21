@@ -37,7 +37,7 @@ otro lado** — con una excepción deliberada, ver §8.1.
 | `dwellThreshold` | 6 min | Permanencia continua dentro del radio para arrancar el partido. |
 | `exitGrace` | 6 min | Tiempo continuo fuera del radio para cerrar el partido. |
 | `gpsJitterGrace` | 15 s | Tolerancia a saltos de GPS: una lectura suelta fuera (o dentro) del radio no resetea nada hasta sostenerse este tiempo. |
-| `dwellSnooze` | 1 h | "No juego": silencia el detector de ESA cancha (también aplica al DETENER manual). |
+| `dwellSnooze` | 2 h 30 min | "No juego": silencia el detector de ESA cancha (también aplica al DETENER manual). |
 | `snoozeExitClear` | 2 min | Lecturas continuas fuera del radio para limpiar el snooze solo (te fuiste de verdad). |
 | `minMatch` | 13 min | Duración mínima para que un partido cuente (menos = cancelado, no suma nada). |
 | `resumeGapMax` | 3 min | Si el "latido" del partido persistido es más viejo que esto al reabrir, el proceso estuvo muerto: se cierra con el tiempo del último latido en vez de resumir inflado. |
@@ -96,11 +96,11 @@ deja de sumar puntos), PLAYING entra en un sub-estado de pausa forzada:
 ```
               2h de juego neto               ┌─ "SÍ, SIGO"  → reanuda con 1h de tope:
    ┌──────────┐ ─────────────▶ ┌──────────┐  │   a las 3h netas cierra y GUARDA solo
-   │ PLAYING  │                │ AWAITING │──┤   (+ snooze 1h + botón manual)
+   │ PLAYING  │                │ AWAITING │──┤   (+ snooze 2:30hs + botón manual)
    │          │                │ CONFIRM  │  ├─ "NO, TERMINÉ" → cierra normal (tiempo
-   └──────────┘                │ (pausado)│  │   congelado en 2h) + snooze 1h
+   └──────────┘                │ (pausado)│  │   congelado en 2h) + snooze 2:30hs
                                └──────────┘  └─ sin respuesta en 20 min → CANCELADO
-                                                 (sin puntos/historial) + snooze 1h
+                                                 (sin puntos/historial) + snooze 2:30hs
 ```
 
 - El cronómetro y la detección quedan **congelados** (reutiliza el mecanismo
@@ -115,8 +115,8 @@ deja de sumar puntos), PLAYING entra en un sub-estado de pausa forzada:
 - **Sin respuesta en 20 min** (`confirmTimeout`): el partido se **cancela por
   completo** — no queda pendiente, no suma puntos, ni tiempo, ni jugadas, ni
   historial.
-- Los tres desenlaces (límite / No / timeout) aplican el **snooze de 1 h** de
-  la cancha (mismo flujo que "No juego"): el celu sigue en el radio y sin eso
+- Los tres desenlaces (límite / No / timeout) aplican el **snooze de 2 h 30 min**
+  de la cancha (mismo flujo que "No juego"): el celu sigue en el radio y sin eso
   arrancaría otra cuenta regresiva al instante. Queda el botón **"Iniciar
   partido"** manual en el mapa.
 - No se pregunta si hay **gracia de salida** en curso (el partido ya se está
@@ -127,7 +127,7 @@ deja de sumar puntos), PLAYING entra en un sub-estado de pausa forzada:
 Casos especiales:
 
 - **"No juego"** (banner o notificación) y **DETENER manual**: silencian el
-  detector de esa cancha por 1 h (`dwellSnooze`). El arranque queda manual
+  detector de esa cancha por 2 h 30 min (`dwellSnooze`). El arranque queda manual
   ("Iniciar partido") mientras sigas ahí; si te vas 2 min continuos, el snooze
   se limpia solo.
 - **Pausa manual**: congela el cronómetro Y la detección (no arranca gracia

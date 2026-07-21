@@ -66,6 +66,13 @@ Notion (BD) ◀──▶ backend/ (NestJS, JWT) ◀──HTTP──▶ ApiClient
 - **Persistencia local:** `SharedPreferences`, con claves **namespaced por usuario**
   (`base::$userKey`, con `userKey = email.trim().toLowerCase()`) para aislar datos
   entre cuentas en el mismo device.
+- **Caché en memoria (stale-while-revalidate):** `ApiCache`
+  ([`lib/services/cache/api_cache.dart`](lib/services/cache/api_cache.dart)) evita
+  recargar reseñas/publicaciones/rey/clan/puntos/listas cada vez que se reentra a
+  una pantalla. Es en memoria (no persiste) y se limpia en el logout. Cómo usarlo,
+  qué está cacheado y cuándo se invalida: [`docs/cache.md`](docs/cache.md). Si
+  agregás una lectura que se repite al navegar, cacheala ahí en vez de pegar a la
+  red cada vez.
 
 ### Providers / servicios clave (`lib/services/`)
 

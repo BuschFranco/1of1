@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/api/api_client.dart';
+import '../services/cache/api_cache.dart';
 import '../services/play_session_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
@@ -75,11 +76,23 @@ class _RankingScreenState extends State<RankingScreen> {
   Future<void> _load(_Period p) async {
     final key = _cacheKey(p);
     if (_cache.containsKey(key)) return;
+    // Reusar entre aperturas de la pantalla vía ApiCache (períodos fijos): si
+    // está fresco, se pinta sin pegar a la red. El custom no se cachea global.
+    final apiKey = p == _Period.custom ? null : 'globalranking::${p.name}';
+    if (apiKey != null && ApiCache.isFresh(apiKey, ApiCache.ttlRanking)) {
+      final cached = ApiCache.peek<Map<String, dynamic>>(apiKey);
+      if (cached != null) {
+        _cache[key] = cached;
+        if (mounted) setState(() {});
+        return;
+      }
+    }
     setState(() {}); // muestra el spinner de esa página
     try {
       final data =
           await ApiClient().globalRanking(_cutoff(p).toIso8601String());
       _cache[key] = data;
+      if (apiKey != null) ApiCache.put(apiKey, data);
     } catch (_) {
       // Sin conexión: queda la vista vacía con su mensaje.
     }
@@ -98,16 +111,23 @@ class _RankingScreenState extends State<RankingScreen> {
               start: DateTime(now.year, now.month, 1),
               end: now,
             ),
-      locale: const Locale('es', 'AR'),
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
+          scaffoldBackgroundColor: AppColors.bg,
           colorScheme: ColorScheme.dark(
             primary: AppColors.accent,
-            onPrimary: Colors.white,
+            onPrimary: Colors.black,
             surface: AppColors.bgElev,
             onSurface: AppColors.ink,
           ),
-          dialogTheme: DialogThemeData(backgroundColor: AppColors.bgElev),
+          datePickerTheme: DatePickerThemeData(
+            backgroundColor: AppColors.bgElev,
+            rangePickerBackgroundColor: AppColors.bg,
+            rangePickerHeaderBackgroundColor: AppColors.bgElev,
+            rangePickerHeaderForegroundColor: AppColors.ink,
+            headerBackgroundColor: AppColors.bgElev,
+            headerForegroundColor: AppColors.ink,
+          ),
         ),
         child: child!,
       ),
@@ -289,18 +309,10 @@ class _RankingScreenState extends State<RankingScreen> {
                   _load(_Period.month);
                 }),
             const SizedBox(width: 8),
-            AppChip(
-                label: _customRangeLabel,
-                icon: '\u{1F4C5}',
-                active: _globalPeriod == _Period.custom,
-                onTap: () async {
-                  if (_customFrom == null || _customTo == null) {
-                    await _pickCustomRange();
-                  } else {
-                    setState(() => _globalPeriod = _Period.custom);
-                    _load(_Period.custom);
-                  }
-                }),
+            // Filtro secundario (avanzado): rango de fechas personalizado. No es
+            // un chip más al mismo nivel — es un botón de ícono que se expande a
+            // mostrar el rango cuando está activo.
+            _customRangeButton(),
           ],
         ),
         if (_globalPeriod == _Period.custom && _customFrom != null) ...[
@@ -317,9 +329,41 @@ class _RankingScreenState extends State<RankingScreen> {
     );
   }
 
-  String get _customRangeLabel {
-    if (_customFrom == null || _customTo == null) return 'Rango';
-    return '${_fmtShort(_customFrom!)} — ${_fmtShort(_customTo!)}';
+  /// Botón del filtro de rango personalizado. Inactivo: solo un ícono de
+  /// calendario (secundario, no compite con Semana/Mes). Activo: se expande y
+  /// muestra el rango elegido, tintado con el acento.
+  Widget _customRangeButton() {
+    final active = _globalPeriod == _Period.custom &&
+        _customFrom != null &&
+        _customTo != null;
+    return PressableWidget(
+      onTap: _pickCustomRange,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: active ? 12 : 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? AppColors.accent.withAlpha(30) : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppShape.rChip),
+          border: Border.all(
+              color: active ? AppColors.accent : AppColors.line, width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.date_range,
+                size: 16,
+                color: active ? AppColors.accent : AppColors.white(0.55)),
+            if (active) ...[
+              const SizedBox(width: 6),
+              Text('${_fmtShort(_customFrom!)} — ${_fmtShort(_customTo!)}',
+                  style: AppText.grotesk(
+                      size: 11,
+                      weight: FontWeight.w700,
+                      color: AppColors.accent)),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   String _fmt(DateTime d) =>
@@ -402,23 +446,32 @@ class _RankingScreenState extends State<RankingScreen> {
     );
   }
 
-  String _medal(int i) => i == 0
-      ? '\u{1F947}'
-      : i == 1
-          ? '\u{1F948}'
-          : i == 2
-              ? '\u{1F949}'
-              : '';
+  // Top 3 con número tintado oro/plata/bronce (sin emojis).
+  static const Color _gold = Color(0xFFFFD54A);
+  static const Color _silver = Color(0xFFCFD8DC);
+  static const Color _bronze = Color(0xFFCD7F32);
 
-  Widget _rankBadge(int i) => SizedBox(
-        width: 28,
-        child: Text(
-          _medal(i).isNotEmpty ? _medal(i) : '${i + 1}',
-          style: AppText.grotesk(
-              size: 13, weight: FontWeight.w800, color: AppColors.white(0.5)),
-          textAlign: TextAlign.center,
+  Widget _rankBadge(int i) {
+    final Color? medal = i == 0
+        ? _gold
+        : i == 1
+            ? _silver
+            : i == 2
+                ? _bronze
+                : null;
+    return SizedBox(
+      width: 28,
+      child: Text(
+        '${i + 1}',
+        textAlign: TextAlign.center,
+        style: AppText.archivo(
+          size: medal != null ? 16 : 13,
+          weight: FontWeight.w900,
+          color: medal ?? AppColors.white(0.5),
         ),
-      );
+      ),
+    );
+  }
 
   Widget _pts(int points, {required bool highlight}) => Row(
         mainAxisSize: MainAxisSize.min,

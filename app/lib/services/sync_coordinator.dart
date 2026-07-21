@@ -5,6 +5,7 @@ import 'package:native_geofence/native_geofence.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/courts.dart';
 import 'api/api_client.dart';
+import 'cache/api_cache.dart';
 import 'courts_provider.dart';
 import 'blocked_provider.dart';
 import 'favorites_provider.dart';
@@ -294,6 +295,7 @@ class SyncCoordinator {
         _favorites.clearForLogout();
         _pickups.clearForLogout();
         _blocked.clearForLogout();
+        ApiCache.clear(); // no filtrar datos cacheados a la próxima cuenta
         _trackingStarted = false;
         _geofencedCount = -1;
         GeofenceService.instance.clear();

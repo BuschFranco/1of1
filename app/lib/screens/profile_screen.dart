@@ -11,6 +11,7 @@ import '../data/courts.dart';
 import '../data/legal_content.dart';
 import '../data/models.dart';
 import '../services/api/api_client.dart';
+import '../services/cache/api_cache.dart';
 import '../services/api/api_config.dart';
 import '../services/app_permissions.dart';
 import '../services/blocked_provider.dart';
@@ -2732,19 +2733,36 @@ class _RankingSheetState extends State<_RankingSheet> {
         .where((e) => e.isNotEmpty)
         .toList();
     if (emails.isNotEmpty) {
-      try {
-        final cutoffIso = _cutoff(p).toIso8601String();
-        final rows = await ApiClient().ranking(
-          since: cutoffIso,
-          emails: emails,
-        );
-        for (final row in rows) {
-          final email = (row['email'] ?? '').toString().toLowerCase();
-          final pts = (row['points'] as num?)?.round() ?? 0;
-          if (email.isNotEmpty) byEmail[email] = pts;
+      // Cache por período (solo períodos fijos, no el rango custom): reabrir el
+      // ranking dentro del TTL no vuelve a pegar a la red. Se invalida al
+      // agregar/quitar amigos y al resolver un partido.
+      final rankKey =
+          p == _RankPeriod.custom ? null : 'ranking::${p.name}';
+      final cachedRank = rankKey == null
+          ? null
+          : ApiCache.peek<Map<String, int>>(rankKey);
+      if (rankKey != null &&
+          cachedRank != null &&
+          ApiCache.isFresh(rankKey, ApiCache.ttlRanking)) {
+        byEmail.addAll(cachedRank);
+      } else {
+        try {
+          final cutoffIso = _cutoff(p).toIso8601String();
+          final rows = await ApiClient().ranking(
+            since: cutoffIso,
+            emails: emails,
+          );
+          for (final row in rows) {
+            final email = (row['email'] ?? '').toString().toLowerCase();
+            final pts = (row['points'] as num?)?.round() ?? 0;
+            if (email.isNotEmpty) byEmail[email] = pts;
+          }
+          if (rankKey != null) {
+            ApiCache.put(rankKey, Map<String, int>.from(byEmail));
+          }
+        } catch (_) {
+          // Sin conexión / error: los amigos quedan en 0 para el período.
         }
-      } catch (_) {
-        // Sin conexión / error: los amigos quedan en 0 para el período.
       }
     }
 

@@ -1,6 +1,7 @@
 import 'dart:collection';
 import '../data/models.dart';
 import 'api/api_client.dart';
+import 'cache/api_cache.dart';
 
 /// Resultado del cálculo de rating para una cancha.
 class CourtRating {
@@ -49,10 +50,25 @@ class CourtRatingService {
     }
   }
 
-  /// Reseñas de una cancha (sin cache: la pantalla de detalle quiere frescas).
-  Future<List<Review>> listReviews(String courtId) async {
+  /// Clave de la lista de reseñas en [ApiCache]. La comparten [ratingFor] y la
+  /// pantalla de detalle para no pedir dos veces lo mismo.
+  static String reviewsKey(String courtId) => 'reviews::$courtId';
+
+  /// Reseñas de una cancha. Cacheadas con TTL (stale-while-revalidate desde la
+  /// UI): dentro del TTL se sirven sin pegar a la red. `force` salta el cache
+  /// (pull-to-refresh / tras crear o borrar).
+  Future<List<Review>> listReviews(String courtId, {bool force = false}) async {
+    final key = reviewsKey(courtId);
+    if (!force) {
+      final cached = ApiCache.peek<List<Review>>(key);
+      if (cached != null && ApiCache.isFresh(key, ApiCache.ttlReviews)) {
+        return cached;
+      }
+    }
     final rows = await _api.courtReviews(courtId);
-    return rows.map(Review.fromApi).toList();
+    final list = rows.map(Review.fromApi).toList();
+    ApiCache.put(key, list);
+    return list;
   }
 
   /// Crea una reseña (email y handle salen del token en el server).
@@ -73,6 +89,9 @@ class CourtRatingService {
     if (courtId.isNotEmpty) invalidate(courtId);
   }
 
-  /// Limpia el cache (útil si se reescribe una reseña).
-  void invalidate(String courtId) => _cache.remove(courtId);
+  /// Limpia el cache del rating agregado y de la lista de reseñas.
+  void invalidate(String courtId) {
+    _cache.remove(courtId);
+    ApiCache.invalidate(reviewsKey(courtId));
+  }
 }

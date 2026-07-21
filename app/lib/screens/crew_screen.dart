@@ -22,9 +22,11 @@ class _CrewScreenState extends State<CrewScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  Future<void> _load() async {
+  // initState usa la guarda TTL (no refetch si se cargó hace poco); el
+  // pull-to-refresh fuerza la recarga.
+  Future<void> _load({bool force = false}) async {
     final email = context.read<Session>().email ?? '';
-    await context.read<PickupsProvider>().loadForUser(email);
+    await context.read<PickupsProvider>().loadForUser(email, force: force);
   }
 
   Color _hex(String hex) {
@@ -68,7 +70,7 @@ class _CrewScreenState extends State<CrewScreen> {
             ),
           ),
           RefreshIndicator(
-            onRefresh: _load,
+            onRefresh: () => _load(force: true),
             color: AppColors.accent,
             backgroundColor: AppColors.bgElev,
             child: ListView(

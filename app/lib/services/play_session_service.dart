@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/achievements.dart';
 import '../data/courts.dart';
 import 'api/api_config.dart';
+import 'cache/api_cache.dart';
 import '../theme/app_theme.dart';
 import 'health_service.dart';
 import 'session_alarms.dart';
@@ -25,7 +26,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   static const Duration dwellThreshold = Duration(minutes: 6);
   // "No juego": al declinar la cuenta regresiva, el detector de ESA cancha
   // queda silenciado por este tiempo (mientras sigas dentro del radio).
-  static const Duration dwellSnooze = Duration(hours: 1);
+  static const Duration dwellSnooze = Duration(hours: 2, minutes: 30);
   // El snooze se limpia solo si venís leyendo FUERA del radio de la cancha
   // silenciada de forma continua por este tiempo (más tolerante que
   // gpsJitterGrace: un salto de GPS no debe revivir el banner, que es justo lo
@@ -1975,6 +1976,16 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         seconds: p.seconds,
       );
     }
+
+    // Un partido resuelto cambia rey/clan/mis-puntos de la cancha y los
+    // rankings: invalidar esas entradas del cache para que se recalculen.
+    if (p.courtId.isNotEmpty) {
+      ApiCache.invalidate('king::${p.courtId}');
+      ApiCache.invalidate('clanowner::${p.courtId}');
+      ApiCache.invalidate('mypoints::${p.courtId}');
+    }
+    ApiCache.invalidatePrefix('ranking');
+    ApiCache.invalidatePrefix('globalranking');
 
     _pendingSession = null;
     await _persistPlays();
