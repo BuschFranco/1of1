@@ -1086,7 +1086,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   PlayStats _stats() => _statsOf(context.watch<PlaySessionService>());
 
   /// Header de card con ícono + título + subtítulo chico (origen de los datos).
-  Widget _cardHeader(IconData icon, String title, String subtitle) {
+  /// [trailing] opcional se ancla arriba a la derecha (p. ej. la fuente del dato).
+  Widget _cardHeader(IconData icon, String title, String subtitle,
+      {Widget? afterTitle, Widget? trailing}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       child: Column(
@@ -1102,11 +1104,140 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       weight: FontWeight.w700,
                       color: AppColors.white(0.5),
                       letterSpacing: 0.1)),
+              if (afterTitle != null) ...[const SizedBox(width: 6), afterTitle],
+              if (trailing != null) ...[const Spacer(), trailing],
             ],
           ),
           const SizedBox(height: 3),
           Text(subtitle,
               style: AppText.grotesk(size: 9, color: AppColors.white(0.3))),
+        ],
+      ),
+    );
+  }
+
+  /// Diálogo que explica de dónde salen los datos de "Estado", para qué sirven,
+  /// qué permisos hacen falta y el tip de poner el reloj en modo básquet.
+  void _showHealthInfo(BuildContext context) {
+    Widget item(String head, String body) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(head,
+                  style: AppText.grotesk(
+                      size: 12,
+                      weight: FontWeight.w800,
+                      color: AppColors.accent)),
+              const SizedBox(height: 4),
+              Text(body,
+                  style: AppText.grotesk(
+                      size: 12.5,
+                      color: AppColors.white(0.75),
+                      height: 1.4)),
+            ],
+          ),
+        );
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bgElev,
+        scrollable: true,
+        title: Row(
+          children: [
+            Icon(Icons.monitor_heart_outlined,
+                size: 18, color: AppColors.accent),
+            const SizedBox(width: 8),
+            Text('Sobre tus datos',
+                style: AppText.archivo(size: 17, weight: FontWeight.w800)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            item('De dónde salen',
+                'Los leemos de Health Connect (Android). Tu reloj o banda (Galaxy Watch, Mi Band, etc., vía Samsung Health o su app) sincroniza ahí tu pulso, calorías, pasos y distancia mientras jugás; nosotros tomamos la ventana del partido.'),
+            item('Para qué sirven',
+                'Para ver tu esfuerzo físico en cada partido y cómo evolucionás semana a semana. Además, batir tu récord de calorías te suma EXP.'),
+            item('Permisos importantes',
+                'En Health Connect, dale permiso de LECTURA a: Frecuencia cardíaca, Calorías activas, Pasos y Distancia. Si usás Samsung Health, entrá a Samsung Health → Ajustes → Health Connect y activá el compartir de "Actividad" (calorías y distancia).'),
+            item('Recomendación',
+                'Al empezar a jugar, poné el reloj en modo Básquet (o Ejercicio). Así registra la sesión y los datos —sobre todo calorías, distancia y zonas de pulso— salen mucho más fieles.'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Entendido',
+                style: AppText.grotesk(
+                    size: 14,
+                    weight: FontWeight.w700,
+                    color: AppColors.accent)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Diálogo que explica de dónde salen las estadísticas de juego (la encuesta
+  /// post-partido) y por qué conviene cargarlas.
+  void _showGameStatsInfo(BuildContext context) {
+    Widget item(String head, String body) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(head,
+                  style: AppText.grotesk(
+                      size: 12,
+                      weight: FontWeight.w800,
+                      color: AppColors.accent)),
+              const SizedBox(height: 4),
+              Text(body,
+                  style: AppText.grotesk(
+                      size: 12.5,
+                      color: AppColors.white(0.75),
+                      height: 1.4)),
+            ],
+          ),
+        );
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bgElev,
+        scrollable: true,
+        title: Row(
+          children: [
+            Icon(Icons.sports_basketball, size: 18, color: AppColors.accent),
+            const SizedBox(width: 8),
+            Text('Sobre tus estadísticas',
+                style: AppText.archivo(size: 17, weight: FontWeight.w800)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            item('De dónde salen',
+                'De la encuesta "¿Cómo te fue?" que aparece al terminar un partido: ahí cargás tus puntos y, si querés, el desglose de triples, dobles y tiros libres.'),
+            item('Por qué conviene cargarlas',
+                'Cada vez que las cargás desbloqueás un montón de métricas: promedio de puntos por partido, de dónde vienen tus puntos, ritmo de anotación y más. Es la forma de seguir tu progreso y ver en qué mejorar.'),
+            item('No te compliques',
+                'No hace falta que los números sean exactos: se usan para sacar promedios. Con que te acerques, alcanza. Mientras más partidos cargues, más fieles quedan tus estadísticas.'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Entendido',
+                style: AppText.grotesk(
+                    size: 14,
+                    weight: FontWeight.w700,
+                    color: AppColors.accent)),
+          ),
         ],
       ),
     );
@@ -1227,7 +1358,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          _cardHeader(Icons.favorite, 'ESTADO', 'Así te movés en los partidos'),
+          _cardHeader(
+            Icons.favorite,
+            'ESTADO',
+            'Todo lo que dejaste en la cancha',
+            afterTitle: GestureDetector(
+              onTap: () => _showHealthInfo(context),
+              behavior: HitTestBehavior.opaque,
+              child: Icon(Icons.help_outline,
+                  size: 14, color: AppColors.white(0.4)),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.watch, size: 11, color: AppColors.white(0.35)),
+                const SizedBox(width: 4),
+                Text('de tu reloj o banda',
+                    style:
+                        AppText.grotesk(size: 8.5, color: AppColors.white(0.35))),
+              ],
+            ),
+          ),
           const SizedBox(height: 8),
           ...rows,
         ],
@@ -1786,8 +1937,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          _cardHeader(Icons.sports_basketball, 'ESTADÍSTICAS DE JUEGO',
-              'Datos de tus últimos partidos'),
+          _cardHeader(
+            Icons.sports_basketball,
+            'ESTADÍSTICAS DE JUEGO',
+            'Datos de tus últimos partidos',
+            afterTitle: GestureDetector(
+              onTap: () => _showGameStatsInfo(context),
+              behavior: HitTestBehavior.opaque,
+              child: Icon(Icons.help_outline,
+                  size: 14, color: AppColors.white(0.4)),
+            ),
+          ),
           const SizedBox(height: 8),
           ...rows,
           if (fromBreakdown > 0) ...[
@@ -3339,32 +3499,41 @@ class _RankingSheetState extends State<_RankingSheet> {
       );
 
   Widget _rankRow(int i, _RankEntry e) {
-    final medal = i == 0
-        ? '\u{1F947}'
+    // Puesto con color oro/plata/bronce para el top 3 (sin emojis).
+    const gold = Color(0xFFFFD54A);
+    const silver = Color(0xFFCFD8DC);
+    const bronze = Color(0xFFCD7F32);
+    final Color? medal = i == 0
+        ? gold
         : i == 1
-            ? '\u{1F948}'
+            ? silver
             : i == 2
-                ? '\u{1F949}'
-                : '';
+                ? bronze
+                : null;
     // Fila plana: "vos" se marca solo con tinte de acento, sin borde.
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       color: e.isMe ? AppColors.accent.withAlpha(18) : Colors.transparent,
       child: Row(
         children: [
-          SizedBox(
-            width: 28,
+          Container(
+            width: 26,
+            height: 26,
+            alignment: Alignment.center,
+            decoration: medal != null
+                ? BoxDecoration(
+                    color: medal.withAlpha(30), shape: BoxShape.circle)
+                : null,
             child: Text(
-              medal.isNotEmpty ? medal : '${i + 1}',
-              style: AppText.grotesk(
-                size: 13,
-                weight: FontWeight.w800,
-                color: AppColors.white(0.5),
+              '${i + 1}',
+              style: AppText.archivo(
+                size: medal != null ? 14 : 13,
+                weight: FontWeight.w900,
+                color: medal ?? AppColors.white(0.4),
               ),
-              textAlign: TextAlign.center,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
