@@ -19,7 +19,10 @@ enum AuthMode { login, signup }
 
 class AuthScreen extends StatefulWidget {
   final AuthMode initialMode;
-  const AuthScreen({super.key, this.initialMode = AuthMode.signup});
+  /// Mensaje a mostrar apenas se abre (ej. la verificación de arranque falló).
+  final String? initialError;
+  const AuthScreen(
+      {super.key, this.initialMode = AuthMode.signup, this.initialError});
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -55,6 +58,13 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   void initState() {
     super.initState();
+    _error = widget.initialError;
+    // Consumir el error de arranque para que no reaparezca en cada rebuild.
+    if (widget.initialError != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.read<Session>().clearStartupError();
+      });
+    }
     _prefillLastEmail();
   }
 

@@ -34,6 +34,12 @@ class Session extends ChangeNotifier {
   String _profileBg = '';
   String _defaultTab = 'home';
   bool _restoring = true;
+  // Verificando la sesión cacheada contra el backend al arrancar. Mientras es
+  // true la app se queda en el splash: ya no se entra en modo offline.
+  bool _verifying = false;
+  // Mensaje si la verificación de arranque falló (sin conexión / error del
+  // server / sesión vencida). La UI manda al login y lo muestra.
+  String? _startupError;
   // Campos del perfil modificados localmente sin subir. El batch los sube
   // juntos en flush(). Usar un Set en vez de bool permite enviar solo los
   // campos que realmente cambiaron (PATCH parcial), reduciendo el payload.
@@ -60,6 +66,10 @@ class Session extends ChangeNotifier {
   /// Pestaña de inicio por defecto al abrir la app ('home' = default).
   String get defaultTab => _defaultTab;
   bool get restoring => _restoring;
+  bool get verifying => _verifying;
+  String? get startupError => _startupError;
+  /// La consume la pantalla de login para no repetir el mensaje en rebuilds.
+  void clearStartupError() => _startupError = null;
   bool get isLoggedIn => _profile != null;
   bool get notionReady => _api.isConfigured;
   bool get isAdmin => _profile?.isAdmin ?? false;
@@ -135,33 +145,47 @@ class Session extends ChangeNotifier {
         _email = em;
       } catch (_) {/* cache corrupto: ignorar */}
     }
+    // Con sesión cacheada la VERIFICAMOS contra el backend antes de entrar: ya
+    // no se permite explorar la app sin conexión. Sin backend configurado
+    // (build sin API_BASE_URL) no hay nada que verificar → se entra con cache.
+    if (_profile != null && _api.isConfigured) {
+      _verifying = true;
+      _restoring = false;
+      notifyListeners();
+      await _verifyStartupSession(em!);
+      return;
+    }
     _restoring = false;
     notifyListeners();
-    // Refrescar perfil desde el backend en background para capturar cambios
-    // sin bloquear el arranque. Si el token venció, el 401 cierra la sesión.
-    if (_profile != null && _api.isConfigured) {
-      _refreshProfileFromApi(em!);
-    }
   }
 
-  /// Refresca el perfil desde el backend (background, sin bloquear).
-  Future<void> _refreshProfileFromApi(String email) async {
+  /// Verifica la sesión cacheada contra el backend al arrancar y de paso refresca
+  /// el perfil. Éxito → entra. 401 → sesión vencida, al login. Sin conexión /
+  /// error del server → al login con un mensaje (no se entra en modo offline).
+  /// Timeout corto para no dejar el splash colgado.
+  Future<void> _verifyStartupSession(String email) async {
     try {
-      final json = await _api.me();
+      final json = await _api.me().timeout(const Duration(seconds: 4));
       final fresh = _withAdmin(Profile.fromJson(json));
       // Nunca pisar el cache bueno con un perfil vacío/malformado.
-      if (fresh.pageId.isEmpty) return;
-      if (_email == email) {
+      if (fresh.pageId.isNotEmpty && _email == email) {
         _profile = fresh;
         await _persist(email, fresh);
-        notifyListeners();
       }
     } on ApiException catch (e) {
-      // Token vencido o cuenta eliminada: la única salida es re-loguear.
-      if (e.statusCode == 401 && _email == email) {
-        await logout(flushFirst: false);
-      }
-    } catch (_) {/* sin red: seguir con el cache */}
+      _startupError = e.statusCode == 401
+          ? 'Tu sesión expiró. Iniciá sesión de nuevo.'
+          : 'No pudimos conectar con el servidor. Revisá tu conexión e iniciá sesión de nuevo.';
+      await logout(flushFirst: false);
+    } catch (_) {
+      // Sin red / timeout.
+      _startupError =
+          'No hay conexión. Revisá tu internet e iniciá sesión de nuevo.';
+      await logout(flushFirst: false);
+    } finally {
+      _verifying = false;
+      notifyListeners();
+    }
   }
 
   /// Devuelve null si OK, o un mensaje de error. [persist] indica si la sesión

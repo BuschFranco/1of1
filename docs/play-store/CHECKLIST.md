@@ -33,6 +33,11 @@
 8. **Subir el AAB** (`app/build/app/outputs/bundle/release/app-release.aab`) a un track (te recomiendo arrancar por **Internal testing** o **Closed testing** antes de producción, así probás con vos y unos pocos usuarios antes del review público).
 9. **App access**: si el reviewer de Google necesita loguearse para revisar la app, dejá un usuario de prueba (email/password) en el formulario correspondiente.
 10. **Ads**: declarar que la app NO tiene publicidad (asumo que no la tiene).
+11. **Google Sign-In tras publicar**: cuando actives Play App Signing, agregá la
+    SHA-1 de la *app signing key* (Play Console → Configuración → Firma de la app)
+    al cliente OAuth de Android en Google Cloud, o el login con Google falla para
+    quien instale desde la tienda. Registro de todas las huellas SHA en
+    [`app/docs/google-signin-sha.md`](../../app/docs/google-signin-sha.md).
 
 ## 🤝 Lo que puedo seguir preparando cuando me digas
 

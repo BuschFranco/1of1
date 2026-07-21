@@ -201,15 +201,25 @@ class _RootState extends State<_Root> {
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
 
-    // Splash: mientras se restaura O se espera el bootstrap local.
-    // Si hay timeout (5 s), forzar salida del splash.
-    if ((_bootstrapping || session.restoring) && !_splashTimeout) {
+    // Splash: mientras se restaura, se verifica la sesión, o se espera el
+    // bootstrap local. Si hay timeout (5 s), forzar salida del splash.
+    if ((_bootstrapping || session.restoring || session.verifying) &&
+        !_splashTimeout) {
       return const _Splash();
     }
 
     if (session.isLoggedIn) {
       // Recién registrado sin handle → forzar la elección antes de entrar.
       return session.needsHandle ? const HandleSetupScreen() : const MainShell();
+    }
+
+    // Falló la verificación de una sesión cacheada (sin conexión / server /
+    // sesión vencida): al login con el mensaje, en vez de dejar explorar
+    // offline con todo vacío.
+    final startupError = session.startupError;
+    if (startupError != null) {
+      return AuthScreen(
+          initialMode: AuthMode.login, initialError: startupError);
     }
 
     // Si no se pudo establecer sesión (timeout o sin cache/token), ir al login.
