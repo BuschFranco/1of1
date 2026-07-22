@@ -87,7 +87,7 @@ class _CrewScreenState extends State<CrewScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Tus pickups e invitaciones',
+                  'Tus conversaciones activas',
                   style: AppText.grotesk(size: 13, color: AppColors.white(0.6)),
                 ),
                 const SizedBox(height: 20),
@@ -134,14 +134,14 @@ class _CrewScreenState extends State<CrewScreen> {
       padding: const EdgeInsets.only(top: 40),
       child: Column(
         children: [
-          Icon(Icons.groups_outlined, size: 44, color: AppColors.white(0.25)),
+          Icon(Icons.forum_outlined, size: 44, color: AppColors.white(0.25)),
           const SizedBox(height: 12),
-          Text('Todavía no tenés pickups',
+          Text('No tenés conversaciones activas',
               style: AppText.grotesk(
                   size: 15, weight: FontWeight.w700, color: Colors.white)),
           const SizedBox(height: 6),
           Text(
-            'Creá un pickup desde el botón + o esperá una invitación de tu crew.',
+            'Se arman cuando creás un pickup en una cancha o cuando tu crew te suma a uno.',
             textAlign: TextAlign.center,
             style: AppText.grotesk(size: 13, color: AppColors.white(0.5)),
           ),
