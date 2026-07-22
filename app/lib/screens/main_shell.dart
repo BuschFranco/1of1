@@ -699,17 +699,17 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
       );
     }
 
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.7,
-      ),
-      decoration: const BoxDecoration(
-        color: AppColors.bgElev,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: AnimatedPadding(
-        duration: const Duration(milliseconds: 200),
-        padding: EdgeInsets.only(bottom: bottom),
+    final screenH = MediaQuery.of(context).size.height;
+    return Padding(
+      // El padding del teclado va AFUERA del container: así el sheet flota por
+      // encima del teclado y el contenido nunca queda tapado.
+      padding: EdgeInsets.only(bottom: bottom),
+      child: Container(
+        constraints: BoxConstraints(maxHeight: screenH * 0.85),
+        decoration: const BoxDecoration(
+          color: AppColors.bgElev,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -751,13 +751,48 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Los inputs van PRIMERO: es lo más importante y así quedan
+                    // visibles apenas se abre (aunque el teclado achique el alto).
+                    Text('PUNTOS ANOTADOS',
+                        style: AppText.grotesk(
+                            size: 10,
+                            weight: FontWeight.w700,
+                            color: AppColors.white(0.4),
+                            letterSpacing: 0.08)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: widget.ptsCtrl,
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.center,
+                      autofocus: true,
+                      style: AppText.archivo(size: 22, weight: FontWeight.w800),
+                      cursorColor: AppColors.accent,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(3),
+                      ],
+                      decoration: numDecoration(22),
+                    ),
+                    const SizedBox(height: 16),
+                    // Desglose: 3PT / 2PT / TL en una sola fila.
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        field('3PT', widget.t3Ctrl),
+                        const SizedBox(width: 10),
+                        field('2PT', widget.t2Ctrl),
+                        const SizedBox(width: 10),
+                        field('TL', widget.tlCtrl),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
                     // Por qué cargar esto (tono relajado: es para promedios).
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -773,7 +808,7 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Sirve para llevar el registro de tu progreso. Si no te acordás los números exactos, no pasa nada: se usan para sacar un promedio, así que con que te acerques alcanza.',
+                              'Sirve para llevar el registro de tu progreso. No importa si no es exacto, con el tiempo se crea un promedio 🙂',
                               style: AppText.grotesk(
                                   size: 12,
                                   color: AppColors.white(0.7),
@@ -783,40 +818,7 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    // Puntos totales (ancho completo).
-                    Text('PUNTOS ANOTADOS',
-                        style: AppText.grotesk(
-                            size: 10,
-                            weight: FontWeight.w700,
-                            color: AppColors.white(0.4),
-                            letterSpacing: 0.08)),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: widget.ptsCtrl,
-                      keyboardType: TextInputType.number,
-                      textAlign: TextAlign.center,
-                      style: AppText.archivo(size: 20, weight: FontWeight.w800),
-                      cursorColor: AppColors.accent,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(3),
-                      ],
-                      decoration: numDecoration(20),
-                    ),
-                    const SizedBox(height: 16),
-                    // Desglose: 3PT / 2PT / TL en una sola fila.
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        field('3PT', widget.t3Ctrl),
-                        const SizedBox(width: 10),
-                        field('2PT', widget.t2Ctrl),
-                        const SizedBox(width: 10),
-                        field('TL', widget.tlCtrl),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),

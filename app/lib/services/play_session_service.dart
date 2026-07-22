@@ -523,6 +523,22 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   int get maxHeartRate =>
       _log.fold(0, (m, s) => s.maxHr != null && s.maxHr! > m ? s.maxHr! : m);
 
+  /// Suma de segundos jugados en partidos con datos de salud.
+  int get totalHealthSeconds =>
+      _log.where((s) => s.hasHealth).fold(0, (sum, s) => sum + s.seconds);
+
+  /// Calorías quemadas por minuto (promedio sobre partidos con datos).
+  double get caloriesPerMinute {
+    final secs = totalHealthSeconds;
+    return secs > 0 ? totalCalories / (secs / 60) : 0;
+  }
+
+  /// Cadencia promedio: pasos por minuto sobre partidos con datos.
+  int get avgStepsPerMinute {
+    final secs = totalHealthSeconds;
+    return secs > 0 ? (totalSteps / (secs / 60)).round() : 0;
+  }
+
   /// True si hay stats de salud para mostrar (health activo + al menos un partido con datos).
   bool get hasHealthStats => _healthEnabled && healthMatches > 0;
 
@@ -599,6 +615,31 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// Promedio de puntos por partido (solo partidos con stats).
   double get avgUserPoints =>
       userStatsMatches > 0 ? totalUserPoints / userStatsMatches : 0;
+
+  /// Mejor marca de puntos en un solo partido (récord personal).
+  int get bestUserPoints => _log
+      .where((s) => s.userPoints != null)
+      .fold(0, (m, s) => (s.userPoints ?? 0) > m ? (s.userPoints ?? 0) : m);
+
+  /// Total de canastas de campo (triples + dobles, sin tiros libres).
+  int get totalUserBaskets => totalUserTriples + totalUserDoubles;
+
+  /// Total de tiros anotados (triples + dobles + tiros libres).
+  int get totalUserMadeShots =>
+      totalUserTriples + totalUserDoubles + totalUserFreeThrows;
+
+  /// Promedio de puntos por minuto (partidos con stats y duración > 0).
+  double get avgUserPointsPerMinute {
+    final ms = _log.where((s) => s.userPoints != null && s.seconds > 0);
+    if (ms.isEmpty) return 0;
+    final sum =
+        ms.fold<double>(0, (a, s) => a + (s.userPoints! / (s.seconds / 60)));
+    return sum / ms.length;
+  }
+
+  /// Puntos promedio por tiro anotado (eficiencia de tiro).
+  double get avgPointsPerShot =>
+      totalUserMadeShots > 0 ? totalUserPoints / totalUserMadeShots : 0;
 
   /// True si hay stats de juego para mostrar.
   bool get hasUserStats => userStatsMatches > 0;

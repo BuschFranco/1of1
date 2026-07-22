@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:fl_chart/fl_chart.dart';
 import '../data/achievements.dart';
 import '../data/cosmetics.dart';
 import '../data/courts.dart';
@@ -29,6 +28,7 @@ import '../theme/app_theme.dart';
 import 'legal_screen.dart';
 import 'notifications_screen.dart';
 import 'match_detail_screen.dart';
+import 'game_stats_screen.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
 import '../widgets/permissions_modal.dart';
@@ -554,22 +554,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: _healthStatsCard(ps),
             ),
           ),
-          const SizedBox(height: 16),
-          RevealOnScroll(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: _healthTrendsCard(ps),
-            ),
-          ),
-          if (ps.hasWeeklyHealthTrend) ...[
-            const SizedBox(height: 16),
-            RevealOnScroll(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _weeklyHealthCard(ps),
-              ),
-            ),
-          ],
         ],
         if (ps.hasUserStats) ...[
           const SizedBox(height: 16),
@@ -1157,14 +1141,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            item('De dónde salen',
-                'Los leemos de Health Connect (Android). Tu reloj o banda (Galaxy Watch, Mi Band, etc., vía Samsung Health o su app) sincroniza ahí tu pulso, calorías, pasos y distancia mientras jugás; nosotros tomamos la ventana del partido.'),
-            item('Para qué sirven',
-                'Para ver tu esfuerzo físico en cada partido y cómo evolucionás semana a semana. Además, batir tu récord de calorías te suma EXP.'),
-            item('Permisos importantes',
-                'En Health Connect, dale permiso de LECTURA a: Frecuencia cardíaca, Calorías activas, Pasos y Distancia. Si usás Samsung Health, entrá a Samsung Health → Ajustes → Health Connect y activá el compartir de "Actividad" (calorías y distancia).'),
-            item('Recomendación',
-                'Al empezar a jugar, poné el reloj en modo Básquet (o Ejercicio). Así registra la sesión y los datos —sobre todo calorías, distancia y zonas de pulso— salen mucho más fieles.'),
+            item('Qué es',
+                'Todo lo que dejás en la cancha: pulso, calorías, pasos y distancia de cada partido. Así ves cuánto laburaste de verdad.'),
+            item('Jugá con tu reloj o banda',
+                'Para medir tu estado necesitás jugar con el reloj o la banda puesta y darle permiso de lectura en Health Connect. Sin wearable no hay datos. Tip: ponelo en modo Básquet y salen mucho más fieles.'),
           ],
         ),
         actions: [
@@ -1221,12 +1201,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            item('De dónde salen',
-                'De la encuesta "¿Cómo te fue?" que aparece al terminar un partido: ahí cargás tus puntos y, si querés, el desglose de triples, dobles y tiros libres.'),
-            item('Por qué conviene cargarlas',
-                'Cada vez que las cargás desbloqueás un montón de métricas: promedio de puntos por partido, de dónde vienen tus puntos, ritmo de anotación y más. Es la forma de seguir tu progreso y ver en qué mejorar.'),
+            item('Qué es',
+                'Los puntos y tiros que cargás al terminar cada partido. Con eso armamos tus métricas y seguís tu progreso partido a partido.'),
             item('No te compliques',
-                'No hace falta que los números sean exactos: se usan para sacar promedios. Con que te acerques, alcanza. Mientras más partidos cargues, más fieles quedan tus estadísticas.'),
+                'No importa si no es exacto: con el tiempo se crea un promedio 🙂. Mientras más partidos cargues, mejor ves en qué estás mejorando.'),
           ],
         ),
         actions: [
@@ -1327,6 +1305,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (ps.totalDistanceMeters > 0)
         stat('Distancia', fmtDistance(ps.totalDistanceMeters), 'total',
             Icons.straighten, const Color(0xFF3B82F6)),
+      if (ps.caloriesPerMinute > 0)
+        stat('Calorías/min', ps.caloriesPerMinute.toStringAsFixed(1), 'prom',
+            Icons.whatshot, const Color(0xFFF97316)),
+      if (ps.avgStepsPerMinute > 0)
+        stat('Cadencia', '${ps.avgStepsPerMinute}', 'p/min',
+            Icons.speed, const Color(0xFF10B981)),
     ];
     if (cells.isEmpty) return const SizedBox.shrink();
 
@@ -1386,473 +1370,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// Gráficas de tendencias de salud: barras de calorías y líneas de bpm
-  /// de los últimos partidos con datos.
-  Widget _healthTrendsCard(PlaySessionService ps) {
-    // Tomar los últimos 10 partidos con datos de salud.
-    final matches = ps.log.where((s) => s.hasHealth).take(10).toList().reversed.toList();
-    if (matches.length < 2) return const SizedBox.shrink();
-
-    final barColors = List.generate(
-      matches.length,
-      (i) => i == matches.length - 1 ? AppColors.accent : AppColors.white(0.2),
-    );
-
-    // ── Gráfica de barras: calorías ──
-    final maxCal = matches
-        .fold<double>(0, (m, s) => s.calories > m ? s.calories : m);
-    final calBars = List.generate(matches.length, (i) {
-      final h = maxCal > 0 ? (matches[i].calories / maxCal) * 100 : 0.0;
-      return BarChartGroupData(
-        x: i,
-        barRods: [
-          BarChartRodData(
-            toY: h,
-            color: barColors[i],
-            width: 14,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-          ),
-        ],
-      );
-    });
-
-    // ── Gráfica de líneas: bpm promedio ──
-    final hrSpots = <FlSpot>[];
-    for (var i = 0; i < matches.length; i++) {
-      if (matches[i].avgHr != null) {
-        hrSpots.add(FlSpot(i.toDouble(), matches[i].avgHr!.toDouble()));
-      }
-    }
-    final hasLine = hrSpots.length >= 2;
-    final hasCal = maxCal > 0; // no mostrar el chart de calorías si están en 0
-    // Promedio del pulso: mes actual vs mes anterior (mes calendario). El delta
-    // se calcula entre esos dos promedios; si falta el mes previo, no se muestra.
-    final now = DateTime.now();
-    final thisMonthMs = DateTime(now.year, now.month, 1).millisecondsSinceEpoch;
-    final prevMonthMs =
-        DateTime(now.year, now.month - 1, 1).millisecondsSinceEpoch;
-    int hrSumThis = 0, hrCntThis = 0, hrSumPrev = 0, hrCntPrev = 0;
-    for (final s in ps.log) {
-      if (s.avgHr == null || !s.hasHealth) continue;
-      if (s.endedAtMillis >= thisMonthMs) {
-        hrSumThis += s.avgHr!;
-        hrCntThis++;
-      } else if (s.endedAtMillis >= prevMonthMs) {
-        hrSumPrev += s.avgHr!;
-        hrCntPrev++;
-      }
-    }
-    final hrMonthAvg = hrCntThis > 0 ? (hrSumThis / hrCntThis).round() : null;
-    final hrPrevAvg = hrCntPrev > 0 ? (hrSumPrev / hrCntPrev).round() : null;
-    // Fallback para el número grande si no hay partidos este mes: promedio de la
-    // muestra visible.
-    int? hrAvgAll;
-    if (hrSpots.isNotEmpty) {
-      final vals = hrSpots.map((s) => s.y).toList();
-      hrAvgAll = (vals.reduce((a, b) => a + b) / vals.length).round();
-    }
-    final hrShown = hrMonthAvg ?? hrAvgAll;
-    final hasMonthDelta = hrMonthAvg != null && hrPrevAvg != null;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(AppShape.rCard),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.show_chart, size: 14, color: AppColors.accent),
-              const SizedBox(width: 8),
-              Text('TENDENCIAS',
-                  style: AppText.grotesk(
-                      size: 11,
-                      weight: FontWeight.w700,
-                      color: AppColors.white(0.5),
-                      letterSpacing: 0.1)),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Calorías: barras (solo si hay calorías > 0)
-          if (hasCal) ...[
-            Text('CALORÍAS',
-                style: AppText.grotesk(
-                    size: 9,
-                    weight: FontWeight.w600,
-                    color: AppColors.white(0.35),
-                    letterSpacing: 0.1)),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 80,
-              child: BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
-                  maxY: 110,
-                  titlesData: const FlTitlesData(show: false),
-                  borderData: FlBorderData(show: false),
-                  gridData: const FlGridData(show: false),
-                  barGroups: calBars,
-                ),
-              ),
-            ),
-            if (hasLine) const SizedBox(height: 16),
-          ],
-          // BPM: línea + promedio del mes y tendencia vs mes anterior
-          if (hasLine) ...[
-            Row(
-              children: [
-                Text('PROMEDIO CARDÍACO',
-                    style: AppText.grotesk(
-                        size: 9,
-                        weight: FontWeight.w600,
-                        color: AppColors.white(0.35),
-                        letterSpacing: 0.1)),
-                const Spacer(),
-                if (hrShown != null)
-                  Text('$hrShown bpm',
-                      style: AppText.grotesk(
-                          size: 11,
-                          weight: FontWeight.w700,
-                          color: AppColors.white(0.6))),
-                if (hasMonthDelta) ...[
-                  const SizedBox(width: 6),
-                  _trendDelta(hrMonthAvg.toDouble(), hrPrevAvg.toDouble()),
-                ],
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                  hrMonthAvg != null
-                      ? (hasMonthDelta
-                          ? 'Promedio de este mes vs el anterior'
-                          : 'Promedio de este mes')
-                      : 'Promedio de tus últimos partidos',
-                  style: AppText.grotesk(size: 8, color: AppColors.white(0.3))),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 80,
-              child: LineChart(
-                LineChartData(
-                  minY: 0,
-                  maxY: 200,
-                  titlesData: const FlTitlesData(show: false),
-                  borderData: FlBorderData(show: false),
-                  gridData: const FlGridData(show: false),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: hrSpots,
-                      isCurved: true,
-                      color: const Color(0xFFEF4444),
-                      barWidth: 2.5,
-                      dotData: FlDotData(
-                        show: true,
-                        getDotPainter: (spot, a, b, c) => FlDotCirclePainter(
-                          radius: 3,
-                          color: const Color(0xFFEF4444),
-                          strokeColor: Colors.white,
-                          strokeWidth: 1,
-                        ),
-                      ),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        color: const Color(0xFFEF4444).withAlpha(30),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// Evolución de los stats físicos en los últimos 7 días: barras de calorías
-  /// por día (hoy resaltado), línea de pulso promedio por día, y el delta de la
-  /// semana vs los 7 días previos. Solo aparece con datos suficientes
-  /// (`ps.hasWeeklyHealthTrend`).
-  Widget _weeklyHealthCard(PlaySessionService ps) {
-    final days = ps.lastWeekDailyHealth();
-    final activeDays = days.where((d) => d.hasData).length;
-    if (activeDays < 2) return const SizedBox.shrink();
-
-    // Totales de esta semana (7 días) vs los 7 previos, para el delta.
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day);
-    final weekStartMs =
-        todayStart.subtract(const Duration(days: 6)).millisecondsSinceEpoch;
-    final prevStartMs =
-        todayStart.subtract(const Duration(days: 13)).millisecondsSinceEpoch;
-    double calThis = 0, calPrev = 0;
-    int hrSumT = 0, hrCntT = 0, hrSumP = 0, hrCntP = 0;
-    for (final s in ps.log) {
-      if (!s.hasHealth) continue;
-      if (s.endedAtMillis >= weekStartMs) {
-        calThis += s.calories;
-        if (s.avgHr != null) {
-          hrSumT += s.avgHr!;
-          hrCntT++;
-        }
-      } else if (s.endedAtMillis >= prevStartMs) {
-        calPrev += s.calories;
-        if (s.avgHr != null) {
-          hrSumP += s.avgHr!;
-          hrCntP++;
-        }
-      }
-    }
-    final avgHrThis = hrCntT > 0 ? (hrSumT / hrCntT).round() : null;
-    final avgHrPrev = hrCntP > 0 ? (hrSumP / hrCntP).round() : null;
-
-    // Barras de calorías por día (normalizadas a 100; hoy en acento).
-    final maxCal = days.fold<double>(0, (m, d) => d.calories > m ? d.calories : m);
-    final calBars = List.generate(days.length, (i) {
-      final d = days[i];
-      final h = maxCal > 0 ? (d.calories / maxCal) * 100 : 0.0;
-      final isToday = i == days.length - 1;
-      return BarChartGroupData(x: i, barRods: [
-        BarChartRodData(
-          toY: h,
-          color: !d.hasData
-              ? AppColors.white(0.06)
-              : (isToday ? AppColors.accent : AppColors.white(0.25)),
-          width: 16,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-        ),
-      ]);
-    });
-
-    // Línea de pulso promedio por día (solo días con pulso).
-    final hrSpots = <FlSpot>[];
-    for (var i = 0; i < days.length; i++) {
-      if (days[i].avgHr != null) {
-        hrSpots.add(FlSpot(i.toDouble(), days[i].avgHr!.toDouble()));
-      }
-    }
-    final hasHrLine = hrSpots.length >= 2;
-
-    const dow = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-    Widget dowTitle(double value, TitleMeta meta) {
-      final i = value.toInt();
-      if (i < 0 || i >= days.length) return const SizedBox.shrink();
-      final isToday = i == days.length - 1;
-      return Padding(
-        padding: const EdgeInsets.only(top: 6),
-        child: Text(
-          dow[days[i].day.weekday - 1],
-          style: AppText.grotesk(
-              size: 9,
-              weight: isToday ? FontWeight.w800 : FontWeight.w600,
-              color: isToday ? AppColors.accent : AppColors.white(0.4)),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(AppShape.rCard),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.calendar_view_week, size: 14, color: AppColors.accent),
-              const SizedBox(width: 8),
-              Text('ÚLTIMA SEMANA',
-                  style: AppText.grotesk(
-                      size: 11,
-                      weight: FontWeight.w700,
-                      color: AppColors.white(0.5),
-                      letterSpacing: 0.1)),
-              const Spacer(),
-              Text('$activeDays ${activeDays == 1 ? 'día' : 'días'}',
-                  style:
-                      AppText.grotesk(size: 11, color: AppColors.white(0.35))),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // Resumen con delta vs semana previa (solo métricas con dato).
-          Builder(builder: (_) {
-            final summaryCells = <Widget>[
-              if (calThis > 0)
-                _weeklySummaryCell('CALORÍAS', '${calThis.round()}', 'kcal',
-                    _trendDelta(calThis, calPrev)),
-              if (avgHrThis != null)
-                _weeklySummaryCell(
-                    'PROM. CARDÍACO',
-                    '$avgHrThis',
-                    'bpm',
-                    avgHrPrev != null
-                        ? _trendDelta(
-                            avgHrThis.toDouble(), avgHrPrev.toDouble())
-                        : const SizedBox.shrink()),
-            ];
-            if (summaryCells.isEmpty) return const SizedBox.shrink();
-            if (summaryCells.length == 1) {
-              return Align(
-                  alignment: Alignment.centerLeft, child: summaryCells.first);
-            }
-            return IntrinsicHeight(
-              child: Row(
-                children: [
-                  Expanded(child: summaryCells[0]),
-                  Container(width: 1, color: AppColors.white(0.06)),
-                  Expanded(child: summaryCells[1]),
-                ],
-              ),
-            );
-          }),
-          if (maxCal > 0) ...[
-            const SizedBox(height: 18),
-            Text('CALORÍAS POR DÍA',
-                style: AppText.grotesk(
-                    size: 9,
-                    weight: FontWeight.w600,
-                    color: AppColors.white(0.35),
-                    letterSpacing: 0.1)),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 90,
-              child: BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
-                  maxY: 110,
-                  titlesData: FlTitlesData(
-                    leftTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
-                    topTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 20,
-                        getTitlesWidget: dowTitle,
-                      ),
-                    ),
-                  ),
-                  borderData: FlBorderData(show: false),
-                  gridData: const FlGridData(show: false),
-                  barGroups: calBars,
-                ),
-              ),
-            ),
-          ],
-          if (hasHrLine) ...[
-            const SizedBox(height: 16),
-            Text('PULSO PROMEDIO POR DÍA',
-                style: AppText.grotesk(
-                    size: 9,
-                    weight: FontWeight.w600,
-                    color: AppColors.white(0.35),
-                    letterSpacing: 0.1)),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 70,
-              child: LineChart(
-                LineChartData(
-                  minX: 0,
-                  maxX: (days.length - 1).toDouble(),
-                  minY: 0,
-                  maxY: 200,
-                  titlesData: const FlTitlesData(show: false),
-                  borderData: FlBorderData(show: false),
-                  gridData: const FlGridData(show: false),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: hrSpots,
-                      isCurved: true,
-                      color: const Color(0xFFEF4444),
-                      barWidth: 2.5,
-                      dotData: FlDotData(
-                        show: true,
-                        getDotPainter: (spot, a, b, c) => FlDotCirclePainter(
-                          radius: 3,
-                          color: const Color(0xFFEF4444),
-                          strokeColor: Colors.white,
-                          strokeWidth: 1,
-                        ),
-                      ),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        color: const Color(0xFFEF4444).withAlpha(30),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// Celda del resumen semanal: label + valor + unidad + chip de delta.
-  Widget _weeklySummaryCell(
-      String label, String value, String unit, Widget delta) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style: AppText.grotesk(
-                  size: 9.5,
-                  weight: FontWeight.w700,
-                  color: AppColors.white(0.45),
-                  letterSpacing: 0.1)),
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(value,
-                  style: AppText.archivo(
-                      size: 22, weight: FontWeight.w900, color: AppColors.ink)),
-              const SizedBox(width: 3),
-              Text(unit,
-                  style:
-                      AppText.grotesk(size: 10, color: AppColors.white(0.4))),
-              const SizedBox(width: 8),
-              delta,
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Chip de tendencia (↑/↓ %) de un valor vs el período previo. Vacío si no hay
-  /// base de comparación o el cambio es 0.
-  Widget _trendDelta(double current, double previous) {
-    if (previous <= 0) return const SizedBox.shrink();
-    final pct = ((current - previous) / previous * 100).round();
-    if (pct == 0) return const SizedBox.shrink();
-    final up = pct > 0;
-    final color = up ? AppColors.accent : AppColors.white(0.4);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(up ? Icons.arrow_upward : Icons.arrow_downward,
-            size: 11, color: color),
-        Text('${pct.abs()}%',
-            style: AppText.grotesk(
-                size: 10, weight: FontWeight.w700, color: color)),
-      ],
-    );
-  }
-
   /// Card de estadísticas de juego ingresadas por el usuario.
   Widget _userStatsCard(PlaySessionService ps) {
     Widget stat(String label, String value, IconData icon, Color color) {
@@ -1888,12 +1405,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     Widget hDiv() => Container(height: 1, color: AppColors.white(0.06));
 
-    // Puntos totales y promedio siempre (son el titular); el desglose solo si > 0.
+    // Puntos totales y promedio siempre (son el titular); el resto solo si > 0.
     final cells = <Widget>[
       stat('Puntos totales', '${ps.totalUserPoints}', Icons.score,
           const Color(0xFFFF6B1A)),
       stat('Prom. por partido', ps.avgUserPoints.toStringAsFixed(1),
           Icons.trending_up, const Color(0xFF22C55E)),
+      if (ps.bestUserPoints > 0)
+        stat('Mejor partido', '${ps.bestUserPoints}', Icons.emoji_events,
+            const Color(0xFFEAB308)),
+      stat('Partidos', '${ps.userStatsMatches}', Icons.event_available,
+          const Color(0xFF64748B)),
+      if (ps.avgUserPointsPerMinute > 0)
+        stat('Puntos por min', ps.avgUserPointsPerMinute.toStringAsFixed(1),
+            Icons.bolt, const Color(0xFFF97316)),
+      if (ps.avgPointsPerShot > 0)
+        stat('Puntos por tiro', ps.avgPointsPerShot.toStringAsFixed(1),
+            Icons.my_location, const Color(0xFF14B8A6)),
+      if (ps.totalUserBaskets > 0)
+        stat('Canastas', '${ps.totalUserBaskets}', Icons.sports_basketball,
+            const Color(0xFFFF6B1A)),
       if (ps.totalUserTriples > 0)
         stat('Triples', '${ps.totalUserTriples}', Icons.add_circle_outline,
             const Color(0xFF3B82F6)),
@@ -1929,32 +1460,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final ptsTl = ps.totalUserFreeThrows; // 1 c/u
     final fromBreakdown = pts3 + pts2 + ptsTl;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(AppShape.rCard),
+    // Toda la card es tocable: abre la pantalla desarrollada con gráficos y
+    // filtros de tiempo. El (?) del header captura su propio tap aparte.
+    return PressableWidget(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const GameStatsScreen()),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          _cardHeader(
-            Icons.sports_basketball,
-            'ESTADÍSTICAS DE JUEGO',
-            'Datos de tus últimos partidos',
-            afterTitle: GestureDetector(
-              onTap: () => _showGameStatsInfo(context),
-              behavior: HitTestBehavior.opaque,
-              child: Icon(Icons.help_outline,
-                  size: 14, color: AppColors.white(0.4)),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(AppShape.rCard),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            _cardHeader(
+              Icons.sports_basketball,
+              'ESTADÍSTICAS DE JUEGO',
+              'Tocá para ver tu evolución',
+              afterTitle: GestureDetector(
+                onTap: () => _showGameStatsInfo(context),
+                behavior: HitTestBehavior.opaque,
+                child: Icon(Icons.help_outline,
+                    size: 14, color: AppColors.white(0.4)),
+              ),
+              trailing: Icon(Icons.chevron_right,
+                  size: 20, color: AppColors.white(0.3)),
             ),
-          ),
-          const SizedBox(height: 8),
-          ...rows,
-          if (fromBreakdown > 0) ...[
-            hDiv(),
-            _pointsDistribution(pts3, pts2, ptsTl, fromBreakdown),
+            const SizedBox(height: 8),
+            ...rows,
+            if (fromBreakdown > 0) ...[
+              hDiv(),
+              _pointsDistribution(pts3, pts2, ptsTl, fromBreakdown),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

@@ -289,14 +289,19 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     final pts = s.userPoints ?? 0;
     // Métricas desde la fuente única (compartida con la imagen, no se desincroniza).
     final items = _userStatItems(s);
-    final row = <Widget>[];
+
+    // Filas de "planilla": etiqueta a la izquierda, valor a la derecha, con una
+    // línea fina entre cada una. Texto plano, sin cajas ni divisores verticales.
+    final lines = <Widget>[];
     for (var i = 0; i < items.length; i++) {
-      if (i > 0) row.add(_vDivider());
-      row.add(Expanded(child: _inlineStat(items[i].label, items[i].value)));
+      if (i > 0) {
+        lines.add(Divider(height: 1, thickness: 1, color: AppColors.white(0.05)));
+      }
+      lines.add(_statLine(items[i].label, items[i].value));
     }
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 6),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(AppShape.rCard),
@@ -319,22 +324,46 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                 const Spacer(),
                 Text('$pts',
                     style: AppText.archivo(
-                        size: 20,
+                        size: 22,
                         weight: FontWeight.w900,
                         color: AppColors.accent)),
-                const SizedBox(width: 4),
-                Text('PTS',
-                    style: AppText.grotesk(
-                        size: 10,
-                        weight: FontWeight.w700,
-                        color: AppColors.white(0.4))),
+                const SizedBox(width: 5),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Text('PTS',
+                      style: AppText.grotesk(
+                          size: 10,
+                          weight: FontWeight.w700,
+                          color: AppColors.white(0.4))),
+                ),
               ],
             ],
           ),
-          if (row.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Row(children: row),
+          if (lines.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            ...lines,
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Fila de planilla: nombre de la métrica a la izquierda (tenue), valor a la
+  /// derecha (blanco, destacado). Lectura tipo lista, no columnas apretadas.
+  Widget _statLine(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 11),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label,
+                style: AppText.grotesk(
+                    size: 13,
+                    weight: FontWeight.w600,
+                    color: AppColors.white(0.6))),
+          ),
+          Text(value,
+              style: AppText.archivo(size: 17, weight: FontWeight.w900)),
         ],
       ),
     );
@@ -372,6 +401,9 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       if (s.avgHr != null)
         _healthMetric(
             Icons.favorite, const Color(0xFFEF4444), '${s.avgHr}', 'bpm'),
+      if (s.maxHr != null && s.maxHr! > 0)
+        _healthMetric(
+            Icons.monitor_heart, const Color(0xFFF43F5E), '${s.maxHr}', 'máx'),
       if (s.distance > 0)
         _healthMetric(
             Icons.straighten,
@@ -380,6 +412,12 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                 ? (s.distance / 1000).toStringAsFixed(2)
                 : '${s.distance.round()}',
             s.distance >= 1000 ? 'km' : 'm'),
+      if (s.calories > 0 && s.seconds > 0)
+        _healthMetric(Icons.whatshot, const Color(0xFFF97316),
+            (s.calories / (s.seconds / 60)).toStringAsFixed(1), 'kcal/min'),
+      if (s.steps > 0 && s.seconds > 0)
+        _healthMetric(Icons.speed, const Color(0xFF10B981),
+            '${(s.steps / (s.seconds / 60)).round()}', 'pasos/min'),
     ];
     final hasZones = s.hrZones != null &&
         s.hrZones!.any((z) => z > 0);
@@ -773,13 +811,21 @@ List<({String label, String value})> _userStatItems(PlaySession s) {
   final t2 = s.userDoubles ?? 0;
   final tl = s.userFreeThrows ?? 0;
   final fieldGoals = t3 + t2;
+  final madeShots = t3 + t2 + tl;
   final ppm = (pts > 0 && s.seconds > 0) ? pts / (s.seconds / 60) : null;
+  // Puntos por tiro anotado (eficiencia) y qué parte del puntaje vino de triples.
+  final perShot = (pts > 0 && madeShots > 0) ? pts / madeShots : null;
+  final threeShare = (pts > 0 && t3 > 0) ? (t3 * 3 / pts * 100).round() : null;
   return [
-    if (t3 > 0) (label: '3PT', value: '$t3'),
-    if (t2 > 0) (label: '2PT', value: '$t2'),
-    if (tl > 0) (label: 'TL', value: '$tl'),
-    if (fieldGoals > 0) (label: 'CANASTAS', value: '$fieldGoals'),
-    if (ppm != null) (label: 'PTS/MIN', value: ppm.toStringAsFixed(1)),
+    if (t3 > 0) (label: 'Triples', value: '$t3'),
+    if (t2 > 0) (label: 'Dobles', value: '$t2'),
+    if (tl > 0) (label: 'Tiros libres', value: '$tl'),
+    if (fieldGoals > 0) (label: 'Canastas', value: '$fieldGoals'),
+    if (madeShots > 0) (label: 'Tiros anotados', value: '$madeShots'),
+    if (ppm != null) (label: 'Puntos por minuto', value: ppm.toStringAsFixed(1)),
+    if (perShot != null)
+      (label: 'Puntos por tiro', value: perShot.toStringAsFixed(1)),
+    if (threeShare != null) (label: 'Puntaje en triples', value: '$threeShare%'),
   ];
 }
 
@@ -863,20 +909,33 @@ class _ShareCard extends StatelessWidget {
                   color: s.points > 0 ? AppColors.accent : null),
             ],
           ),
-          // Stats del usuario: total (PTS) + las MISMAS métricas del registro
-          // (3PT/2PT/TL/CANASTAS/PTS/MIN). Wrap para que no se desborde a lo ancho.
+          // Stats del usuario: total anotado (número grande) + el desglose como
+          // planilla de texto plano (mismas métricas y valores que el registro).
           if (s.hasUserStats) ...[
-            const SizedBox(height: 52),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 48,
-              runSpacing: 40,
-              children: [
-                if ((s.userPoints ?? 0) > 0)
-                  _shareUserStat('${s.userPoints}', 'PTS'),
-                for (final it in _userStatItems(s))
-                  _shareUserStat(it.value, it.label),
-              ],
+            const SizedBox(height: 56),
+            if ((s.userPoints ?? 0) > 0) ...[
+              Text('${s.userPoints}',
+                  style: AppText.archivo(
+                      size: 128,
+                      weight: FontWeight.w900,
+                      color: AppColors.accent,
+                      height: 0.95)),
+              Text('PUNTOS ANOTADOS',
+                  style: AppText.grotesk(
+                      size: 24,
+                      weight: FontWeight.w700,
+                      color: AppColors.white(0.4),
+                      letterSpacing: 0.14)),
+              const SizedBox(height: 40),
+            ],
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 620),
+              child: Column(
+                children: [
+                  for (final it in _userStatItems(s))
+                    _shareStatLine(it.label, it.value),
+                ],
+              ),
             ),
           ],
           // Salud: todas las métricas disponibles.
@@ -893,6 +952,8 @@ class _ShareCard extends StatelessWidget {
                   _shareMiniStat(Icons.directions_walk, '${s.steps} pasos'),
                 if (s.avgHr != null)
                   _shareMiniStat(Icons.favorite_border, '${s.avgHr} bpm'),
+                if (s.maxHr != null && s.maxHr! > 0)
+                  _shareMiniStat(Icons.monitor_heart, '${s.maxHr} máx'),
                 if (s.distance > 0)
                   _shareMiniStat(
                     Icons.straighten,
@@ -900,6 +961,12 @@ class _ShareCard extends StatelessWidget {
                         ? '${(s.distance / 1000).toStringAsFixed(1)} km'
                         : '${s.distance.round()} m',
                   ),
+                if (s.calories > 0 && s.seconds > 0)
+                  _shareMiniStat(Icons.whatshot,
+                      '${(s.calories / (s.seconds / 60)).toStringAsFixed(1)} kcal/min'),
+                if (s.steps > 0 && s.seconds > 0)
+                  _shareMiniStat(Icons.speed,
+                      '${(s.steps / (s.seconds / 60)).round()} pasos/min'),
               ],
             ),
             // Mini barra de zonas cardíacas.
@@ -976,20 +1043,28 @@ class _ShareCard extends StatelessWidget {
     );
   }
 
-  Widget _shareUserStat(String value, String label) {
-    return Column(
-      children: [
-        Text(value,
-            style: AppText.archivo(
-                size: 52, weight: FontWeight.w900, color: Colors.white)),
-        const SizedBox(height: 6),
-        Text(label,
-            style: AppText.grotesk(
-                size: 18,
-                weight: FontWeight.w700,
-                color: AppColors.white(0.4),
-                letterSpacing: 0.1)),
-      ],
+  /// Fila de planilla para la imagen: métrica a la izquierda, valor a la
+  /// derecha, con una línea fina debajo. Mismo estilo que el registro en app.
+  Widget _shareStatLine(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 22),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.white(0.08))),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label,
+                style: AppText.grotesk(
+                    size: 30,
+                    weight: FontWeight.w600,
+                    color: AppColors.white(0.6))),
+          ),
+          Text(value,
+              style: AppText.archivo(
+                  size: 44, weight: FontWeight.w900, color: Colors.white)),
+        ],
+      ),
     );
   }
 
