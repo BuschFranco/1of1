@@ -60,7 +60,7 @@ const features = t.features.items;
           <a href="#stats" class="nav-link" style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;color:#e2bfb2;font-style:italic;">{t.nav.stats}</a>
           <a href="#descargar" class="nav-link" style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;color:#e2bfb2;font-style:italic;">{t.nav.download}</a>
         </div>
-        <a href="#descargar" class="btn-active" style="transform:skewX(-8deg);display:inline-flex;align-items:center;justify-content:center;padding:12px 32px;background:#ff6b1a;color:#591e00;font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;font-style:italic;transition:all 0.2s;cursor:pointer;">
+        <a href="#descargar" class="btn-active" style="transform:skewX(-8deg);display:inline-flex;align-items:center;justify-content:center;padding:12px 32px;background:#ff6b1a;color:#591e00;font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;font-style:italic;transition:all 0.2s;cursor:pointer;" onmouseover="this.style.boxShadow='0 0 40px rgba(255,107,26,0.7),0 0 80px rgba(255,107,26,0.4)';this.style.background='#ff7d38'" onmouseout="this.style.boxShadow='none';this.style.background='#ff6b1a'">
           <span style="transform:skewX(8deg);">{t.nav.getApp}</span>
         </a>
       </div>
@@ -90,7 +90,7 @@ const features = t.features.items;
         </div>
       </div>
       <div style="position:absolute;bottom:-40px;left:0;width:100%;overflow:hidden;pointer-events:none;opacity:0.08;">
-        <h2 style="font-family:'Anton',sans-serif;font-size:250px;font-style:italic;text-transform:uppercase;color:#fff;white-space:nowrap;text-shadow:0 0 40px rgba(0,0,0,0.7),0 0 80px rgba(0,0,0,0.4);">CHAMPIONS ONLY CHAMPIONS ONLY CHAMPIONS ONLY</h2>
+        <h2 class="reveal reveal-left" style="font-family:'Anton',sans-serif;font-size:250px;font-style:italic;text-transform:uppercase;color:#fff;white-space:nowrap;text-shadow:0 0 40px rgba(0,0,0,0.7),0 0 80px rgba(0,0,0,0.4);transition-delay:1s;transition-duration:1s;">CHAMPIONS ONLY CHAMPIONS ONLY CHAMPIONS ONLY</h2>
       </div>
     </section>
 
@@ -133,10 +133,12 @@ const features = t.features.items;
             <span class="material-symbols-outlined" style="font-size:48px;color:#ff6b1a;">analytics</span>
             <h3 style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;text-transform:uppercase;color:#fff;">{features[2].title}</h3>
             <p style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#e2bfb2;">{features[2].body}</p>
-            <div style="margin-top:auto;padding-top:16px;display:flex;flex-direction:column;gap:8px;">
-              <div style="height:8px;width:100%;background:#2f3540;"><div style="height:100%;background:#ff6b1a;width:85%;"></div></div>
-              <div style="height:8px;width:100%;background:#2f3540;"><div style="height:100%;background:#ff6b1a;width:62%;"></div></div>
-              <div style="height:8px;width:100%;background:#2f3540;"><div style="height:100%;background:#ff6b1a;width:94%;"></div></div>
+            <div style="margin-top:auto;padding-top:16px;display:flex;flex-direction:column;gap:8px;justify-content:center;height:100%;">
+              <div style="display:flex;align-items:center;gap:8px;"><span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#e2bfb2;text-transform:uppercase;width:60px;">Shots</span><div style="flex:1;height:8px;background:#2f3540;"><div style="height:100%;background:#ff6b1a;width:85%;"></div></div><span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#ff6b1a;">85%</span></div>
+              <div style="display:flex;align-items:center;gap:8px;"><span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#e2bfb2;text-transform:uppercase;width:60px;">Win Rate</span><div style="flex:1;height:8px;background:#2f3540;"><div style="height:100%;background:#ff6b1a;width:62%;"></div></div><span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#ff6b1a;">62%</span></div>
+              <div style="display:flex;align-items:center;gap:8px;"><span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#e2bfb2;text-transform:uppercase;width:60px;">Heart</span><div style="flex:1;height:8px;background:#2f3540;"><div style="height:100%;background:#ff6b1a;width:94%;"></div></div><span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#ff6b1a;">142bpm</span></div>
+              <div style="display:flex;align-items:center;gap:8px;"><span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#e2bfb2;text-transform:uppercase;width:60px;">Stamina</span><div style="flex:1;height:8px;background:#2f3540;"><div style="height:100%;background:#ff6b1a;width:78%;"></div></div><span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#ff6b1a;">78%</span></div>
+              <div style="display:flex;align-items:center;gap:8px;"><span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#e2bfb2;text-transform:uppercase;width:60px;">Speed</span><div style="flex:1;height:8px;background:#2f3540;"><div style="height:100%;background:#ff6b1a;width:71%;"></div></div><span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#ff6b1a;">18km/h</span></div>
             </div>
           </div>
         </div>
@@ -287,6 +289,23 @@ const features = t.features.items;
             </div>
           </div>
         </div>
+        <div class="reveal reveal-left" style="margin-top:48px;background:rgba(26,32,42,0.7);border:1px solid #5a4137;padding:32px;display:flex;align-items:center;gap:32px;">
+          <div style="width:64px;height:64px;background:rgba(255,107,26,0.15);border:1px solid #ff6b1a;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <span class="material-symbols-outlined" style="color:#ff6b1a;font-size:32px;">share</span>
+          </div>
+          <div style="flex:1;">
+            <h3 style="font-family:'Anton',sans-serif;font-size:24px;font-style:italic;text-transform:uppercase;color:#fff;margin-bottom:4px;">Share your results</h3>
+            <p style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#e2bfb2;">Track your performance and share your stats with friends and on social media. Show your progress and challenge other players.</p>
+          </div>
+          <div style="display:flex;gap:12px;flex-shrink:0;">
+            <div style="width:40px;height:40px;background:rgba(255,107,26,0.1);border:1px solid #5a4137;display:flex;align-items:center;justify-content:center;">
+              <span class="material-symbols-outlined" style="color:#ff6b1a;">group</span>
+            </div>
+            <div style="width:40px;height:40px;background:rgba(255,107,26,0.1);border:1px solid #5a4137;display:flex;align-items:center;justify-content:center;">
+              <span class="material-symbols-outlined" style="color:#ff6b1a;">public</span>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -319,17 +338,23 @@ const features = t.features.items;
               <div style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#fff;">{t.stats.speed}</div>
             </div>
           </div>
-          <div style="position:relative;height:256px;background:rgba(8,14,24,0.7);border:1px solid #5a4137;overflow:hidden;">
-            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
-              <div style="width:80%;height:80%;border:2px solid #5a4137;border-radius:50%;opacity:0.3;"></div>
-              <div style="width:1px;height:100%;background:#5a4137;position:absolute;opacity:0.3;"></div>
-              <div style="width:100%;height:1px;background:#5a4137;position:absolute;opacity:0.3;"></div>
+          <div style="position:relative;height:256px;background:rgba(8,14,24,0.7);border:1px solid #5a4137;overflow:hidden;padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div style="background:rgba(47,53,64,0.5);border-left:3px solid #ff6b1a;padding:12px;display:flex;flex-direction:column;justify-content:center;">
+              <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#e2bfb2;text-transform:uppercase;">Distance</div>
+              <div style="font-family:'Anton',sans-serif;font-size:28px;font-style:italic;color:#fff;">4.8 km</div>
             </div>
-            <div style="position:absolute;top:25%;left:33%;width:16px;height:16px;background:#ff6b1a;border-radius:50%;box-shadow:0 0 15px rgba(255,107,26,0.8);"></div>
-            <div style="position:absolute;top:50%;left:25%;width:12px;height:12px;background:#ff6b1a;border-radius:50%;opacity:0.6;"></div>
-            <div style="position:absolute;bottom:25%;right:33%;width:20px;height:20px;background:#ff6b1a;border-radius:50%;box-shadow:0 0 20px rgba(255,107,26,0.8);"></div>
-            <div style="position:absolute;top:33%;right:25%;width:12px;height:12px;background:#ff6b1a;border-radius:50%;opacity:0.4;"></div>
-            <div style="position:absolute;bottom:16px;left:16px;font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;color:#ff6b1a;text-transform:uppercase;letter-spacing:0.1em;font-style:italic;">{t.stats.liveChart}</div>
+            <div style="background:rgba(47,53,64,0.5);border-left:3px solid #ff6b1a;padding:12px;display:flex;flex-direction:column;justify-content:center;">
+              <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#e2bfb2;text-transform:uppercase;">Active Time</div>
+              <div style="font-family:'Anton',sans-serif;font-size:28px;font-style:italic;color:#fff;">48 min</div>
+            </div>
+            <div style="background:rgba(47,53,64,0.5);border-left:3px solid #ff6b1a;padding:12px;display:flex;flex-direction:column;justify-content:center;">
+              <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#e2bfb2;text-transform:uppercase;">Calories</div>
+              <div style="font-family:'Anton',sans-serif;font-size:28px;font-style:italic;color:#fff;">620 kcal</div>
+            </div>
+            <div style="background:rgba(47,53,64,0.5);border-left:3px solid #ff6b1a;padding:12px;display:flex;flex-direction:column;justify-content:center;">
+              <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#e2bfb2;text-transform:uppercase;">Avg Heart</div>
+              <div style="font-family:'Anton',sans-serif;font-size:28px;font-style:italic;color:#fff;">138 bpm</div>
+            </div>
           </div>
         </div>
         <div class="reveal reveal-right" style="display:flex;flex-direction:column;gap:16px;">
@@ -360,10 +385,12 @@ const features = t.features.items;
         <p style="font-family:'Archivo Narrow',sans-serif;font-size:18px;color:rgba(89,30,0,0.8);max-width:600px;margin:0 auto 12px;font-weight:700;">{t.cta.subtitle}</p>
         <p style="font-family:'Archivo Narrow',sans-serif;font-size:14px;color:rgba(89,30,0,0.6);max-width:400px;margin:0 auto 32px;font-weight:600;letter-spacing:0.05em;">No subscriptions. No hidden fees.</p>
         <div style="display:flex;justify-content:center;align-items:center;gap:16px;flex-wrap:wrap;">
-          <span class="btn-active" style="transform:skewX(-8deg);display:inline-flex;padding:24px 48px;background:#0d141e;color:#fff;font-family:'Anybody',sans-serif;font-weight:800;font-size:32px;font-style:italic;cursor:pointer;transition:all 0.2s;">
+          <span class="btn-active" style="transform:skewX(-8deg);display:inline-flex;align-items:center;gap:12px;padding:24px 48px;background:#0d141e;color:#fff;font-family:'Anybody',sans-serif;font-weight:800;font-size:32px;font-style:italic;cursor:pointer;transition:all 0.2s;">
+            <svg style="width:40px;height:40px;fill:#fff;" viewBox="0 0 24 24"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
             <span style="transform:skewX(8deg);">{t.cta.appStore}</span>
           </span>
-          <span class="btn-active" style="transform:skewX(-8deg);display:inline-flex;padding:24px 48px;background:#0d141e;color:#fff;font-family:'Anybody',sans-serif;font-weight:800;font-size:32px;font-style:italic;cursor:pointer;transition:all 0.2s;">
+          <span class="btn-active" style="transform:skewX(-8deg);display:inline-flex;align-items:center;gap:12px;padding:24px 48px;background:#0d141e;color:#fff;font-family:'Anybody',sans-serif;font-weight:800;font-size:32px;font-style:italic;cursor:pointer;transition:all 0.2s;">
+            <svg style="width:40px;height:40px;fill:#fff;" viewBox="0 0 24 24"><path d="M3,20.5V3.5C3,2.91 3.34,2.39 3.84,2.15L13.69,12L3.84,21.85C3.34,21.61 3,21.09 3,20.5M16.81,15.12L6.05,21.34L14.54,12.85L16.81,15.12M20.16,10.81C20.5,11.08 20.75,11.5 20.75,12C20.75,12.5 20.53,12.9 20.18,13.18L17.89,14.5L15.39,12L17.89,9.5L20.16,10.81M6.05,2.66L16.81,8.88L14.54,11.15L6.05,2.66Z"/></svg>
             <span style="transform:skewX(8deg);">{t.cta.playStore}</span>
           </span>
         </div>
