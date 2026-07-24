@@ -7,7 +7,7 @@ const { size = 32 } = Astro.props;
 
 <img
   class="logo-mark"
-  src="/logo_1of1.png"
+  src={`${import.meta.env.BASE_URL}/logo_1of1.png`}
   alt="1of1"
   width={size}
   height={size}
