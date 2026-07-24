@@ -5,7 +5,7 @@ interface Props {
 const { current = 'es' } = Astro.props;
 ---
 
-<div class="lang-selector">
+<div class="lang-selector" data-base={import.meta.env.BASE_URL}>
   <button class={`lang-btn ${current === 'es' ? 'active' : ''}`} data-lang="es">ES</button>
   <span class="lang-divider">/</span>
   <button class={`lang-btn ${current === 'en' ? 'active' : ''}`} data-lang="en">EN</button>
@@ -15,13 +15,16 @@ const { current = 'es' } = Astro.props;
   document.querySelectorAll('.lang-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const lang = btn.dataset.lang;
+      const base = btn.closest('.lang-selector').dataset.base || '/';
+      const baseNorm = base.endsWith('/') ? base.slice(0, -1) : base;
       const path = window.location.pathname;
-      const isEn = path.startsWith('/en');
-      
+      const rel = path.startsWith(baseNorm) ? path.slice(baseNorm.length) : path;
+      const isEn = rel.startsWith('/en');
+
       if (lang === 'en' && !isEn) {
-        window.location.href = '/en' + path;
+        window.location.href = baseNorm + '/en' + rel;
       } else if (lang === 'es' && isEn) {
-        window.location.href = path.replace('/en', '') || '/';
+        window.location.href = baseNorm + rel.replace('/en', '') || baseNorm + '/';
       }
     });
   });

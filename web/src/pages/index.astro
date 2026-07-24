@@ -53,7 +53,7 @@ const features = t.features.items;
     <!-- NAVBAR -->
     <nav style="position:fixed;top:0;width:100%;z-index:50;background:rgba(13,20,30,0.9);backdrop-filter:blur(12px);border-bottom:2px solid #5a4137;">
       <div style="max-width:1200px;margin:0 auto;padding:0 64px;display:flex;align-items:center;justify-content:space-between;height:80px;">
-        <a href="/" style="display:flex;align-items:center;"><Logo size={72} /></a>
+        <a href={import.meta.env.BASE_URL + '/'} style="display:flex;align-items:center;"><Logo size={72} /></a>
         <LangSelector current="es" />
         <div style="display:flex;gap:32px;">
           <a href="#features" class="nav-link" style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;color:#e2bfb2;font-style:italic;">{t.nav.features}</a>
@@ -198,8 +198,8 @@ const features = t.features.items;
           <a href="#features" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">{t.footer.features}</a>
           <a href="#stats" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">{t.footer.stats}</a>
           <a href="#descargar" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">{t.footer.download}</a>
-          <a href="/terminos" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">{t.footer.terms}</a>
-          <a href="/privacidad" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">{t.footer.privacy}</a>
+          <a href={`${import.meta.env.BASE_URL}/terminos`} style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">{t.footer.terms}</a>
+          <a href={`${import.meta.env.BASE_URL}/privacidad`} style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">{t.footer.privacy}</a>
         </div>
         <div style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;opacity:0.5;text-transform:uppercase;letter-spacing:0.1em;">© 2024 1OF1 BASKETBALL. ALL RIGHTS RESERVED.</div>
       </div>

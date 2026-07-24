@@ -40,14 +40,14 @@ const terms = t.terms;
   <!-- NAVBAR -->
   <nav style="position:fixed;top:0;width:100%;z-index:50;background:rgba(13,20,30,0.9);backdrop-filter:blur(12px);border-bottom:2px solid #5a4137;">
     <div style="max-width:1200px;margin:0 auto;padding:0 64px;display:flex;align-items:center;justify-content:space-between;height:80px;">
-      <a href="/en/" style="display:flex;align-items:center;"><Logo size={40} /></a>
+      <a href={`${import.meta.env.BASE_URL}/en/`} style="display:flex;align-items:center;"><Logo size={40} /></a>
       <LangSelector current="en" />
       <div style="display:flex;gap:32px;">
-        <a href="/en/" style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;color:#e2bfb2;font-style:italic;">Home</a>
-        <a href="/en/terminos" style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;color:#ff6b1a;font-style:italic;">Terms</a>
-        <a href="/en/privacidad" style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;color:#e2bfb2;font-style:italic;">Privacy</a>
+        <a href={`${import.meta.env.BASE_URL}/en/`} style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;color:#e2bfb2;font-style:italic;">Home</a>
+        <a href={`${import.meta.env.BASE_URL}/en/terminos`} style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;color:#ff6b1a;font-style:italic;">Terms</a>
+        <a href={`${import.meta.env.BASE_URL}/en/privacidad`} style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;color:#e2bfb2;font-style:italic;">Privacy</a>
       </div>
-      <a href="/en/" style="transform:skewX(-8deg);display:inline-flex;align-items:center;justify-content:center;padding:12px 32px;background:#ff6b1a;color:#591e00;font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;font-style:italic;">
+      <a href={`${import.meta.env.BASE_URL}/en/`} style="transform:skewX(-8deg);display:inline-flex;align-items:center;justify-content:center;padding:12px 32px;background:#ff6b1a;color:#591e00;font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;font-style:italic;">
         <span style="transform:skewX(8deg);">{terms.back}</span>
       </a>
     </div>
@@ -79,9 +79,9 @@ const terms = t.terms;
     <div style="max-width:1200px;margin:0 auto;padding:0 64px;display:flex;flex-direction:column;align-items:center;gap:16px;">
       <Logo size={32} />
       <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:32px;">
-        <a href="/en/" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">Home</a>
-        <a href="/en/terminos" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">Terms</a>
-        <a href="/en/privacidad" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">Privacy</a>
+        <a href={`${import.meta.env.BASE_URL}/en/`} style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">Home</a>
+        <a href={`${import.meta.env.BASE_URL}/en/terminos`} style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">Terms</a>
+        <a href={`${import.meta.env.BASE_URL}/en/privacidad`} style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">Privacy</a>
       </div>
       <div style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;opacity:0.5;text-transform:uppercase;letter-spacing:0.1em;">© 2024 1OF1 BASKETBALL. ALL RIGHTS RESERVED.</div>
     </div>
