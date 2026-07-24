@@ -35,8 +35,10 @@ const features = t.features.items;
 
 <!-- HERO -->
 <section style="position:relative;min-height:90vh;display:flex;align-items:center;overflow:hidden;padding-top:80px;">
-  <div style="max-width:1200px;margin:0 auto;padding:0 64px;display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:center;position:relative;z-index:10;width:100%;">
-    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:16px;">
+  <div style={`position:absolute;inset:0;background-image:url(${import.meta.env.BASE_URL}/hero-bg.png);background-size:auto 100%;background-position:right center;background-repeat:no-repeat;`}></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(to right, #0d141e 35%, rgba(13,20,30,0.3) 70%, transparent);"></div>
+  <div style="max-width:1200px;margin:0 auto;padding:0 64px;position:relative;z-index:10;width:100%;">
+    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:16px;max-width:620px;">
       <span style="display:inline-block;background:#ff6b1a;color:#591e00;padding:6px 12px;font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;font-style:italic;text-transform:uppercase;letter-spacing:0.1em;transform:skewX(-8deg);margin-bottom:16px;">{t.hero.badge}</span>
       <h1 style="font-family:'Anton',sans-serif;font-size:120px;line-height:0.9;font-style:italic;text-transform:uppercase;letter-spacing:-0.02em;color:#fff;">{t.hero.title1} <br/> <span style="color:#ff6b1a;text-shadow:0 0 20px rgba(255,107,26,0.4);">{t.hero.title2}</span></h1>
       <p style="font-family:'Archivo Narrow',sans-serif;font-size:18px;color:#e2bfb2;max-width:500px;margin-top:16px;">{t.hero.subtitle}</p>
@@ -49,13 +51,9 @@ const features = t.features.items;
         </a>
       </div>
     </div>
-    <div style="position:relative;display:flex;justify-content:center;align-items:center;">
-      <div style="position:absolute;width:400px;height:400px;background:rgba(255,107,26,0.1);border-radius:50%;filter:blur(100px);"></div>
-      <div class="logo-pulse"><Logo size={400} /></div>
-    </div>
   </div>
-  <div style="position:absolute;bottom:-40px;left:0;width:100%;overflow:hidden;pointer-events:none;opacity:0.03;">
-    <h2 style="font-family:'Anton',sans-serif;font-size:250px;font-style:italic;text-transform:uppercase;color:#fff;white-space:nowrap;">CHAMPIONS ONLY CHAMPIONS ONLY CHAMPIONS ONLY</h2>
+  <div style="position:absolute;bottom:-40px;left:0;width:100%;overflow:hidden;pointer-events:none;opacity:0.08;">
+    <h2 style="font-family:'Anton',sans-serif;font-size:250px;font-style:italic;text-transform:uppercase;color:#fff;white-space:nowrap;text-shadow:0 0 40px rgba(0,0,0,0.7),0 0 80px rgba(0,0,0,0.4);">CHAMPIONS ONLY CHAMPIONS ONLY CHAMPIONS ONLY</h2>
   </div>
 </section>
 
