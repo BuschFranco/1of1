@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Apex Courtside - Own The Court</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Inter:wght@400;500;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Oswald:wght@100..900&display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 48;
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* Custom kinetic animation for the hero button */
+        @keyframes pulse-orange {
+            0% { box-shadow: 0 0 0 0 rgba(255, 107, 0, 0.4); }
+            70% { box-shadow: 0 0 0 15px rgba(255, 107, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 107, 0, 0); }
+        }
+        .animate-pulse-orange {
+            animation: pulse-orange 2s infinite;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary-container": "#464950",
+                        "on-tertiary-container": "#2c3139",
+                        "on-error": "#690005",
+                        "tertiary-fixed-dim": "#c2c7d0",
+                        "on-tertiary-fixed": "#171c23",
+                        "surface-variant": "#333536",
+                        "tertiary-container": "#9499a2",
+                        "on-secondary-container": "#b6b8c1",
+                        "on-background": "#e2e2e3",
+                        "on-secondary-fixed-variant": "#44474e",
+                        "surface-container": "#1e2021",
+                        "on-surface": "#e2e2e3",
+                        "inverse-surface": "#e2e2e3",
+                        "surface-container-high": "#282a2b",
+                        "primary-container": "#ff6b00",
+                        "surface-bright": "#38393a",
+                        "inverse-on-surface": "#2f3132",
+                        "secondary-fixed-dim": "#c4c6cf",
+                        "tertiary-fixed": "#dee2ec",
+                        "surface-container-lowest": "#0c0e0f",
+                        "error-container": "#93000a",
+                        "on-primary-container": "#572000",
+                        "surface-container-highest": "#333536",
+                        "on-surface-variant": "#e2bfb0",
+                        "primary": "#ffb693",
+                        "on-tertiary-fixed-variant": "#42474f",
+                        "error": "#ffb4ab",
+                        "on-error-container": "#ffdad6",
+                        "surface-dim": "#121415",
+                        "on-tertiary": "#2c3138",
+                        "surface-container-low": "#1a1c1d",
+                        "outline": "#a98a7d",
+                        "on-primary": "#561f00",
+                        "primary-fixed": "#ffdbcc",
+                        "on-primary-fixed": "#351000",
+                        "secondary": "#c4c6cf",
+                        "outline-variant": "#5a4136",
+                        "surface-tint": "#ffb693",
+                        "on-secondary": "#2e3037",
+                        "inverse-primary": "#a04100",
+                        "tertiary": "#c2c7d0",
+                        "on-primary-fixed-variant": "#7a3000",
+                        "on-secondary-fixed": "#191c22",
+                        "background": "#121415",
+                        "secondary-fixed": "#e1e2eb",
+                        "surface": "#121415",
+                        "primary-fixed-dim": "#ffb693"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "base": "8px",
+                        "margin-desktop": "64px",
+                        "margin-mobile": "16px",
+                        "container-max": "1280px",
+                        "gutter": "24px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Oswald"],
+                        "display-lg": ["Oswald"],
+                        "headline-lg-mobile": ["Oswald"],
+                        "label-bold": ["Inter"],
+                        "headline-lg": ["Oswald"],
+                        "body-md": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["32px", { "lineHeight": "40px", "fontWeight": "600" }],
+                        "display-lg": ["72px", { "lineHeight": "80px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-lg-mobile": ["36px", { "lineHeight": "42px", "fontWeight": "600" }],
+                        "label-bold": ["14px", { "lineHeight": "20px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "headline-lg": ["48px", { "lineHeight": "56px", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body-md selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface border-b border-outline-variant flex justify-between items-center px-margin-mobile h-16 md:px-margin-desktop">
+<div class="flex items-center gap-4">
+<button class="active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-primary">menu</span>
+</button>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile tracking-tighter text-primary italic uppercase md:text-headline-md font-headline-md">COURTSIDE</h1>
+</div>
+<div class="flex items-center gap-4">
+<nav class="hidden md:flex gap-6">
+<a class="font-label-bold text-label-bold text-primary hover:text-primary transition-colors" href="#">Games</a>
+<a class="font-label-bold text-label-bold text-on-surface hover:text-primary transition-colors" href="#">Stats</a>
+<a class="font-label-bold text-label-bold text-on-surface hover:text-primary transition-colors" href="#">News</a>
+<a class="font-label-bold text-label-bold text-on-surface hover:text-primary transition-colors" href="#">Pro</a>
+</nav>
+<div class="w-10 h-10 rounded-full border border-outline overflow-hidden active:scale-95 transition-transform cursor-pointer">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a young athlete in a basketball jersey, looking confidently at the camera. The background is a dark, moody basketball arena with soft orange rim lighting that highlights the contours of the face and jersey. Cinematic high-contrast photography with a minimalist dark navy and electric orange color palette." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAeVEvlMa-0KLqMPq-wV5O0KqMgV1GQqffVXjpGiAiY2ClvDyB52aaw3NqhEUSAqj_8OAABn26G4gig0vqWDIuYnf3H6-rsd9VQ1FqaFAOblcLeXXTDQ9Nr53wsyWwNaCEUv6rsXDZKL2Egbi6iT4Qx-gUSveDzVwS6myMCqfC9FqhDBoHwnOHoSJJGuRIMFbv_6do24_74qJ6__nJvXjlr7yyuS4zZhWxHeGkQq5OnbRiEZ-8nlBs3qRDQ5am3Te_AyE6cQBf2Kyb-"/>
+</div>
+</div>
+</header>
+<main class="pt-16 pb-24">
+<!-- Hero Section -->
+<section class="relative h-[707px] flex items-center justify-center overflow-hidden">
+<div class="absolute inset-0 z-0">
+<div class="w-full h-full bg-cover bg-center" data-alt="A cinematic low-angle shot of a premium outdoor basketball court at night. The court surface is dark asphalt with vibrant neon orange lines. A single spotlight from above creates dramatic shadows and highlights. The background shows a dark city skyline under a deep navy night sky with a subtle atmospheric haze. Modern minimalist aesthetic." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBIjTwvWH5t_IweX9fmeazdwTPxuRuItEO3A_z4OcYfwiUPfkoyfSAAL05rlx6LqVOwD72ez2J-UaT66sENsgM-8xNUYlD8NUHbQF019lr8cFiusV8TdMw_-YBhacOezhbkbqiPY4lKkYe5YJOc2gKyFdtneqWa6CNPteUrcFTELqJ98ghrdDsW_sMuBkHaTu1XOaE-2D7yKQrVTp78nsXmiGb724QcTnVZTO-dXwAofLV9FmmTN-LG0XRL9HrC_hD6_WO5VDE46eIr')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/50"></div>
+</div>
+<div class="relative z-10 text-center px-margin-mobile max-w-container-max mx-auto">
+<h2 class="font-display-lg text-headline-lg-mobile md:text-display-lg text-primary italic uppercase leading-none mb-4 drop-shadow-2xl">
+                    OWN THE COURT
+                </h2>
+<p class="font-body-lg text-body-lg text-on-background max-w-2xl mx-auto mb-8 opacity-90">
+                    The ultimate hub for stats, scores, and highlights. Track every play, analyze every movement, and stay ahead of the game.
+                </p>
+<button class="bg-primary-container text-on-primary-container font-label-bold text-label-bold py-4 px-10 rounded-lg uppercase tracking-widest animate-pulse-orange hover:scale-105 transition-all duration-300">
+                    START FREE TRIAL
+                </button>
+</div>
+</section>
+<!-- Featured Section: Live Games -->
+<section class="py-12 md:py-20 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto">
+<div class="flex items-center justify-between mb-8">
+<div class="flex items-center gap-3">
+<div class="w-3 h-3 bg-primary-container rounded-full animate-pulse"></div>
+<h3 class="font-headline-md text-headline-md uppercase italic">Live Games</h3>
+</div>
+<a class="text-primary font-label-bold text-label-bold hover:underline" href="#">View All</a>
+</div>
+<div class="flex gap-gutter overflow-x-auto hide-scrollbar pb-4 snap-x">
+<!-- Team Card 1 -->
+<div class="min-w-[320px] md:min-w-[450px] bg-surface-container border border-outline-variant p-6 snap-start group hover:border-primary transition-colors cursor-pointer">
+<div class="flex justify-between items-center mb-6">
+<span class="bg-black text-primary font-label-bold text-[10px] px-2 py-1 uppercase tracking-tighter border border-primary/30">4th Quarter - 02:45</span>
+<span class="material-symbols-outlined text-secondary">tv</span>
+</div>
+<div class="flex items-center justify-between gap-4">
+<div class="flex flex-col items-center flex-1">
+<div class="w-16 h-16 md:w-20 md:h-20 mb-3 grayscale group-hover:grayscale-0 transition-all">
+<img class="w-full h-full object-contain" data-alt="A minimalist vector logo of a basketball team named 'The Raptors'. The logo features a fierce dinosaur head in shades of gray and white with electric orange eyes. Set against a clean dark navy background for high contrast." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC_ubcSzWOQ2375EHQ8mDA0jcw6HnSVy9_YSl-Qzo1rvSStAhY5VGcJeLi_kNrfopxNrLHhJYba8B09bqB6xBw2gHTyAcEy2QL7N-w2RlG6WdhRKBJ-tClYKbHFxg_wAJAMS3wM8zVVBSAgcvCDtdonKH4GHI0QQczxFZNo2LXnYxQHTz1JnSAdRupVwjEcSEAx3JNHZSC-q0js3qXFZOeyKZCqHaQO0cBFYI33BPg8XamTEV1vq3DWZVyk2bDtUE9n3OfdfxBR6zwU"/>
+</div>
+<span class="font-label-bold text-label-bold uppercase text-center">Raptors</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="text-4xl md:text-5xl font-display-lg text-on-surface">102 : 98</div>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-16 h-16 md:w-20 md:h-20 mb-3 grayscale group-hover:grayscale-0 transition-all">
+<img class="w-full h-full object-contain" data-alt="A sleek minimalist logo of a basketball team named 'The Titans'. The logo depicts a stylized helmet silhouette in silver and white with sharp orange accents. Professional sports branding style on dark background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDs_KTRKFJFN1OrJjPA5KShGvl_glWmo-egaVJVVNe3_qZVEcIiTsUY_VYFVZZ8dX7R7gTgGaItZyznUpLNUMW6uEn2X-4Q4M3W92hE3YchE4pnu9dFnsGI56j0zEwiyJVPuPWNHSlKLeM_ZvoyyxdyNmcoN35IRf6fKbNIILwa7W1cA3WZnAHhfJLFhPsiBknhDsKq9FTFnMadAeFXlmvtkFACftdYaCltP6FQL-m7gtd_9HevI_5ID-SKUnphGvDmtBKUoh-DVUw6"/>
+</div>
+<span class="font-label-bold text-label-bold uppercase text-center">Titans</span>
+</div>
+</div>
+<div class="mt-6 h-1 bg-surface-variant overflow-hidden">
+<div class="h-full bg-primary-container w-3/4 transition-all duration-1000"></div>
+</div>
+</div>
+<!-- Team Card 2 -->
+<div class="min-w-[320px] md:min-w-[450px] bg-surface-container border border-outline-variant p-6 snap-start group hover:border-primary transition-colors cursor-pointer">
+<div class="flex justify-between items-center mb-6">
+<span class="bg-black text-primary font-label-bold text-[10px] px-2 py-1 uppercase tracking-tighter border border-primary/30">2nd Quarter - 08:12</span>
+<span class="material-symbols-outlined text-secondary">tv</span>
+</div>
+<div class="flex items-center justify-between gap-4">
+<div class="flex flex-col items-center flex-1">
+<div class="w-16 h-16 md:w-20 md:h-20 mb-3 grayscale group-hover:grayscale-0 transition-all">
+<img class="w-full h-full object-contain" data-alt="A professional basketball team logo for 'The Sharks'. Featuring a streamlined shark fin graphic slicing through a basketball, colored in sleek charcoal and brilliant orange. High-impact sports logo design." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAMIoSGMY66k1c5moEY4RYBGYBEkijMyIOi4vOv43cPOyVa3iNTNyAfPsEcb27ruiKf1WD4Ovtjx23PWnlboDFoNqjzA6-7pr21z1vuaALgXsZzmqtfZvfvd1aJdmqpFjlzSv7erlJr6_D5g38TO5tsZM9yf_GvqlwENbV9pSEulV-e0IcLINdLuTQfpeRXVFInXHhKXPgurhds_G0yE1O3LDUdLt8Io6_dRdcyZ8NtazuRewucS5hcbkb8Pxxfxc9-XurXVesWioRD"/>
+</div>
+<span class="font-label-bold text-label-bold uppercase text-center">Sharks</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="text-4xl md:text-5xl font-display-lg text-on-surface">45 : 52</div>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-16 h-16 md:w-20 md:h-20 mb-3 grayscale group-hover:grayscale-0 transition-all">
+<img class="w-full h-full object-contain" data-alt="A modern basketball team logo for 'The Storm'. The design shows a stylized lightning bolt integrated with a basketball, in silver and intense orange colors. Bold, energetic professional sports aesthetics." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCu2Cq7bR0RVFHelKkRCHxzXim4NdoT3Pl0IqQWhYRgf_5Wu9F3Q0ErLZOhEZNn9CWr6iCgvSlZkYAOAA_jdSN6rmMrDxjFW_bME03J7XstKhwkBHWZv4L62f9sDI1ikBR-_UE4gjO6Pbc2JHsa_O8Qs5xne_XdNTyO_SrIsRc0T5wyrfCbdOFMHTz0ylasf3s2X0rO1FhN92JiTYpaUi7L56oN1rZptIIAfDN1R-ufnbYU9jgm1Uwmtidrne-PCDgC_Cr7ECw0ZFIH"/>
+</div>
+<span class="font-label-bold text-label-bold uppercase text-center">Storm</span>
+</div>
+</div>
+<div class="mt-6 h-1 bg-surface-variant overflow-hidden">
+<div class="h-full bg-primary-container w-1/2 transition-all duration-1000"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- News Section -->
+<section class="py-12 md:py-20 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto">
+<h3 class="font-headline-md text-headline-md uppercase italic mb-8 border-l-4 border-primary pl-4">Latest Headlines</h3>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-gutter">
+<!-- Main News (Left) -->
+<div class="md:col-span-8 flex flex-col gap-8">
+<div class="group cursor-pointer">
+<div class="relative aspect-video overflow-hidden mb-4 border border-outline-variant group-hover:border-primary transition-colors">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="High-speed action photograph of a professional basketball player performing a powerful dunk. The scene is shot from a low angle with dramatic stadium lighting creating long shadows and brilliant highlights on the athlete's muscular form. The background is a blur of cheering fans in a dark arena. Style is dynamic, gritty, and high-octane." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD1eX2OjyhNL4sd7yqImgOqJ04bqcG0JLQqwjy7ARzPVLKkUhAOz01CXgGoCXNgZ79cDDOGTtRgleAzVcAlpytpF0wauZfgEPbpN-QewXL52jrUehhvolOCiEwBCrTk7o4ajg7KxME55ne4X_vP3qJ4vP_RXcWMZFIDPRsXhOJL0tTdtxVrVOVTyO97tQ_ASU4pNzPEKCiOKZCv_dF8NeQ69Q6NCgeNYZjHC3eYCbFNHK11P4Z0Pwl7rU8irD7OUdVpgichlI-6Seo_"/>
+<div class="absolute top-4 left-4">
+<span class="bg-primary-container text-on-primary-container font-label-bold text-label-sm px-3 py-1 uppercase tracking-widest">Featured</span>
+</div>
+</div>
+<h4 class="font-headline-md text-headline-md mb-2 group-hover:text-primary transition-colors uppercase">Top Draft Prospects: Who's Leading the 2024 Board?</h4>
+<p class="text-on-surface-variant line-clamp-2">An in-depth look at the rising stars poised to dominate the next generation of professional basketball. Scouts weigh in on the talent.</p>
+<div class="mt-4 flex items-center gap-4 text-secondary text-label-sm uppercase font-label-bold">
+<span>Admin</span>
+<span class="w-1 h-1 bg-secondary rounded-full"></span>
+<span>2 Hours Ago</span>
+</div>
+</div>
+<div class="h-px bg-outline-variant"></div>
+<div class="flex flex-col gap-8">
+<!-- News Item 1 -->
+<div class="flex gap-4 md:gap-6 group cursor-pointer">
+<div class="w-24 h-24 md:w-40 md:h-28 shrink-0 overflow-hidden border border-outline-variant group-hover:border-primary transition-all">
+<img class="w-full h-full object-cover" data-alt="A close-up shot of a worn basketball sitting on the hardwood floor of a dimly lit gymnasium. Warm orange light reflects off the leather grain and the polished wood. Artistic, moody photography focusing on texture and professional basketball atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAExYdLevh23jw-BkdohmIW1yKobELSVUc3Obkaqz1ktkvBZNSAu4yW30igl2sUgCy5P0B8c1DGC9UzcC8cV0YI27bP7IL9om-y0rKUQBeNjDd8VCDGlVp-oSmNxFxQ8wwUs8NKz2CrHlku2DODZcX_mUq9wx-oaDDbfGpaonfXln_2V-uC4XR1TJqAQ1gUmZncyUdJqO3wgt6TBMPFdy39eO3moEJHxUi3oDImpS0fNX7AUYDIrnJK2Fydi07mmPjmUo2ri2kueB7y"/>
+</div>
+<div class="flex flex-col justify-center">
+<h5 class="font-label-bold text-body-lg group-hover:text-primary transition-colors uppercase leading-tight mb-1">Revolutionizing the Defense: New Strategies Emerging</h5>
+<p class="hidden md:block text-on-surface-variant text-body-md line-clamp-1">Coaches across the league are adopting hybrid zone systems that are baffling top scorers.</p>
+<span class="text-secondary text-label-sm uppercase font-label-bold mt-1">4 Hours Ago</span>
+</div>
+</div>
+<!-- News Item 2 -->
+<div class="flex gap-4 md:gap-6 group cursor-pointer">
+<div class="w-24 h-24 md:w-40 md:h-28 shrink-0 overflow-hidden border border-outline-variant group-hover:border-primary transition-all">
+<img class="w-full h-full object-cover" data-alt="A professional basketball coach standing on the sidelines, intensely looking at a digital clipboard. The coach is wearing a dark suit with a subtle orange tie. The blurred background shows the vibrant colors of a live match under bright arena lights. High-end editorial style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBa1XVOb_YKSBkxdGFgt8USaCAteRqyOVMuH0b9jKsYi8FDzPyO9xUulQDrgg_i4Xrqbsf7Q9KHNPn8iQNwvq4n9AH56TPBA_amJI3sjhuAHU_pzppOynd9ewAV36bGkqGxUNqf7wMkMXyzY_MkhWqNtIgeU4FX_dlvlBmZiMd-JAbxLOfUlu_s2Ng9AJ0z6RY6YQ0h38JHiwY48gD5Clc-En0LJ7L-4b6kxGISvqVoNAZ2miTqkta7CNyhquh_SMok9Zosq7k_K3KR"/>
+</div>
+<div class="flex flex-col justify-center">
+<h5 class="font-label-bold text-body-lg group-hover:text-primary transition-colors uppercase leading-tight mb-1">Mid-Season Trade Rumors: Who's on the Move?</h5>
+<p class="hidden md:block text-on-surface-variant text-body-md line-clamp-1">Sources indicate multiple contenders are looking to bolster their rosters before the deadline.</p>
+<span class="text-secondary text-label-sm uppercase font-label-bold mt-1">6 Hours Ago</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Sidebar (Right) -->
+<div class="md:col-span-4 flex flex-col gap-8">
+<div class="bg-surface-container-high border border-outline-variant p-6">
+<h4 class="font-label-bold text-label-bold uppercase text-primary mb-6 flex items-center justify-between">
+                            Player Rankings
+                            <span class="material-symbols-outlined text-sm">trending_up</span>
+</h4>
+<div class="space-y-6">
+<div class="flex items-center gap-4">
+<div class="font-display-lg text-outline-variant text-2xl">01</div>
+<div class="w-10 h-10 rounded-full bg-surface-variant overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Professional athlete profile picture, male with a focused expression, wearing a navy jersey. Dark moody lighting with orange highlights." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDrswQtD89ARq47ITZ5gwDmeUYUkmpBhFnwtGWzXio79MvEUs08h5NHw-xVbBLmgVlNcnYK1JNj1aXlN7d-61vku50UVJuivoKHcKTy287UPNGdHbjMdpPYZvKbTbSadKTA0wVedEAgwLWFPUgvKtOiks2IOFcCToMFedNTAskkhR1EGIz3NKWC6ey5eRMOT-dOtEIN4j465SaXuIxX1N4zND14FFi2JlWuJyk2X-UVWPXevLl5rlPBAMGHa-bgUp2CVnqhDwNBi4Tu"/>
+</div>
+<div class="flex-1">
+<div class="font-label-bold uppercase">Jaxson Miller</div>
+<div class="text-label-sm text-secondary uppercase">SF • TITANS</div>
+</div>
+<div class="font-label-bold text-primary">32.4 PPG</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="font-display-lg text-outline-variant text-2xl">02</div>
+<div class="w-10 h-10 rounded-full bg-surface-variant overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Professional athlete profile picture, male with short hair and intense gaze, wearing a grey jersey. Dark cinematic lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD8YQkzCHgTuP0kPaYH2nzySgHRIbvQgRAlNTtvDHYZO5Teu5f_82GA7WkvCye8zbVlzXzOqmJEzc8JAaY8VxfAsWUfpGvxQ5901NDGoQHi3XevVmMg1r-tI5ajaWxLFVIv4aGx0q3N-8udp7ZxE4HygzVDP2Ey5EMBFA6uePl8oKK8R4mBCq-6CgAkeRHKv1EHsPbdF9-xVMbhtDjKd-tUb83Gl0HBviW5vmcpjp_3sRKSGkgBTMLQpUuiETgdlvYSZ4cPPNOGuTz1"/>
+</div>
+<div class="flex-1">
+<div class="font-label-bold uppercase">Marcus Reed</div>
+<div class="text-label-sm text-secondary uppercase">PG • SHARKS</div>
+</div>
+<div class="font-label-bold text-primary">28.1 PPG</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="font-display-lg text-outline-variant text-2xl">03</div>
+<div class="w-10 h-10 rounded-full bg-surface-variant overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Professional athlete profile picture, male with athletic build, wearing a white jersey with orange trim. Sharp studio lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD-gOopUwxjbAbJK-JALZxXdMb8xSAqX0voBGpT7MpY8BeNKzMUaXXhcM4I9tDs5TLq8k_6SkcW-yXAaWweoqkqQOi09FoWtq8MRM3n-6SocRL2QriZO0hJ9V0YCASoL4K0_wU6BPzWx56030CaQblZEJuND7Lry61DpTWbWdvf851XQ3tsZcJ9Q8V_vCrFle4PelMwGRPVELsF8kHFkBn2Qdx3XcdiZyOnQ4zj3mJGOa8gCcM5_cPTJBcHOlRDSg10QqaVl8jhcDCN"/>
+</div>
+<div class="flex-1">
+<div class="font-label-bold uppercase">Derrick Vance</div>
+<div class="text-label-sm text-secondary uppercase">C • STORM</div>
+</div>
+<div class="font-label-bold text-primary">25.7 PPG</div>
+</div>
+</div>
+</div>
+<div class="bg-primary-container/10 border border-primary/20 p-6 relative overflow-hidden group">
+<div class="relative z-10">
+<h4 class="font-headline-md text-headline-md italic uppercase text-primary leading-tight mb-2">Upgrade to Pro</h4>
+<p class="text-body-md text-on-surface mb-6">Unlock advanced analytics, live play-by-play heatmaps, and exclusive insider news.</p>
+<button class="w-full py-3 bg-primary-container text-on-primary-container font-label-bold text-label-bold uppercase tracking-wider hover:bg-opacity-90 transition-all">Go Premium</button>
+</div>
+<span class="material-symbols-outlined absolute -bottom-8 -right-8 text-9xl text-primary/5 group-hover:rotate-12 transition-transform duration-700">workspace_premium</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 bg-surface-container flex justify-around items-center px-4 py-2 border-t border-outline-variant md:hidden">
+<a class="flex flex-col items-center justify-center text-primary font-bold bg-primary-container/10 rounded-xl p-2 active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined">sports_basketball</span>
+<span class="font-label-sm text-label-sm uppercase mt-1">Games</span>
+</a>
+<a class="flex flex-col items-center justify-center text-secondary p-2 active:scale-90 transition-all duration-200 hover:bg-surface-variant" href="#">
+<span class="material-symbols-outlined">leaderboard</span>
+<span class="font-label-sm text-label-sm uppercase mt-1">Stats</span>
+</a>
+<a class="flex flex-col items-center justify-center text-secondary p-2 active:scale-90 transition-all duration-200 hover:bg-surface-variant" href="#">
+<span class="material-symbols-outlined">newspaper</span>
+<span class="font-label-sm text-label-sm uppercase mt-1">News</span>
+</a>
+<a class="flex flex-col items-center justify-center text-secondary p-2 active:scale-90 transition-all duration-200 hover:bg-surface-variant" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-sm text-label-sm uppercase mt-1">Profile</span>
+</a>
+</nav>
+<!-- Floating Action Button (Only contextually relevant screens - Home/Stats) -->
+<button class="fixed bottom-20 right-6 md:bottom-10 md:right-10 w-14 h-14 bg-primary-container text-on-primary-container rounded-full shadow-2xl flex items-center justify-center z-40 active:scale-95 transition-transform hover:shadow-primary/30">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">add</span>
+</button>
+<script>
+        // Micro-interaction for score ticking or light shifts
+        document.addEventListener('DOMContentLoaded', () => {
+            const cards = document.querySelectorAll('.snap-start');
+            const observerOptions = {
+                threshold: 0.5
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('border-primary/50');
+                    } else {
+                        entry.target.classList.remove('border-primary/50');
+                    }
+                });
+            }, observerOptions);
+
+            cards.forEach(card => observer.observe(card));
+        });
+    </script>
+</body></html>

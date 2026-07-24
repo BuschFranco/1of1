@@ -1,0 +1,63 @@
+---
+import Logo from './Logo.astro';
+---
+
+<header class="nav">
+  <div class="container nav-inner">
+    <a href="/" class="nav-brand" aria-label="1of1 — inicio">
+      <Logo size={80} />
+    </a>
+
+    <nav class="nav-links" aria-label="Principal">
+      <a href="/#caracteristicas">Características</a>
+      <a href="/#como-funciona">Cómo funciona</a>
+      <a href="/privacidad">Privacidad</a>
+    </nav>
+
+    <a href="/#descargar" class="btn btn-primary nav-cta">Descargar</a>
+  </div>
+</header>
+
+<style>
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(10, 10, 10, 0.72);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--ink-06);
+  }
+  .nav-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 68px;
+    gap: 24px;
+  }
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    margin-left: auto;
+  }
+  .nav-links a {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--ink-70);
+    transition: color 0.15s ease;
+  }
+  .nav-links a:hover {
+    color: var(--ink);
+  }
+  .nav-cta {
+    padding: 11px 20px;
+    font-size: 14px;
+  }
+
+  @media (max-width: 720px) {
+    .nav-links {
+      display: none;
+    }
+  }
+</style>

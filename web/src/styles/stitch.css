@@ -1,0 +1,164 @@
+/* ==========================================================================
+   1OF1 — Stitch Design System (Elite Motion)
+   Dark navy + electric orange, Anton headlines, sharp corners
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Narrow:wght@400;700&family=Anybody:wght@500;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+
+:root {
+  --bg: #0B0E14;
+  --bg-surface: #0D141E;
+  --bg-elevated: #1A202A;
+  --bg-card: #242A35;
+  --bg-highest: #2F3540;
+  --bg-lowest: #080E18;
+
+  --accent: #FF6B1A;
+  --accent-light: #FFB596;
+  --accent-dark: #E65100;
+
+  --ink: #DDE2F1;
+  --ink-variant: #E2BFB2;
+  --ink-muted: #A98A7E;
+  --ink-dim: #5A4137;
+
+  --border: #3E4654;
+  --border-dim: #5A4137;
+
+  --font-display: 'Anton', sans-serif;
+  --font-body: 'Archivo Narrow', sans-serif;
+  --font-label: 'Anybody', sans-serif;
+
+  color-scheme: dark;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--bg-surface);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-weight: 400;
+  line-height: 1.5;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img, svg {
+  display: block;
+  max-width: 100%;
+}
+
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1;
+}
+
+ul {
+  list-style: none;
+}
+
+/* ---- Utilities ---- */
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: clamp(16px, 5vw, 64px);
+}
+
+.text-accent {
+  color: var(--accent);
+  text-shadow: 0 0 20px rgba(255, 107, 26, 0.4);
+}
+
+/* ---- Buttons ---- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-family: var(--font-label);
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 18px 40px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
+  white-space: nowrap;
+  transform: skewX(-8deg);
+}
+.btn > * {
+  transform: skewX(8deg);
+}
+.btn:active {
+  transform: skewX(-8deg) scale(0.97);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 30px rgba(255, 107, 26, 0.3);
+}
+.btn-primary:hover {
+  box-shadow: 0 0 40px rgba(255, 107, 26, 0.5);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--ink);
+  border: 2px solid var(--ink);
+}
+.btn-outline:hover {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+/* ---- Reveal on scroll ---- */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.reveal.in {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}

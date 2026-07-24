@@ -1,0 +1,120 @@
+---
+import Logo from '../../components/Logo.astro';
+import LangSelector from '../../components/LangSelector.astro';
+const email = 'francobusch130@gmail.com';
+const updated = 'July 22, 2026';
+---
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/png" href="/logo_1of1.png" />
+  <title>Privacy Policy — 1OF1</title>
+  <meta name="theme-color" content="#0d141e" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Narrow:wght@400;500;600;700&family=Anybody:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+  <style is:global>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0d141e; color: #dde2f1; overflow-x: hidden; font-family: 'Archivo Narrow', sans-serif; }
+    a { color: inherit; text-decoration: none; }
+    img { display: block; max-width: 100%; }
+    ul { list-style: none; }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #080e18; }
+    ::-webkit-scrollbar-thumb { background: #ff6b1a; }
+  </style>
+</head>
+<body>
+
+  <!-- LOADER -->
+  <div id="loader" style="position:fixed;inset:0;z-index:9999;background:#0d141e;display:flex;align-items:center;justify-content:center;transition:opacity 0.8s ease, visibility 0.8s ease;">
+    <Logo size={80} />
+  </div>
+
+  <!-- NAVBAR -->
+  <nav style="position:fixed;top:0;width:100%;z-index:50;background:rgba(13,20,30,0.9);backdrop-filter:blur(12px);border-bottom:2px solid #5a4137;">
+    <div style="max-width:1200px;margin:0 auto;padding:0 64px;display:flex;align-items:center;justify-content:space-between;height:80px;">
+      <a href="/en/" style="display:flex;align-items:center;"><Logo size={40} /></a>
+      <LangSelector current="en" />
+      <div style="display:flex;gap:32px;">
+        <a href="/en/" style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;color:#e2bfb2;font-style:italic;">Home</a>
+        <a href="/en/terminos" style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;color:#e2bfb2;font-style:italic;">Terms</a>
+        <a href="/en/privacidad" style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;color:#ff6b1a;font-style:italic;">Privacy</a>
+      </div>
+      <a href="/en/" style="transform:skewX(-8deg);display:inline-flex;align-items:center;justify-content:center;padding:12px 32px;background:#ff6b1a;color:#591e00;font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;font-style:italic;">
+        <span style="transform:skewX(8deg);">BACK</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- CONTENT -->
+  <main style="max-width:780px;margin:0 auto;padding:120px 64px 80px;">
+    <span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:0.1em;color:#ff6b1a;font-style:italic;">1OF1</span>
+    <h1 style="font-family:'Anton',sans-serif;font-size:clamp(34px,6vw,56px);font-style:italic;text-transform:uppercase;color:#fff;margin-top:14px;">Privacy Policy</h1>
+    <p style="color:#a98a7e;font-size:14px;margin-top:16px;">Last updated: {updated}</p>
+
+    <div style="margin-top:40px;">
+      <p style="color:#e2bfb2;font-size:16.5px;line-height:1.7;margin-bottom:14px;">1of1 ("the app") is an application to find basketball courts and log your games. This policy explains what data we use and why.</p>
+
+      <h2 style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;letter-spacing:0.14em;text-transform:uppercase;color:#ff6b1a;margin-top:40px;margin-bottom:14px;">Data we collect</h2>
+      <ul style="display:flex;flex-direction:column;gap:12px;margin:8px 0 18px;">
+        <li style="position:relative;padding-left:22px;color:#e2bfb2;font-size:16.5px;line-height:1.65;"><span style="position:absolute;left:2px;top:11px;width:7px;height:7px;border-radius:50%;background:#ff6b1a;"></span><strong style="color:#dde2f1;font-weight:700;">Account data:</strong> name, email and optionally city and phone number you submit when signing up. Your date of birth is stored to verify and confirm you meet the minimum age requirement.</li>
+        <li style="position:relative;padding-left:22px;color:#e2bfb2;font-size:16.5px;line-height:1.65;"><span style="position:absolute;left:2px;top:11px;width:7px;height:7px;border-radius:50%;background:#ff6b1a;"></span><strong style="color:#dde2f1;font-weight:700;">Handle and profile data:</strong> public display name, clan badge, profile photo (if you sign in with Google) and your game statistics.</li>
+        <li style="position:relative;padding-left:22px;color:#e2bfb2;font-size:16.5px;line-height:1.65;"><span style="position:absolute;left:2px;top:11px;width:7px;height:7px;border-radius:50%;background:#ff6b1a;"></span><strong style="color:#dde2f1;font-weight:700;">Location:</strong> we use your location to show nearby courts and to detect when you are playing at a court. With "Always" permission, detection works with the app closed. We do not store your coordinates in our database: we only log which court you played at.</li>
+        <li style="position:relative;padding-left:22px;color:#e2bfb2;font-size:16.5px;line-height:1.65;"><span style="position:absolute;left:2px;top:11px;width:7px;height:7px;border-radius:50%;background:#ff6b1a;"></span><strong style="color:#dde2f1;font-weight:700;">Health data (optional):</strong> if you connect Health (Health Connect / Apple Health), we read calories, heart rate, steps and distance from your games. This data stays <strong style="color:#dde2f1;font-weight:700;">on your device only</strong> and is not uploaded to our servers.</li>
+        <li style="position:relative;padding-left:22px;color:#e2bfb2;font-size:16.5px;line-height:1.65;"><span style="position:absolute;left:2px;top:11px;width:7px;height:7px;border-radius:50%;background:#ff6b1a;"></span><strong style="color:#dde2f1;font-weight:700;">Game activity:</strong> game history (court, date, duration, points).</li>
+        <li style="position:relative;padding-left:22px;color:#e2bfb2;font-size:16.5px;line-height:1.65;"><span style="position:absolute;left:2px;top:11px;width:7px;height:7px;border-radius:50%;background:#ff6b1a;"></span><strong style="color:#dde2f1;font-weight:700;">Messages:</strong> the content of pickup chats you send is stored on our server to display to participants of that pickup.</li>
+      </ul>
+
+      <h2 style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;letter-spacing:0.14em;text-transform:uppercase;color:#ff6b1a;margin-top:40px;margin-bottom:14px;">How we use it</h2>
+      <p style="color:#e2bfb2;font-size:16.5px;line-height:1.7;margin-bottom:14px;">To make the app work: locate you on the map, detect and score your games, display your profile and rankings, and connect the community (friends, pickups and their chats).</p>
+
+      <h2 style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;letter-spacing:0.14em;text-transform:uppercase;color:#ff6b1a;margin-top:40px;margin-bottom:14px;">Where it is stored</h2>
+      <p style="color:#e2bfb2;font-size:16.5px;line-height:1.7;margin-bottom:14px;">Account, game and message data is stored on our own backend, hosted on Render (Render Services, Inc., servers in the United States) on a Supabase Postgres database (Supabase, Inc.). Both providers act as data processors on our behalf. By using the app, you accept this international data transfer to the United States. Health data never leaves your phone.</p>
+
+      <h2 style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;letter-spacing:0.14em;text-transform:uppercase;color:#ff6b1a;margin-top:40px;margin-bottom:14px;">Third-party services</h2>
+      <p style="color:#e2bfb2;font-size:16.5px;line-height:1.7;margin-bottom:14px;">We use Google services for map features: Google Maps (displaying the map), Geocoding (converting addresses to coordinates) and Directions (calculating routes to courts). When using these features, your location and/or queried address are sent to Google. If you sign in with Google, your authentication and profile photo are provided by Google Sign-In. Google's handling is governed by their own privacy policy (<a href="https://policies.google.com/privacy" target="_blank" rel="noopener" style="color:#ff6b1a;text-decoration:underline;text-underline-offset:2px;">policies.google.com/privacy</a>).</p>
+
+      <h2 style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;letter-spacing:0.14em;text-transform:uppercase;color:#ff6b1a;margin-top:40px;margin-bottom:14px;">How long we keep it</h2>
+      <p style="color:#e2bfb2;font-size:16.5px;line-height:1.7;margin-bottom:14px;">We keep your data while your account is active. If you delete your account, we remove it from our database; it may persist briefly in backup copies before being fully deleted.</p>
+
+      <h2 style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;letter-spacing:0.14em;text-transform:uppercase;color:#ff6b1a;margin-top:40px;margin-bottom:14px;">What other users see</h2>
+      <p style="color:#e2bfb2;font-size:16.5px;line-height:1.7;margin-bottom:14px;">Other users can see your name, handle, badge and public statistics. In pickup chats, participants see the messages you send and your handle. Your "playing" status, the court and time are only shared if you enable those permissions in Settings → Privacy (all are disabled by default).</p>
+
+      <h2 style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;letter-spacing:0.14em;text-transform:uppercase;color:#ff6b1a;margin-top:40px;margin-bottom:14px;">Your rights</h2>
+      <p style="color:#e2bfb2;font-size:16.5px;line-height:1.7;margin-bottom:14px;">You can access, correct or delete your data. From Settings → Delete Account you remove your account and data from our database. You can also contact us at <a href={`mailto:${email}`} style="color:#ff6b1a;text-decoration:underline;text-underline-offset:2px;">{email}</a> to exercise any rights (applicable data protection laws in your jurisdiction, including equivalent rights such as CCPA/CPRA in the US).</p>
+
+      <h2 style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;letter-spacing:0.14em;text-transform:uppercase;color:#ff6b1a;margin-top:40px;margin-bottom:14px;">Children</h2>
+      <p style="color:#e2bfb2;font-size:16.5px;line-height:1.7;margin-bottom:14px;">The app is not directed at children under 13 and we do not knowingly collect their data. If you are a minor, use the app with authorization from your legal guardian.</p>
+
+      <h2 style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;letter-spacing:0.14em;text-transform:uppercase;color:#ff6b1a;margin-top:40px;margin-bottom:14px;">Changes</h2>
+      <p style="color:#e2bfb2;font-size:16.5px;line-height:1.7;margin-bottom:14px;">We may update this policy; we will notify you within the app. If you have questions, contact us at <a href={`mailto:${email}`} style="color:#ff6b1a;text-decoration:underline;text-underline-offset:2px;">{email}</a>.</p>
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer style="padding:32px 0;background:#080e18;border-top:2px solid #5a4137;">
+    <div style="max-width:1200px;margin:0 auto;padding:0 64px;display:flex;flex-direction:column;align-items:center;gap:16px;">
+      <Logo size={32} />
+      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:32px;">
+        <a href="/en/" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">Home</a>
+        <a href="/en/terminos" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">Terms</a>
+        <a href="/en/privacidad" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">Privacy</a>
+      </div>
+      <div style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;opacity:0.5;text-transform:uppercase;letter-spacing:0.1em;">© 2024 1OF1 BASKETBALL. ALL RIGHTS RESERVED.</div>
+    </div>
+  </footer>
+
+  <script is:inline>
+    window.addEventListener('load', () => {
+      const loader = document.getElementById('loader');
+      setTimeout(() => { loader.style.opacity = '0'; loader.style.visibility = 'hidden'; }, 600);
+    });
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,92 @@
+{
+  "nav": {
+    "features": "Features",
+    "stats": "Stats",
+    "download": "Download",
+    "getApp": "GET THE APP"
+  },
+  "hero": {
+    "badge": "ELITE PERFORMANCE",
+    "title1": "THE COURT",
+    "title2": "IS YOURS",
+    "subtitle": "The ultimate tactical advantage for the modern hooper. Find premium courts near you, track every movement with GPS precision, and dominate the leaderboard with elite analytics.",
+    "cta1": "DOWNLOAD NOW",
+    "cta2": "WATCH TRAILER"
+  },
+  "features": {
+    "title": "PLAYBOOK",
+    "eyebrow": "01 // FEATURES",
+    "items": [
+      { "icon": "location_on", "title": "FIND YOUR COURT", "body": "Real-time court scouting. See how many players are currently on court and get live condition reports." },
+      { "icon": "distance", "title": "GPS GAME TRACKER", "body": "Automatic playtime logging and movement heatmaps. Know exactly where you dominate on the floor." },
+      { "icon": "analytics", "title": "ELITE STATS", "body": "Professional-grade analytics. Track FG%, speed metrics, and verticality in every pickup game." }
+    ]
+  },
+  "stats": {
+    "playerId": "PLAYER_ID_001",
+    "playerName": "DOMINATOR",
+    "level": "LEVEL",
+    "winRate": "WIN RATE",
+    "avgSpd": "AVG SPD",
+    "speed": "18.2 MPH",
+    "liveChart": "LIVE_SHOT_CHART",
+    "title": "MASTER YOUR",
+    "titleAccent": "METRICS",
+    "desc": "Don't just play—analyze. Our deep-learning algorithm breaks down your movement patterns, shot efficiency, and fatigue levels to give you a pro-ready profile.",
+    "list": [
+      "Pro-Grade Shot Selection Heatmaps",
+      "High-Speed Displacement Tracking",
+      "Regional Leaderboard Progression"
+    ],
+    "cta": "VIEW SAMPLE DATA"
+  },
+  "cta": {
+    "title": "UNLEASH YOUR POTENTIAL",
+    "subtitle": "Join over 50,000 hoopers who have leveled up their game with 1OF1. The next court is waiting for you.",
+    "appStore": "APP STORE",
+    "playStore": "PLAY STORE"
+  },
+  "footer": {
+    "features": "Features",
+    "stats": "Stats",
+    "download": "Download",
+    "terms": "Terms",
+    "privacy": "Privacy"
+  },
+  "terms": {
+    "badge": "1OF1",
+    "title": "Terms & Conditions",
+    "updated": "Last updated: July 22, 2026",
+    "intro": "By creating an account and using 1of1, you accept these terms.",
+    "sections": [
+      { "heading": "Use of the app", "body": "1of1 helps you find courts and log games. You are responsible for the information you submit (courts, reviews, handle, name) and for playing safely: the app does not monitor or guarantee the condition of courts." },
+      { "heading": "Content and conduct", "body": "You are responsible for the content you post, including court reviews and messages sent in pickup chats. Offensive content, spam, harassment, or impersonation is not allowed. You can report inappropriate content or users from the app and block other users. We review reports and may remove content or suspend accounts that violate these rules. We do not tolerate abusive content." },
+      { "heading": "Location and background", "body": "Game detection uses your location, including in the background if you authorize it. You can disable it anytime from Settings → Privacy or from system permissions." },
+      { "heading": "Health data", "body": "Health metrics are informational and do not constitute medical advice." },
+      { "heading": "Liability", "body": "The app is provided \"as is\". We are not liable for injuries, losses, or damages arising from the use of the app or from attending courts." },
+      { "heading": "Account deletion", "body": "You can delete your account anytime from Settings → Delete Account." },
+      { "heading": "Governing law", "body": "These terms are governed by the laws of the jurisdiction where the app operates. Any dispute shall be submitted to the competent courts of that jurisdiction, without prejudice to consumer protection rights in your country of residence." }
+    ],
+    "contactLabel": "Contact",
+    "email": "francobusch130@gmail.com",
+    "back": "BACK"
+  },
+  "privacy": {
+    "badge": "1OF1",
+    "title": "Privacy Policy",
+    "updated": "Last updated: July 22, 2026",
+    "intro": "Your privacy matters. This policy describes how 1of1 collects, uses, and protects your information.",
+    "sections": [
+      { "heading": "Data we collect", "body": "Email and name used to create your account. Public handle and display name in the app. Location (GPS) to detect games and nearby courts, including in the background if you authorize it. Activity data: game time, movement, and performance metrics. Messages in pickup chats (stored server-side only). Device information (model, OS, notification token)." },
+      { "heading": "How we use your data", "body": "To operate and improve the app: matchmaking, statistics, push notifications, and automatic game detection. To personalize your experience and show relevant content." },
+      { "heading": "Data sharing", "body": "Your handle and display name are visible to other users. Your exact location is never shared publicly; it is only used for internal calculations. We do not sell your data to third parties." },
+      { "heading": "Security", "body": "Your data is transmitted and stored securely. However, no method of Internet transmission is 100% secure." },
+      { "heading": "Your rights", "body": "You can access, correct, or delete your data from Settings → Account. You can disable location permissions anytime from system settings." },
+      { "heading": "Children", "body": "The app is not directed at children under 13." },
+      { "heading": "Changes to this policy", "body": "If we make significant changes, we will notify you within the app." }
+    ],
+    "contactLabel": "Contact",
+    "email": "francobusch130@gmail.com",
+    "back": "BACK"
+  }
+}

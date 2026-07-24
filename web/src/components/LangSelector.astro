@@ -1,0 +1,60 @@
+---
+interface Props {
+  current: 'es' | 'en';
+}
+const { current = 'es' } = Astro.props;
+---
+
+<div class="lang-selector">
+  <button class={`lang-btn ${current === 'es' ? 'active' : ''}`} data-lang="es">ES</button>
+  <span class="lang-divider">/</span>
+  <button class={`lang-btn ${current === 'en' ? 'active' : ''}`} data-lang="en">EN</button>
+</div>
+
+<script is:inline>
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const lang = btn.dataset.lang;
+      const path = window.location.pathname;
+      const isEn = path.startsWith('/en');
+      
+      if (lang === 'en' && !isEn) {
+        window.location.href = '/en' + path;
+      } else if (lang === 'es' && isEn) {
+        window.location.href = path.replace('/en', '') || '/';
+      }
+    });
+  });
+</script>
+
+<style>
+  .lang-selector {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 16px;
+  }
+  .lang-btn {
+    background: none;
+    border: none;
+    color: #a98a7e;
+    font-family: 'Anybody', sans-serif;
+    font-weight: 800;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    padding: 4px 6px;
+    transition: color 0.2s;
+  }
+  .lang-btn:hover {
+    color: #e2bfb2;
+  }
+  .lang-btn.active {
+    color: #ff6b1a;
+  }
+  .lang-divider {
+    color: #5a4137;
+    font-size: 12px;
+  }
+</style>

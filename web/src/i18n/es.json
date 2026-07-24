@@ -1,0 +1,92 @@
+{
+  "nav": {
+    "features": "Características",
+    "stats": "Estadísticas",
+    "download": "Descargar",
+    "getApp": "OBTENER LA APP"
+  },
+  "hero": {
+    "badge": "RENDIMIENTO ÉLITE",
+    "title1": "LA CANCHA",
+    "title2": "ES TUYA",
+    "subtitle": "La ventaja táctica definitiva para el jugador moderno. Encontrá canchas premium cerca tuyo, trackea cada movimiento con precisión GPS y dominá el leaderboard con analytics de élite.",
+    "cta1": "DESCARGAR AHORA",
+    "cta2": "VER CARACTERÍSTICAS"
+  },
+  "features": {
+    "title": "MANUAL DE JUEGO",
+    "eyebrow": "01 // CARACTERÍSTICAS",
+    "items": [
+      { "icon": "location_on", "title": "ENCONTRÁ TU CANCHA", "body": "Búsqueda en tiempo real. Mirá cuántos jugadores hay en cada cancha y el estado actual." },
+      { "icon": "distance", "title": "GPS GAME TRACKER", "body": "Registro automático de tiempo de juego y mapas de calor. Dominá la cancha con datos precisos." },
+      { "icon": "analytics", "title": "STATS ÉLITE", "body": "Analítica de nivel profesional. Seguí tu % de tiros, velocidad y verticalidad en cada pickup." }
+    ]
+  },
+  "stats": {
+    "playerId": "JUGADOR_ID_001",
+    "playerName": "DOMINADOR",
+    "level": "NIVEL",
+    "winRate": "TASA VICTORIA",
+    "avgSpd": "VEL. PROMEDIO",
+    "speed": "18.2 KM/H",
+    "liveChart": "GRÁFICO_EN_VIVO",
+    "title": "DOMINÁ TUS",
+    "titleAccent": "MÉTRICAS",
+    "desc": "No solo juegues — analizá. Nuestro algoritmo de deep-learning desglosa tus patrones de movimiento, eficiencia de tiro y niveles de fatiga para darte un perfil de nivel profesional.",
+    "list": [
+      "Heatmaps de Selección de Tiro Profesional",
+      "Tracking de Desplazamiento de Alta Velocidad",
+      "Progresión en Leaderboard Regional"
+    ],
+    "cta": "VER DATOS DE EJEMPLO"
+  },
+  "cta": {
+    "title": "LIBERÁ TU POTENCIAL",
+    "subtitle": "Unite a más de 50,000 jugadores que mejoraron su juego con 1OF1. La próxima cancha te está esperando.",
+    "appStore": "APP STORE",
+    "playStore": "PLAY STORE"
+  },
+  "footer": {
+    "features": "Características",
+    "stats": "Estadísticas",
+    "download": "Descargar",
+    "terms": "Términos",
+    "privacy": "Privacidad"
+  },
+  "terms": {
+    "badge": "1OF1",
+    "title": "Términos y Condiciones",
+    "updated": "Última actualización: 22 de julio de 2026",
+    "intro": "Al crear una cuenta y usar 1of1 aceptás estos términos.",
+    "sections": [
+      { "heading": "Uso de la app", "body": "1of1 te ayuda a encontrar canchas y registrar partidos. Sos responsable de la información que cargás (canchas, reseñas, handle, nombre) y de jugar de forma segura: la app no supervisa ni garantiza el estado de las canchas." },
+      { "heading": "Contenido y conducta", "body": "Sos responsable del contenido que publicás, incluidas reseñas de canchas y los mensajes que enviás en los chats de pickups. No se permite contenido ofensivo, ilegal, spam, acoso ni suplantación de identidad. Podés reportar contenido o usuarios inapropiados desde la app, y bloquear a otros usuarios. Revisamos los reportes y podemos eliminar contenido o suspender cuentas que violen estas reglas. No toleramos contenido abusivo." },
+      { "heading": "Ubicación y segundo plano", "body": "La detección de partidos usa tu ubicación, incluso en segundo plano si lo autorizás. Podés desactivarla cuando quieras desde Ajustes → Privacidad o desde los permisos del sistema." },
+      { "heading": "Datos de salud", "body": "Las métricas de salud son informativas y no constituyen consejo médico." },
+      { "heading": "Responsabilidad", "body": "La app se ofrece \"tal cual\". No nos responsabilizamos por lesiones, pérdidas o daños derivados del uso de la app o de la asistencia a las canchas." },
+      { "heading": "Baja", "body": "Podés eliminar tu cuenta en cualquier momento desde Ajustes → Eliminar cuenta." },
+      { "heading": "Ley aplicable y jurisdicción", "body": "Estos términos se rigen por las leyes de la República Argentina. Cualquier controversia se someterá a los tribunales ordinarios competentes de la Ciudad Autónoma de Buenos Aires, sin perjuicio de los derechos que la ley de tu país de residencia te reconozca como consumidor." }
+    ],
+    "contactLabel": "Contacto",
+    "email": "francobusch130@gmail.com",
+    "back": "VOLVER"
+  },
+  "privacy": {
+    "badge": "1OF1",
+    "title": "Política de Privacidad",
+    "updated": "Última actualización: 22 de julio de 2026",
+    "intro": "Tu privacidad es importante. Esta política describe cómo 1of1 recopila, usa y protege tu información.",
+    "sections": [
+      { "heading": "Datos que recopilamos", "body": "Email y nombre que usás para crear tu cuenta. Handle público y nombre para mostrar en la app. Ubicación (GPS) para detectar partidos y canchas cercanas, incluso en segundo plano si lo autorizás. Datos de actividad: tiempo de juego, movimiento y métricas de rendimiento. Mensajes en chats de pickups (solo se almacenan en el servidor). Información del dispositivo (modelo, sistema operativo, token de notificaciones)." },
+      { "heading": "Cómo usamos tus datos", "body": "Para operar y mejorar la app: matchmaking, estadísticas, notificaciones push y detección automática de partidos. Para personalizar tu experiencia y mostrar contenido relevante." },
+      { "heading": "Compartición de datos", "body": "Tu handle y nombre son visibles para otros usuarios de la app. Tu ubicación exacta nunca se comparte públicamente; solo se usa para cálculos internos. No vendemos tus datos a terceros." },
+      { "heading": "Seguridad", "body": "Tus datos se transmiten y almacenan de forma segura. Sin embargo, ningún método de transmisión por Internet es 100% seguro." },
+      { "heading": "Tus derechos", "body": "Podés acceder, corregir o eliminar tus datos desde Ajustes → Cuenta. Podés desactivar el permiso de ubicación en cualquier momento desde los ajustes del sistema." },
+      { "heading": "Menores de edad", "body": "La app no está dirigida a menores de 13 años." },
+      { "heading": "Cambios en esta política", "body": "Si hacemos cambios significativos, te notificaremos dentro de la app." }
+    ],
+    "contactLabel": "Contacto",
+    "email": "francobusch130@gmail.com",
+    "back": "VOLVER"
+  }
+}

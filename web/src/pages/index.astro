@@ -1,0 +1,262 @@
+---
+import Logo from '../components/Logo.astro';
+import LangSelector from '../components/LangSelector.astro';
+import { useTranslations } from '../i18n';
+
+const t = useTranslations('es');
+const features = t.features.items;
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/png" href="/logo_1of1.png" />
+    <title>1OF1 Basketball — Encontrá cancha. Jugá. Registrá cada partido.</title>
+    <meta name="description" content="1of1 es la app de básquet para encontrar canchas cerca, registrar tus partidos automáticamente y seguir tu progreso: stats, rankings y logros." />
+    <meta name="theme-color" content="#0d141e" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Narrow:wght@400;500;600;700&family=Anybody:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+    <style is:global>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      body { background: #0d141e; color: #dde2f1; overflow-x: hidden; font-family: 'Archivo Narrow', sans-serif; }
+      a { color: inherit; text-decoration: none; }
+      img { display: block; max-width: 100%; }
+      ul { list-style: none; }
+      .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: #080e18; }
+      ::-webkit-scrollbar-thumb { background: #ff6b1a; }
+      @keyframes pulse-glow {
+        0%, 100% { filter: drop-shadow(0 0 20px rgba(255,107,26,0.3)); }
+        50% { filter: drop-shadow(0 0 40px rgba(255,107,26,0.6)); }
+      }
+      .logo-pulse { animation: pulse-glow 3s ease-in-out infinite; }
+      .btn-active:active { transform: skewX(-8deg) scale(0.95); }
+      .nav-link { transition: color 0.2s, transform 0.2s; }
+      .nav-link:hover { color: #ff6b1a; transform: skewX(-4deg); }
+      .card-hover { transition: border-color 0.2s, transform 0.2s; }
+      .card-hover:hover { border-color: #ff6b1a; transform: translateY(-4px); }
+      .cta-btn { transition: background 0.2s, color 0.2s, box-shadow 0.2s; }
+      .cta-btn:hover { background: #ff6b1a; color: #591e00; box-shadow: 0 0 30px rgba(255,107,26,0.4); }
+    </style>
+  </head>
+  <body>
+    <!-- LOADER -->
+    <div id="loader" style="position:fixed;inset:0;z-index:9999;background:#0d141e;display:flex;align-items:center;justify-content:center;transition:opacity 0.8s ease, visibility 0.8s ease;">
+      <Logo size={80} />
+    </div>
+
+    <!-- NAVBAR -->
+    <nav style="position:fixed;top:0;width:100%;z-index:50;background:rgba(13,20,30,0.9);backdrop-filter:blur(12px);border-bottom:2px solid #5a4137;">
+      <div style="max-width:1200px;margin:0 auto;padding:0 64px;display:flex;align-items:center;justify-content:space-between;height:80px;">
+        <a href="/" style="display:flex;align-items:center;"><Logo size={72} /></a>
+        <LangSelector current="es" />
+        <div style="display:flex;gap:32px;">
+          <a href="#features" class="nav-link" style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;color:#e2bfb2;font-style:italic;">{t.nav.features}</a>
+          <a href="#stats" class="nav-link" style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;color:#e2bfb2;font-style:italic;">{t.nav.stats}</a>
+          <a href="#descargar" class="nav-link" style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;color:#e2bfb2;font-style:italic;">{t.nav.download}</a>
+        </div>
+        <a href="#descargar" class="btn-active" style="transform:skewX(-8deg);display:inline-flex;align-items:center;justify-content:center;padding:12px 32px;background:#ff6b1a;color:#591e00;font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:0.1em;font-style:italic;transition:all 0.2s;cursor:pointer;">
+          <span style="transform:skewX(8deg);">{t.nav.getApp}</span>
+        </a>
+      </div>
+    </nav>
+
+    <!-- HERO -->
+    <section style="position:relative;min-height:90vh;display:flex;align-items:center;overflow:hidden;padding-top:80px;">
+      <div style="max-width:1200px;margin:0 auto;padding:0 64px;display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:center;position:relative;z-index:10;width:100%;">
+        <div style="display:flex;flex-direction:column;align-items:flex-start;gap:16px;">
+          <span style="display:inline-block;background:#ff6b1a;color:#591e00;padding:6px 12px;font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;font-style:italic;text-transform:uppercase;letter-spacing:0.1em;transform:skewX(-8deg);margin-bottom:16px;">{t.hero.badge}</span>
+          <h1 style="font-family:'Anton',sans-serif;font-size:120px;line-height:0.9;font-style:italic;text-transform:uppercase;letter-spacing:-0.02em;color:#fff;">{t.hero.title1} <br/> <span style="color:#ff6b1a;text-shadow:0 0 20px rgba(255,107,26,0.4);">{t.hero.title2}</span></h1>
+          <p style="font-family:'Archivo Narrow',sans-serif;font-size:18px;color:#e2bfb2;max-width:500px;margin-top:16px;">{t.hero.subtitle}</p>
+          <div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:32px;">
+            <a href="#descargar" class="btn-active" style="transform:skewX(-8deg);display:inline-flex;align-items:center;justify-content:center;padding:20px 40px;background:#ff6b1a;color:#591e00;font-family:'Anybody',sans-serif;font-weight:800;font-size:18px;text-transform:uppercase;font-style:italic;box-shadow:0 0 30px rgba(255,107,26,0.3);transition:all 0.2s;cursor:pointer;">
+              <span style="transform:skewX(8deg);">{t.hero.cta1}</span>
+            </a>
+            <a href="#features" class="btn-active" style="transform:skewX(-8deg);display:inline-flex;align-items:center;justify-content:center;padding:20px 40px;background:transparent;color:#fff;border:2px solid #fff;font-family:'Anybody',sans-serif;font-weight:800;font-size:18px;text-transform:uppercase;font-style:italic;transition:all 0.2s;cursor:pointer;" onmouseover="this.style.background='#fff';this.style.color='#0d141e'" onmouseout="this.style.background='transparent';this.style.color='#fff'">
+              <span style="transform:skewX(8deg);">{t.hero.cta2}</span>
+            </a>
+          </div>
+        </div>
+        <div style="position:relative;display:flex;justify-content:center;align-items:center;">
+          <div style="position:absolute;width:400px;height:400px;background:rgba(255,107,26,0.1);border-radius:50%;filter:blur(100px);"></div>
+          <div class="logo-pulse"><Logo size={400} /></div>
+        </div>
+      </div>
+      <div style="position:absolute;bottom:-40px;left:0;width:100%;overflow:hidden;pointer-events:none;opacity:0.03;">
+        <h2 style="font-family:'Anton',sans-serif;font-size:250px;font-style:italic;text-transform:uppercase;color:#fff;white-space:nowrap;">CHAMPIONS ONLY CHAMPIONS ONLY CHAMPIONS ONLY</h2>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features" style="padding:80px 0;background:#080e18;">
+      <div style="max-width:1200px;margin:0 auto;padding:0 64px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:32px;border-bottom:2px solid #5a4137;padding-bottom:16px;">
+          <h2 style="font-family:'Anton',sans-serif;font-size:48px;font-style:italic;text-transform:uppercase;color:#fff;">{t.features.title}</h2>
+          <span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;letter-spacing:0.1em;color:#ff6b1a;font-style:italic;">{t.features.eyebrow}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;">
+          {features.map((f: any) => (
+            <div class="card-hover" style="background:#1a202a;border:1px solid #5a4137;padding:32px;display:flex;flex-direction:column;gap:16px;">
+              <span class="material-symbols-outlined" style="font-size:48px;color:#ff6b1a;">{f.icon}</span>
+              <h3 style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;text-transform:uppercase;color:#fff;">{f.title}</h3>
+              <p style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#e2bfb2;">{f.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <!-- STATS -->
+    <section id="stats" style="padding:80px 0;">
+      <div style="max-width:1200px;margin:0 auto;padding:0 64px;display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:center;">
+        <div data-tilt style="background:#242a35;border:2px solid #5a4137;padding:32px;box-shadow:0 25px 50px rgba(0,0,0,0.5);transform:rotateY(-10deg) rotateX(5deg);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:32px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div style="width:48px;height:48px;background:#ff6b1a;display:flex;align-items:center;justify-content:center;">
+                <span class="material-symbols-outlined" style="color:#591e00;font-size:28px;font-variation-settings:'FILL' 1;">person</span>
+              </div>
+              <div>
+                <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;color:#ffb596;text-transform:uppercase;letter-spacing:0.1em;">{t.stats.playerId}</div>
+                <div style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#fff;text-transform:uppercase;line-height:1;">{t.stats.playerName}</div>
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;color:#e2bfb2;text-transform:uppercase;">{t.stats.level}</div>
+              <div style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#fff;line-height:1;">42</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:32px;">
+            <div style="padding:12px;background:#2f3540;border-left:4px solid #ff6b1a;">
+              <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;color:#e2bfb2;text-transform:uppercase;">{t.stats.winRate}</div>
+              <div style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#fff;">78.4%</div>
+            </div>
+            <div style="padding:12px;background:#2f3540;border-left:4px solid #ff6b1a;">
+              <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;color:#e2bfb2;text-transform:uppercase;">{t.stats.avgSpd}</div>
+              <div style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#fff;">{t.stats.speed}</div>
+            </div>
+          </div>
+          <div style="position:relative;height:256px;background:#080e18;border:1px solid #5a4137;overflow:hidden;">
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+              <div style="width:80%;height:80%;border:2px solid #5a4137;border-radius:50%;opacity:0.3;"></div>
+              <div style="width:1px;height:100%;background:#5a4137;position:absolute;opacity:0.3;"></div>
+              <div style="width:100%;height:1px;background:#5a4137;position:absolute;opacity:0.3;"></div>
+            </div>
+            <div style="position:absolute;top:25%;left:33%;width:16px;height:16px;background:#ff6b1a;border-radius:50%;box-shadow:0 0 15px rgba(255,107,26,0.8);"></div>
+            <div style="position:absolute;top:50%;left:25%;width:12px;height:12px;background:#ff6b1a;border-radius:50%;opacity:0.6;"></div>
+            <div style="position:absolute;bottom:25%;right:33%;width:20px;height:20px;background:#ff6b1a;border-radius:50%;box-shadow:0 0 20px rgba(255,107,26,0.8);"></div>
+            <div style="position:absolute;top:33%;right:25%;width:12px;height:12px;background:#ff6b1a;border-radius:50%;opacity:0.4;"></div>
+            <div style="position:absolute;bottom:16px;left:16px;font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;color:#ff6b1a;text-transform:uppercase;letter-spacing:0.1em;font-style:italic;">{t.stats.liveChart}</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <h2 style="font-family:'Anton',sans-serif;font-size:48px;font-style:italic;text-transform:uppercase;color:#fff;line-height:1;">{t.stats.title} <span style="color:#ff6b1a;">{t.stats.titleAccent}</span></h2>
+          <p style="font-family:'Archivo Narrow',sans-serif;font-size:18px;color:#e2bfb2;">{t.stats.desc}</p>
+          <ul style="display:flex;flex-direction:column;gap:16px;margin-top:16px;">
+            {t.stats.list.map((item: string) => (
+              <li style="display:flex;align-items:center;gap:12px;">
+                <span class="material-symbols-outlined" style="color:#ff6b1a;">check_circle</span>
+                <span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;font-style:italic;color:#fff;">{item}</span>
+              </li>
+            ))}
+          </ul>
+          <div style="margin-top:32px;">
+            <a href="#descargar" class="cta-btn btn-active" style="transform:skewX(-8deg);display:inline-flex;align-items:center;padding:16px 32px;border:2px solid #ff6b1a;color:#ff6b1a;font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;font-style:italic;transition:all 0.2s;cursor:pointer;">
+              <span style="transform:skewX(8deg);">{t.stats.cta}</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section id="descargar" style="padding:96px 0;background:#ff6b1a;position:relative;overflow:hidden;">
+      <div style="position:absolute;inset:0;opacity:0.1;background:radial-gradient(circle at center,rgba(255,255,255,1),transparent);"></div>
+      <div style="max-width:1200px;margin:0 auto;padding:0 64px;text-align:center;position:relative;z-index:1;">
+        <h2 style="font-family:'Anton',sans-serif;font-size:48px;font-style:italic;text-transform:uppercase;color:#591e00;margin-bottom:16px;">{t.cta.title}</h2>
+        <p style="font-family:'Archivo Narrow',sans-serif;font-size:18px;color:rgba(89,30,0,0.8);max-width:600px;margin:0 auto 32px;font-weight:700;">{t.cta.subtitle}</p>
+        <div style="display:flex;justify-content:center;gap:16px;flex-wrap:wrap;">
+          <span class="btn-active" style="transform:skewX(-8deg);display:inline-flex;padding:24px 48px;background:#0d141e;color:#fff;font-family:'Anybody',sans-serif;font-weight:800;font-size:32px;font-style:italic;cursor:pointer;transition:all 0.2s;">
+            <span style="transform:skewX(8deg);">{t.cta.appStore}</span>
+          </span>
+          <span class="btn-active" style="transform:skewX(-8deg);display:inline-flex;padding:24px 48px;background:#0d141e;color:#fff;font-family:'Anybody',sans-serif;font-weight:800;font-size:32px;font-style:italic;cursor:pointer;transition:all 0.2s;">
+            <span style="transform:skewX(8deg);">{t.cta.playStore}</span>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer style="padding:32px 0;background:#080e18;border-top:2px solid #5a4137;">
+      <div style="max-width:1200px;margin:0 auto;padding:0 64px;display:flex;flex-direction:column;align-items:center;gap:16px;">
+        <Logo size={32} />
+        <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:32px;">
+          <a href="#features" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">{t.footer.features}</a>
+          <a href="#stats" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">{t.footer.stats}</a>
+          <a href="#descargar" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">{t.footer.download}</a>
+          <a href="/terminos" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">{t.footer.terms}</a>
+          <a href="/privacidad" style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;">{t.footer.privacy}</a>
+        </div>
+        <div style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#2f3132;opacity:0.5;text-transform:uppercase;letter-spacing:0.1em;">© 2024 1OF1 BASKETBALL. ALL RIGHTS RESERVED.</div>
+      </div>
+    </footer>
+
+    <script is:inline>
+      window.addEventListener('load', () => {
+        const loader = document.getElementById('loader');
+        setTimeout(() => { loader.style.opacity = '0'; loader.style.visibility = 'hidden'; }, 600);
+      });
+      (function() {
+        let currentScroll = window.scrollY;
+        let targetScroll = window.scrollY;
+        const ease = 0.08;
+        let isScrolling = false;
+        function smoothScroll() {
+          const diff = targetScroll - currentScroll;
+          currentScroll += diff * ease;
+          if (Math.abs(diff) > 0.5) {
+            window.scrollTo(0, currentScroll);
+            requestAnimationFrame(smoothScroll);
+          } else {
+            currentScroll = targetScroll;
+            window.scrollTo(0, targetScroll);
+            isScrolling = false;
+          }
+        }
+        window.addEventListener('wheel', function(e) {
+          e.preventDefault();
+          targetScroll = Math.max(0, Math.min(targetScroll + e.deltaY, document.body.scrollHeight - window.innerHeight));
+          if (!isScrolling) { isScrolling = true; requestAnimationFrame(smoothScroll); }
+        }, { passive: false });
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+          anchor.addEventListener('click', function(e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+              targetScroll = target.getBoundingClientRect().top + window.scrollY - 80;
+              currentScroll = window.scrollY;
+              if (!isScrolling) { isScrolling = true; requestAnimationFrame(smoothScroll); }
+            }
+          });
+        });
+      })();
+      document.addEventListener('mousemove', (e) => {
+        const card = document.querySelector('[data-tilt]');
+        if (card) {
+          const rect = card.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          if (x > 0 && x < rect.width && y > 0 && y < rect.height) {
+            card.style.transform = `rotateY(${((x / rect.width) - 0.5) * 20 - 10}deg) rotateX(${((y / rect.height) - 0.5) * -20 + 5}deg)`;
+          } else {
+            card.style.transform = `rotateY(-10deg) rotateX(5deg)`;
+          }
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+---
+interface Props {
+  size?: number;
+}
+const { size = 32 } = Astro.props;
+---
+
+<img
+  class="logo-mark"
+  src="/logo_1of1.png"
+  alt="1of1"
+  width={size}
+  height={size}
+  style={`width:${size}px;height:auto;`}
+/>
+
+<style>
+  .logo-mark {
+    display: block;
+    object-fit: contain;
+  }
+</style>
