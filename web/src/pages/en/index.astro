@@ -111,6 +111,134 @@ const features = t.features.items;
       </div>
     </section>
 
+    <!-- SQUAD & COMMUNITY -->
+    <section style="padding:80px 0;background:#0d141e;position:relative;overflow:hidden;">
+      <div style="max-width:1200px;margin:0 auto;padding:0 64px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:32px;border-bottom:2px solid #5a4137;padding-bottom:16px;">
+          <h2 style="font-family:'Anton',sans-serif;font-size:48px;font-style:italic;text-transform:uppercase;color:#fff;">{t.community.title}</h2>
+          <span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;letter-spacing:0.1em;color:#ff6b1a;font-style:italic;">{t.community.eyebrow}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:8fr 4fr;gap:24px;">
+          <!-- Left: Social + Pickups + Clan -->
+          <div style="display:flex;flex-direction:column;gap:24px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+              <!-- Social Hub -->
+              <div class="card-hover" style="background:#1a202a;border:1px solid #5a4137;padding:32px;">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                  <span class="material-symbols-outlined" style="color:#ff6b1a;font-size:32px;">group</span>
+                  <h3 style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#fff;">{t.community.socialHub.title}</h3>
+                </div>
+                <p style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#e2bfb2;margin-bottom:24px;">{t.community.socialHub.body}</p>
+                <div style="display:flex;margin-bottom:16px;">
+                  <div style="width:48px;height:48px;border:2px solid #0d141e;background:#ff6b1a;display:flex;align-items:center;justify-content:center;font-weight:700;">JD</div>
+                  <div style="width:48px;height:48px;border:2px solid #0d141e;background:#c4c6cf;display:flex;align-items:center;justify-content:center;font-weight:700;margin-left:-16px;">ML</div>
+                  <div style="width:48px;height:48px;border:2px solid #0d141e;background:#a98a7e;display:flex;align-items:center;justify-content:center;font-weight:700;margin-left:-16px;">AK</div>
+                  <div style="width:48px;height:48px;border:2px solid #0d141e;background:#2f3540;display:flex;align-items:center;justify-content:center;font-weight:700;margin-left:-16px;">+12</div>
+                </div>
+                <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;color:#ff6b1a;font-style:italic;text-transform:uppercase;">{t.community.socialHub.friendsActive}</div>
+              </div>
+              <!-- Pickups & Events -->
+              <div class="card-hover" style="background:#1a202a;border:1px solid #5a4137;padding:32px;">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                  <span class="material-symbols-outlined" style="color:#ff6b1a;font-size:32px;">event_available</span>
+                  <h3 style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#fff;">{t.community.pickups.title}</h3>
+                </div>
+                <p style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#e2bfb2;margin-bottom:24px;">{t.community.pickups.body}</p>
+                <div style="display:flex;flex-direction:column;gap:12px;">
+                  <div style="background:rgba(47,53,64,0.5);padding:12px;display:flex;justify-content:space-between;align-items:center;border-left:4px solid #ff6b1a;">
+                    <span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;color:#fff;font-style:italic;">{t.community.pickups.event1}</span>
+                    <span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;color:#ff6b1a;">{t.community.pickups.event1Status}</span>
+                  </div>
+                  <div style="background:rgba(47,53,64,0.5);padding:12px;display:flex;justify-content:space-between;align-items:center;border-left:4px solid #5a4137;">
+                    <span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;color:#e2bfb2;font-style:italic;">{t.community.pickups.event2}</span>
+                    <span style="font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;color:#fff;">{t.community.pickups.event2Status}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Clan System -->
+            <div style="background:#242a35;border:2px solid #ff6b1a;padding:32px;position:relative;overflow:hidden;">
+              <div style="position:absolute;right:-40px;top:-40px;opacity:0.1;transform:rotate(12deg);pointer-events:none;">
+                <span class="material-symbols-outlined" style="font-size:200px;">shield</span>
+              </div>
+              <div style="position:relative;z-index:1;">
+                <span style="display:inline-block;background:#ff6b1a;color:#591e00;padding:6px 12px;font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;font-style:italic;text-transform:uppercase;letter-spacing:0.1em;transform:skewX(-8deg);margin-bottom:16px;">{t.community.clan.badge}</span>
+                <h3 style="font-family:'Anton',sans-serif;font-size:48px;font-style:italic;color:#fff;margin-bottom:8px;text-transform:uppercase;">{t.community.clan.title}</h3>
+                <p style="font-family:'Archivo Narrow',sans-serif;font-size:18px;color:#e2bfb2;max-width:600px;margin-bottom:24px;">{t.community.clan.body} <span style="color:#ff6b1a;font-style:italic;font-weight:700;">{t.community.clan.highlight}</span>.</p>
+                <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;">
+                  <div style="background:#0d141e;border:1px solid #5a4137;padding:16px;display:flex;align-items:center;gap:12px;min-width:240px;">
+                    <div style="width:48px;height:48px;background:#ff6b1a;display:flex;align-items:center;justify-content:center;">
+                      <span class="material-symbols-outlined" style="color:#591e00;">sports_kabaddi</span>
+                    </div>
+                    <div>
+                      <div style="font-family:'Archivo Narrow',sans-serif;font-size:10px;color:#e2bfb2;text-transform:uppercase;font-weight:700;">{t.community.clan.currentRulers}</div>
+                      <div style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#fff;text-transform:uppercase;">{t.community.clan.clanName}</div>
+                    </div>
+                  </div>
+                  <a href="#descargar" class="btn-active" style="transform:skewX(-8deg);display:inline-flex;align-items:center;padding:16px 32px;background:#fff;color:#0d141e;font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;text-transform:uppercase;font-style:italic;transition:all 0.2s;cursor:pointer;">
+                    <span style="transform:skewX(8deg);">{t.community.clan.cta}</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Right: Leaderboard -->
+          <div style="background:#1a202a;border:1px solid #5a4137;padding:32px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:32px;">
+              <span class="material-symbols-outlined" style="color:#ff6b1a;font-size:32px;">military_tech</span>
+              <h3 style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#fff;text-transform:uppercase;">{t.community.leaderboard.title}</h3>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:24px;">
+              <!-- Top 1 -->
+              <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid rgba(90,65,55,0.3);">
+                <div style="display:flex;align-items:center;gap:16px;">
+                  <span style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#ff6b1a;">01</span>
+                  <div>
+                    <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;color:#fff;font-style:italic;">{t.community.leaderboard.rank1}</div>
+                    <div style="font-family:'Archivo Narrow',sans-serif;font-size:10px;color:#e2bfb2;text-transform:uppercase;">{t.community.leaderboard.rank1Stats}</div>
+                  </div>
+                </div>
+                <span class="material-symbols-outlined" style="color:#ff6b1a;"  font-variation-settings="'FILL' 1;">workspace_premium</span>
+              </div>
+              <!-- Top 2 -->
+              <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid rgba(90,65,55,0.3);">
+                <div style="display:flex;align-items:center;gap:16px;">
+                  <span style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#fff;opacity:0.5;">02</span>
+                  <div>
+                    <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;color:#fff;font-style:italic;">{t.community.leaderboard.rank2}</div>
+                    <div style="font-family:'Archivo Narrow',sans-serif;font-size:10px;color:#e2bfb2;text-transform:uppercase;">{t.community.leaderboard.rank2Stats}</div>
+                  </div>
+                </div>
+              </div>
+              <!-- Top 3 -->
+              <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid rgba(90,65,55,0.3);">
+                <div style="display:flex;align-items:center;gap:16px;">
+                  <span style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#fff;opacity:0.5;">03</span>
+                  <div>
+                    <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;color:#fff;font-style:italic;">{t.community.leaderboard.rank3}</div>
+                    <div style="font-family:'Archivo Narrow',sans-serif;font-size:10px;color:#e2bfb2;text-transform:uppercase;">{t.community.leaderboard.rank3Stats}</div>
+                  </div>
+                </div>
+              </div>
+              <!-- Your Rank -->
+              <div style="margin-top:48px;background:rgba(255,107,26,0.1);border:1px solid #ff6b1a;padding:16px;transform:skewX(-4deg);">
+                <div style="display:flex;justify-content:space-between;align-items:center;transform:skewX(4deg);">
+                  <div>
+                    <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#ff6b1a;text-transform:uppercase;">{t.community.leaderboard.yourRank}</div>
+                    <div style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#fff;">{t.community.leaderboard.rankNumber}</div>
+                  </div>
+                  <div style="text-align:right;">
+                    <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#ff6b1a;text-transform:uppercase;">{t.community.leaderboard.nextTier}</div>
+                    <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:14px;color:#fff;">{t.community.leaderboard.nextTierXP}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- STATS -->
     <section id="stats" style="padding:80px 0;">
       <div style="max-width:1200px;margin:0 auto;padding:0 64px;display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:center;">

@@ -51,7 +51,48 @@
     "stats": "Estadísticas",
     "download": "Descargar",
     "terms": "Términos",
-    "privacy": "Privacidad"
+    "privacy": "Privacidad",
+    "support": "Soporte",
+    "contact": "Contacto"
+  },
+  "community": {
+    "title": "SQUAD & COMMUNITY",
+    "eyebrow": "02 // LA ALIANZA",
+    "socialHub": {
+      "title": "SOCIAL HUB",
+      "body": "Mantenete conectado. Chateá con tu crew, compartí highlight reels y espeá a la competencia en tiempo real.",
+      "friendsActive": "4 AMIGOS ACTIVOS AHORA"
+    },
+    "pickups": {
+      "title": "PICKUPS & EVENTS",
+      "body": "Organizá partidos privados o unite a eventos públicos elite. Match-making custom basado en tus stats profesionales.",
+      "event1": "PARTIDO_DOMINGO_@_9PM",
+      "event1Status": "UNIDO",
+      "event2": "INVITACION_ABIERTA_ELITE",
+      "event2Status": "INSCRIBITE"
+    },
+    "clan": {
+      "badge": "NUEVO: SISTEMA DE CLANES",
+      "title": "CONQUER THE COURT",
+      "body": "Presentá a tu squad en el escenario global. Ganá partidos en tu cancha para reclamar el título de",
+      "highlight": "CANCHA CONQUISTADA POR EL CLAN",
+      "currentRulers": "GOBERNANTES ACTUALES",
+      "clanName": "LOS_RUDOS_V12",
+      "cta": "DESAFIAR CLAN"
+    },
+    "leaderboard": {
+      "title": "KING OF THE COURT",
+      "rank1": "PHANTOM_HOOPER",
+      "rank1Stats": "342 VICTORIAS // 94% TG",
+      "rank2": "SKYWALKER_X",
+      "rank2Stats": "289 VICTORIAS // 88% TG",
+      "rank3": "BUCKET_GOD_7",
+      "rank3Stats": "256 VICTORIAS // 82% TG",
+      "yourRank": "TU RANKING",
+      "rankNumber": "#1.432",
+      "nextTier": "SIGUIENTE NIVEL",
+      "nextTierXP": "120 XP"
+    }
   },
   "terms": {
     "badge": "1OF1",

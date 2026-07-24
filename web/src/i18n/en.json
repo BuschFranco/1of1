@@ -51,7 +51,48 @@
     "stats": "Stats",
     "download": "Download",
     "terms": "Terms",
-    "privacy": "Privacy"
+    "privacy": "Privacy",
+    "support": "Support",
+    "contact": "Contact"
+  },
+  "community": {
+    "title": "SQUAD & COMMUNITY",
+    "eyebrow": "02 // THE ALLIANCE",
+    "socialHub": {
+      "title": "SOCIAL HUB",
+      "body": "Stay connected. Chat with your crew, share highlight reels, and scout the competition in real-time.",
+      "friendsActive": "4 FRIENDS ACTIVE NOW"
+    },
+    "pickups": {
+      "title": "PICKUPS & EVENTS",
+      "body": "Host private runs or join elite public events. Custom match-making based on your pro-grade stats.",
+      "event1": "SUNDAY_RUN_@_9PM",
+      "event1Status": "JOINED",
+      "event2": "ELITE_OPEN_INVITE",
+      "event2Status": "SIGN UP"
+    },
+    "clan": {
+      "badge": "NEW: CLAN SYSTEM",
+      "title": "CONQUER THE COURT",
+      "body": "Introduce your squad to the global stage. Win matches at your local park to claim the title of",
+      "highlight": "CANCHA CONQUISTADA POR EL CLAN",
+      "currentRulers": "CURRENT RULERS",
+      "clanName": "LOS_RUDOS_V12",
+      "cta": "CHALLENGE CLAN"
+    },
+    "leaderboard": {
+      "title": "KING OF THE COURT",
+      "rank1": "PHANTOM_HOOPER",
+      "rank1Stats": "342 WINS // 94% WR",
+      "rank2": "SKYWALKER_X",
+      "rank2Stats": "289 WINS // 88% WR",
+      "rank3": "BUCKET_GOD_7",
+      "rank3Stats": "256 WINS // 82% WR",
+      "yourRank": "YOUR RANKING",
+      "rankNumber": "#1,432",
+      "nextTier": "NEXT TIER",
+      "nextTierXP": "120 XP"
+    }
   },
   "terms": {
     "badge": "1OF1",
