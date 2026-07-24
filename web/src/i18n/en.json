@@ -61,7 +61,13 @@
     "socialHub": {
       "title": "SOCIAL HUB",
       "body": "Stay connected. Chat with your crew, share highlight reels, and scout the competition in real-time.",
-      "friendsActive": "3 FRIENDS ACTIVE NOW"
+      "friendsActive": "3 FRIENDS ACTIVE NOW",
+      "friend1": "[BOCA]@agus",
+      "friend1Status": "Playing at Plaza Italia",
+      "friend2": "[CLAN]@tomi_b",
+      "friend2Status": "Played at Houssay · 1h ago",
+      "friend3": "[RIV]@santi_k",
+      "friend3Status": "Offline"
     },
     "pickups": {
       "title": "PICKUPS & EVENTS",
