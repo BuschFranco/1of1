@@ -61,14 +61,14 @@
     "socialHub": {
       "title": "SOCIAL HUB",
       "body": "Stay connected. Chat with your crew, share highlight reels, and scout the competition in real-time.",
-      "friendsActive": "4 FRIENDS ACTIVE NOW"
+      "friendsActive": "3 FRIENDS ACTIVE NOW"
     },
     "pickups": {
       "title": "PICKUPS & EVENTS",
-      "body": "Host private runs or join elite public events. Custom match-making based on your pro-grade stats.",
+      "body": "Host private runs or join public events. Get matched with players at your skill level for the best competition.",
       "event1": "SUNDAY_RUN_@_9PM",
       "event1Status": "JOINED",
-      "event2": "ELITE_OPEN_INVITE",
+      "event2": "OPEN_INVITE",
       "event2Status": "SIGN UP"
     },
     "clan": {
@@ -77,16 +77,16 @@
       "body": "Introduce your squad to the global stage. Win matches at your local park to claim the title of",
       "highlight": "CANCHA CONQUISTADA POR EL CLAN",
       "currentRulers": "CURRENT RULERS",
-      "clanName": "LOS_RUDOS_V12",
+      "clanName": "RENN",
       "cta": "CHALLENGE CLAN"
     },
     "leaderboard": {
       "title": "KING OF THE COURT",
-      "rank1": "PHANTOM_HOOPER",
+      "rank1": "@phantom_hooper",
       "rank1Stats": "342 WINS // 94% WR",
-      "rank2": "SKYWALKER_X",
+      "rank2": "@skywalker_x",
       "rank2Stats": "289 WINS // 88% WR",
-      "rank3": "BUCKET_GOD_7",
+      "rank3": "@bucket_god_7",
       "rank3Stats": "256 WINS // 82% WR",
       "yourRank": "YOUR RANKING",
       "rankNumber": "#1,432",
