@@ -37,6 +37,11 @@ const features = t.features.items;
       .card-hover:hover { border-color: #ff6b1a; transform: translateY(-4px); }
       .cta-btn { transition: background 0.2s, color 0.2s, box-shadow 0.2s; }
       .cta-btn:hover { background: rgba(255,107,26,0.15); box-shadow: 0 0 20px rgba(255,107,26,0.3); }
+      .reveal { opacity: 0; transition: opacity 0.7s ease, transform 0.7s ease; }
+      .reveal.reveal-left { transform: translateX(-60px); }
+      .reveal.reveal-right { transform: translateX(60px); }
+      .reveal.in { opacity: 1; transform: none; }
+      @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } }
     </style>
   </head>
   <body>
@@ -148,7 +153,7 @@ const features = t.features.items;
           <div style="display:flex;flex-direction:column;gap:24px;">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
               <!-- Social Hub -->
-              <div class="card-hover" style="background:rgba(26,32,42,0.7);border:1px solid #5a4137;padding:32px;">
+              <div class="card-hover reveal reveal-left" style="background:rgba(26,32,42,0.7);border:1px solid #5a4137;padding:32px;">
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
                   <span class="material-symbols-outlined" style="color:#ff6b1a;font-size:32px;">group</span>
                   <h3 style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#fff;">{t.community.socialHub.title}</h3>
@@ -180,7 +185,7 @@ const features = t.features.items;
                 <div style="font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;color:#ff6b1a;font-style:italic;text-transform:uppercase;">{t.community.socialHub.friendsActive}</div>
               </div>
               <!-- Pickups & Events -->
-              <div class="card-hover" style="background:rgba(26,32,42,0.7);border:1px solid #5a4137;padding:32px;">
+              <div class="card-hover reveal reveal-right" style="background:rgba(26,32,42,0.7);border:1px solid #5a4137;padding:32px;">
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
                   <span class="material-symbols-outlined" style="color:#ff6b1a;font-size:32px;">event_available</span>
                   <h3 style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#fff;">{t.community.pickups.title}</h3>
@@ -199,7 +204,7 @@ const features = t.features.items;
               </div>
             </div>
             <!-- Clan System -->
-            <div style="background:rgba(36,42,53,0.7);border:2px solid #ff6b1a;padding:32px;position:relative;overflow:hidden;">
+            <div class="reveal reveal-left" style="background:rgba(36,42,53,0.7);border:2px solid #ff6b1a;padding:32px;position:relative;overflow:hidden;">
               <div style="position:absolute;right:-40px;top:-40px;opacity:0.1;transform:rotate(12deg);pointer-events:none;">
                 <span class="material-symbols-outlined" style="font-size:200px;">shield</span>
               </div>
@@ -225,7 +230,7 @@ const features = t.features.items;
             </div>
           </div>
           <!-- Right: Leaderboard -->
-          <div style="background:rgba(26,32,42,0.7);border:1px solid #5a4137;padding:32px;">
+          <div class="reveal reveal-right" style="background:rgba(26,32,42,0.7);border:1px solid #5a4137;padding:32px;">
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:32px;">
               <span class="material-symbols-outlined" style="color:#ff6b1a;font-size:32px;">military_tech</span>
               <h3 style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;color:#fff;text-transform:uppercase;">{t.community.leaderboard.title}</h3>
@@ -284,7 +289,7 @@ const features = t.features.items;
     <!-- STATS -->
     <section id="stats" style="padding:80px 0;">
       <div style="max-width:1200px;margin:0 auto;padding:0 64px;display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:center;">
-        <div data-tilt style="background:rgba(36,42,53,0.7);border:2px solid #5a4137;padding:32px;box-shadow:0 25px 50px rgba(0,0,0,0.5);transform:rotateY(-10deg) rotateX(5deg);">
+        <div data-tilt class="reveal reveal-left" style="background:rgba(36,42,53,0.7);border:2px solid #5a4137;padding:32px;box-shadow:0 25px 50px rgba(0,0,0,0.5);transform:rotateY(-10deg) rotateX(5deg);">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:32px;">
             <div style="display:flex;align-items:center;gap:12px;">
               <div style="width:48px;height:48px;background:#ff6b1a;display:flex;align-items:center;justify-content:center;">
@@ -323,7 +328,7 @@ const features = t.features.items;
             <div style="position:absolute;bottom:16px;left:16px;font-family:'Anybody',sans-serif;font-weight:800;font-size:12px;color:#ff6b1a;text-transform:uppercase;letter-spacing:0.1em;font-style:italic;">{t.stats.liveChart}</div>
           </div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="reveal reveal-right" style="display:flex;flex-direction:column;gap:16px;">
           <h2 style="font-family:'Anton',sans-serif;font-size:48px;font-style:italic;text-transform:uppercase;color:#fff;line-height:1;">{t.stats.title} <span style="color:#ff6b1a;">{t.stats.titleAccent}</span></h2>
           <p style="font-family:'Archivo Narrow',sans-serif;font-size:18px;color:#e2bfb2;">{t.stats.desc}</p>
           <ul style="display:flex;flex-direction:column;gap:16px;margin-top:16px;">
@@ -376,6 +381,18 @@ const features = t.features.items;
     </footer>
 
     <script is:inline>
+      // Reveal on scroll
+      (function() {
+        const els = document.querySelectorAll('.reveal');
+        if (!els.length) return;
+        const io = new IntersectionObserver((entries) => {
+          for (const e of entries) {
+            if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+          }
+        }, { rootMargin: '0px 0px -8% 0px' });
+        els.forEach((el) => io.observe(el));
+      })();
+
       window.addEventListener('load', () => {
         const loader = document.getElementById('loader');
         setTimeout(() => { loader.style.opacity = '0'; loader.style.visibility = 'hidden'; }, 600);
