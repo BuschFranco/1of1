@@ -106,9 +106,9 @@ const features = t.features.items;
             <h3 style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;text-transform:uppercase;color:#fff;">{features[0].title}</h3>
             <p style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#e2bfb2;">{features[0].body}</p>
             <div style="margin-top:auto;padding-top:16px;">
-              <div style="position:relative;height:160px;width:100%;overflow:hidden;filter:grayscale(1);transition:filter 0.5s;" onmouseover="this.style.filter='grayscale(0)'" onmouseout="this.style.filter='grayscale(1)'">
-                <div style="position:absolute;inset:0;background:rgba(255,107,26,0.2);mix-blend-mode:overlay;"></div>
-                <div style="width:100%;height:100%;background:linear-gradient(135deg,#1a202a 0%,#242a35 50%,#1a202a 100%);background-size:cover;background-position:center;"></div>
+              <div style="position:relative;height:160px;width:100%;overflow:hidden;">
+                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuBRJvLLA6M1Mbi0b--QP_DPhA6sRLvgSumaLmZrj8YWLkiTmoevV0xJgyXyCvaN4mP9jk98hwkZiWczU4tyrDow5G3vzvcfpK2FjvgH-dU1oK1r-_I8c2sX-1SHN4yDYyVjO6ohf_I_7JBF0gsYAiaHyoh8MIiSyYPEF8jCqDylmIkboJZX9ONjJNYHGkn3SGSCXGDkiL67zV-v6PSREFQhhorbM0yjoHQtCPBVrCPMEUZ0jJBWtT5CxsCmgup4l-qQ9NsgX9Diojs" alt="Court map" style="width:100%;height:100%;object-fit:cover;filter:grayscale(1);transition:filter 0.5s;" onmouseover="this.style.filter='grayscale(0)'" onmouseout="this.style.filter='grayscale(1)'" />
+                <div style="position:absolute;inset:0;background:rgba(255,107,26,0.15);mix-blend-mode:overlay;"></div>
               </div>
             </div>
           </div>
@@ -117,6 +117,14 @@ const features = t.features.items;
             <span class="material-symbols-outlined" style="font-size:48px;color:#ff6b1a;">distance</span>
             <h3 style="font-family:'Anton',sans-serif;font-size:32px;font-style:italic;text-transform:uppercase;color:#fff;">{features[1].title}</h3>
             <p style="font-family:'Archivo Narrow',sans-serif;font-size:16px;color:#e2bfb2;">{features[1].body}</p>
+            <div style="margin-top:auto;padding-top:16px;position:relative;height:120px;width:100%;overflow:hidden;border:1px solid #5a4137;background:#080e18;">
+              <div style="position:absolute;top:50%;left:0;width:100%;height:1px;background:#5a4137;opacity:0.3;"></div>
+              <div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:#5a4137;opacity:0.3;"></div>
+              <div style="position:absolute;top:30%;left:20%;width:6px;height:6px;background:#ff6b1a;border-radius:50%;box-shadow:0 0 8px rgba(255,107,26,0.8);"></div>
+              <div style="position:absolute;top:60%;left:45%;width:8px;height:8px;background:#ff6b1a;border-radius:50%;box-shadow:0 0 10px rgba(255,107,26,0.8);"></div>
+              <div style="position:absolute;top:40%;left:70%;width:5px;height:5px;background:#ff6b1a;border-radius:50%;box-shadow:0 0 6px rgba(255,107,26,0.6);opacity:0.7;"></div>
+              <div style="position:absolute;bottom:8px;left:8px;font-family:'Anybody',sans-serif;font-weight:800;font-size:10px;color:#ff6b1a;text-transform:uppercase;letter-spacing:0.1em;font-style:italic;">LIVE TRACKING</div>
+            </div>
           </div>
           <!-- Feature 3: ELITE STATS -->
           <div class="card-hover" style="background:#1a202a;border:1px solid #5a4137;padding:32px;display:flex;flex-direction:column;gap:16px;position:relative;overflow:hidden;">
