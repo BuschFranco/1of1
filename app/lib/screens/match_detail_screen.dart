@@ -241,7 +241,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     return Column(
       children: [
         Text(has ? '+${s.points}' : '—',
-            style: AppText.archivo(
+            style: AppText.display(
                 size: 46,
                 weight: FontWeight.w900,
                 height: 1.0,
@@ -869,7 +869,7 @@ class _ShareCard extends StatelessWidget {
           Container(width: 56, height: 5, color: color),
           const SizedBox(height: 22),
           Text(label,
-              style: AppText.archivo(
+              style: AppText.display(
                   size: 36,
                   weight: FontWeight.w900,
                   color: color,
@@ -879,7 +879,7 @@ class _ShareCard extends StatelessWidget {
           Text(
             court?.name ?? (s.courtName.isEmpty ? 'Cancha' : s.courtName),
             textAlign: TextAlign.center,
-            style: AppText.archivo(
+            style: AppText.display(
                 size: 64, weight: FontWeight.w900, height: 1.05),
           ),
           if (court != null && court!.area.isNotEmpty) ...[
@@ -915,7 +915,7 @@ class _ShareCard extends StatelessWidget {
             const SizedBox(height: 56),
             if ((s.userPoints ?? 0) > 0) ...[
               Text('${s.userPoints}',
-                  style: AppText.archivo(
+                  style: AppText.display(
                       size: 128,
                       weight: FontWeight.w900,
                       color: AppColors.accent,
@@ -1030,7 +1030,7 @@ class _ShareCard extends StatelessWidget {
     return Column(
       children: [
         Text(value,
-            style: AppText.archivo(
+            style: AppText.display(
                 size: 78, weight: FontWeight.w900, color: color ?? Colors.white)),
         const SizedBox(height: 10),
         Text(label,
@@ -1061,7 +1061,7 @@ class _ShareCard extends StatelessWidget {
                     color: AppColors.white(0.6))),
           ),
           Text(value,
-              style: AppText.archivo(
+              style: AppText.display(
                   size: 44, weight: FontWeight.w900, color: Colors.white)),
         ],
       ),
@@ -1075,7 +1075,7 @@ class _ShareCard extends StatelessWidget {
         Icon(icon, size: 36, color: AppColors.accent),
         const SizedBox(width: 14),
         Text(text,
-            style: AppText.archivo(
+            style: AppText.display(
                 size: 34, weight: FontWeight.w800, color: Colors.white)),
       ],
     );

@@ -61,24 +61,19 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+  # Mismas tres familias que la web (web/src/styles/tokens.css): Anton para
+  # titulares, Archivo Narrow para texto y Anybody para etiquetas.
+  # Archivo Narrow y Anybody son fuentes VARIABLES (Google solo publica esa
+  # variante): el peso no sale del `weight:` de acá sino del eje `wght`, que
+  # AppText aplica con `fontVariations`. Ver lib/theme/app_theme.dart.
   fonts:
-    - family: Jost
+    - family: Anton
       fonts:
-        - asset: assets/fonts/jost/Jost-400-Book.otf
+        - asset: assets/fonts/anton/Anton-Regular.ttf
           weight: 400
-        - asset: assets/fonts/jost/Jost-400-BookItalic.otf
-          weight: 400
-          style: italic
-        - asset: assets/fonts/jost/Jost-500-Medium.otf
-          weight: 500
-        - asset: assets/fonts/jost/Jost-600-Semi.otf
-          weight: 600
-        - asset: assets/fonts/jost/Jost-700-Bold.otf
-          weight: 700
-        - asset: assets/fonts/jost/Jost-700-BoldItalic.otf
-          weight: 700
-          style: italic
-        - asset: assets/fonts/jost/Jost-800-Hevy.otf
-          weight: 800
-        - asset: assets/fonts/jost/Jost-900-Black.otf
-          weight: 900
+    - family: ArchivoNarrow
+      fonts:
+        - asset: assets/fonts/archivo_narrow/ArchivoNarrow-Variable.ttf
+    - family: Anybody
+      fonts:
+        - asset: assets/fonts/anybody/Anybody-Variable.ttf

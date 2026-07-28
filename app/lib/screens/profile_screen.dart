@@ -185,7 +185,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         children: [
                           Text(
                             'Perfil',
-                            style: AppText.archivo(
+                            style: AppText.display(
                               size: 30,
                               weight: FontWeight.w900,
                               color: _onDarkBg ? Colors.white : AppColors.ink,
@@ -372,7 +372,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Text(
                 'Perfil',
-                style: AppText.archivo(
+                style: AppText.display(
                   size: 30,
                   weight: FontWeight.w900,
                   color: _onDarkBg ? Colors.white : AppColors.ink,
@@ -665,7 +665,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: hasClan
                       ? clanFontStyle(profile.clanFont,
                           size: 30, color: textColor)
-                      : AppText.archivo(
+                      : AppText.display(
                           size: 36, weight: FontWeight.w900, color: textColor),
                 ),
               ),

@@ -78,7 +78,7 @@ class _CrewScreenState extends State<CrewScreen> {
               children: [
                 Text(
                   'Crew',
-                  style: AppText.archivo(
+                  style: AppText.display(
                     size: 34,
                     weight: FontWeight.w900,
                     color: Colors.white,

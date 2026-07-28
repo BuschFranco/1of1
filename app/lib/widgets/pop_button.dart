@@ -68,7 +68,7 @@ class _PopButtonState extends State<PopButton>
             children: [
               Text(
                 widget.label.toUpperCase(),
-                style: AppText.display(
+                style: AppText.archivo(
                   size: 14,
                   weight: FontWeight.w800,
                   letterSpacing: 0.04,

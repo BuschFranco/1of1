@@ -56,7 +56,7 @@ class _HandleSetupScreenState extends State<HandleSetupScreen> {
                 children: [
                   Text(
                     name.isEmpty ? '¡Bienvenido! 🏀' : '¡Bienvenido, ${name.split(' ').first}! 🏀',
-                    style: AppText.archivo(size: 28, weight: FontWeight.w900, height: 1.05),
+                    style: AppText.display(size: 28, weight: FontWeight.w900, height: 1.05),
                   ),
                   const SizedBox(height: 10),
                   Text(

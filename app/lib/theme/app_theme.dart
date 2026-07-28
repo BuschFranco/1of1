@@ -66,18 +66,37 @@ class AppShape {
   static const double rField = 16; // inputs de texto (rectángulo redondeado, no píldora)
 }
 
+/// Tipografía de la marca: las mismas tres familias que la web
+/// (`web/src/styles/tokens.css`), con un helper por rol.
+///
+/// | Helper      | Familia        | Rol en la web  |
+/// | ----------- | -------------- | -------------- |
+/// | `display()` | Anton          | titulares      |
+/// | `archivo()` | Anybody        | etiquetas      |
+/// | `grotesk()` | Archivo Narrow | texto corrido  |
+///
+/// Archivo Narrow y Anybody son **fuentes variables**: declarar `fontWeight` no
+/// alcanza para moverles el peso, hay que empujar el eje `wght` con
+/// `fontVariations`. Por eso los helpers mandan las dos cosas — `fontWeight`
+/// para que Flutter elija bien la familia y calcule el fallback, y la variación
+/// para que el trazo sea realmente el pedido.
 class AppText {
-  /// Fuente display de la marca (títulos): Jost — geometric sans-serif
-  /// inspirada en Futura (estilo Nike). Bold por defecto.
+  /// Eje `wght` a partir del `FontWeight` pedido.
+  static List<FontVariation> _wght(FontWeight w) =>
+      [FontVariation('wght', w.value.toDouble())];
+
+  /// Titulares de la marca: Anton, condensada y pesada. Viene en un solo peso
+  /// (400), así que acá `weight` no cambia el trazo — no le pases pesos
+  /// esperando variación.
   static TextStyle display({
     double size = 14,
-    FontWeight weight = FontWeight.w700,
+    FontWeight weight = FontWeight.w400,
     Color color = AppColors.ink,
     double letterSpacing = 0,
     double? height,
   }) {
     return TextStyle(
-      fontFamily: 'Jost',
+      fontFamily: 'Anton',
       fontSize: size,
       fontWeight: weight,
       color: color,
@@ -86,22 +105,28 @@ class AppText {
     );
   }
 
-  /// Alias histórico.
+  /// Etiquetas y títulos de sección: Anybody. Es la que la web usa para
+  /// botones y rótulos en mayúscula. Conserva el nombre histórico porque lo
+  /// usan ~150 call-sites.
   static TextStyle archivo({
     double size = 14,
     FontWeight weight = FontWeight.w900,
     Color color = AppColors.ink,
     double letterSpacing = 0,
     double? height,
-  }) =>
-      display(
-        size: size,
-        weight: weight,
-        color: color,
-        letterSpacing: letterSpacing,
-        height: height,
-      );
+  }) {
+    return TextStyle(
+      fontFamily: 'Anybody',
+      fontSize: size,
+      fontWeight: weight,
+      fontVariations: _wght(weight),
+      color: color,
+      letterSpacing: letterSpacing * size,
+      height: height,
+    );
+  }
 
+  /// Texto corrido: Archivo Narrow.
   static TextStyle grotesk({
     double size = 12,
     FontWeight weight = FontWeight.w500,
@@ -110,9 +135,10 @@ class AppText {
     double? height,
   }) {
     return TextStyle(
-      fontFamily: 'Jost',
+      fontFamily: 'ArchivoNarrow',
       fontSize: size,
       fontWeight: weight,
+      fontVariations: _wght(weight),
       color: color,
       letterSpacing: letterSpacing * size,
       height: height,
@@ -129,13 +155,14 @@ ThemeData buildAppTheme() {
       secondary: AppColors.accent,
       surface: AppColors.bg,
     ),
+    // Texto corrido en Archivo Narrow y etiquetas en Anybody, igual que la web.
     textTheme: ThemeData.dark().textTheme.copyWith(
-      bodyLarge: const TextStyle(fontFamily: 'Jost'),
-      bodyMedium: const TextStyle(fontFamily: 'Jost'),
-      bodySmall: const TextStyle(fontFamily: 'Jost'),
-      labelLarge: const TextStyle(fontFamily: 'Jost'),
-      labelMedium: const TextStyle(fontFamily: 'Jost'),
-      labelSmall: const TextStyle(fontFamily: 'Jost'),
+      bodyLarge: const TextStyle(fontFamily: 'ArchivoNarrow'),
+      bodyMedium: const TextStyle(fontFamily: 'ArchivoNarrow'),
+      bodySmall: const TextStyle(fontFamily: 'ArchivoNarrow'),
+      labelLarge: const TextStyle(fontFamily: 'Anybody'),
+      labelMedium: const TextStyle(fontFamily: 'Anybody'),
+      labelSmall: const TextStyle(fontFamily: 'Anybody'),
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: AppColors.bgElev,

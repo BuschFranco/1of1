@@ -262,7 +262,7 @@ class DetailScreen extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   court.name,
-                  style: AppText.archivo(
+                  style: AppText.display(
                     size: 38,
                     weight: FontWeight.w900,
                     letterSpacing: -0.01,

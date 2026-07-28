@@ -109,7 +109,7 @@ class OnboardingScreen extends StatelessWidget {
           const SizedBox(height: 14),
           Text(
             'Encontrá tu\npróxima\ncancha.',
-            style: AppText.archivo(
+            style: AppText.display(
               size: 46,
               weight: FontWeight.w900,
               color: AppColors.accent,

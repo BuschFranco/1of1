@@ -187,7 +187,7 @@ class CreateScreen extends StatelessWidget {
             children: [
               Text(
                 'Juego',
-                style: AppText.archivo(
+                style: AppText.display(
                   size: 34,
                   weight: FontWeight.w900,
                   letterSpacing: -0.01,

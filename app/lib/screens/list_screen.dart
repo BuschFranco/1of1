@@ -97,7 +97,7 @@ class _ListScreenState extends State<ListScreen> {
                   const SizedBox(height: 8),
                   Text(
                     'Canchas\ncerca tuyo.',
-                    style: AppText.archivo(
+                    style: AppText.display(
                       size: 38,
                       weight: FontWeight.w900,
                       color: Colors.white,

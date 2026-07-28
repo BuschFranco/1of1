@@ -307,7 +307,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       const SizedBox(height: 40),
                       Text(
                         _isSignup ? 'Creá tu cuenta' : 'Bienvenido de vuelta',
-                        style: AppText.archivo(
+                        style: AppText.display(
                           size: 30,
                           weight: FontWeight.w900,
                           height: 1.05,
@@ -702,7 +702,7 @@ class _AuthScreenState extends State<AuthScreen> {
               )
             : Text(
                 (_isSignup ? 'Crear cuenta' : 'Ingresar').toUpperCase(),
-                style: AppText.display(
+                style: AppText.archivo(
                   size: 14,
                   weight: FontWeight.w800,
                   letterSpacing: 0.04,

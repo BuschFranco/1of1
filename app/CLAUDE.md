@@ -253,7 +253,25 @@ El branding está centralizado. Seguí este checklist en orden.
 - **Todo el color y la tipografía** salen de [`lib/theme/app_theme.dart`](lib/theme/app_theme.dart):
   - `AppColors` (acento `accent`/`accentDark`, fondos `bg`/`bgElev`, estados
     `open`/`busy`/`closed`).
-  - `AppText.archivo` / `AppText.grotesk` (fuentes de Google Fonts).
+  - `AppText`, con un helper por rol tipográfico. Las tres familias son **las
+    mismas que la web** (`web/src/styles/tokens.css`) y están **bundleadas** en
+    `assets/fonts/` (no se bajan en runtime):
+
+    | Helper | Familia | Rol |
+    | --- | --- | --- |
+    | `AppText.display()` | Anton | titulares |
+    | `AppText.archivo()` | Anybody | etiquetas y títulos de sección |
+    | `AppText.grotesk()` | Archivo Narrow | texto corrido |
+
+  - **Anybody y Archivo Narrow son fuentes variables**: el `fontWeight` solo no
+    mueve el trazo, hace falta el eje `wght` vía `fontVariations`. Los helpers
+    ya mandan las dos cosas; si escribís un `TextStyle` a mano con esas
+    familias, acordate de la variación o vas a ver todo en peso 400.
+  - **Anton viene en un solo peso** (400) y sin itálica: pasarle `weight` no
+    cambia nada.
+  - `GoogleFonts` sigue en uso **solo** para las fuentes cosméticas de clan que
+    elige el usuario (`clanFontStyle` en `lib/data/cosmetics.dart`), no para la
+    tipografía de la app.
 - Cambiá los valores ahí y se propaga a toda la app. **No** hay colores hardcodeados
   sueltos que valga la pena migrar salvo tints puntuales (buscá `Color(0x...)` en
   `profile_screen.dart` si querés afinar).
