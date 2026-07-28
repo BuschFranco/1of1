@@ -1,90 +1,89 @@
 ---
 import Base from './Base.astro';
+import { useTranslations } from '../i18n';
+import type { Lang } from '../lib/urls';
 
 interface Props {
-  title: string;
-  updated: string;
+  lang: Lang;
+  doc: 'terms' | 'privacy';
 }
-const { title, updated } = Astro.props;
+const { lang, doc } = Astro.props;
+const t = useTranslations(lang);
+const d = doc === 'terms' ? t.terms : t.privacy;
 ---
 
-<Base title={`${title} — 1of1`} description={`${title} de la app 1of1.`}>
-  <article class="legal container">
-    <p class="eyebrow reveal">1of1</p>
-    <h1 class="reveal">{title}</h1>
-    <p class="legal-updated reveal">Última actualización: {updated}</p>
+<Base lang={lang} title={`${d.title} — 1OF1`} variant="legal" current={doc}>
+  <main class="legal">
+    <span class="eyebrow">{d.badge}</span>
+    <h1 class="legal-title">{d.title}</h1>
+    <p class="legal-updated">{d.updated}</p>
 
-    <div class="legal-body reveal">
-      <slot />
+    <div class="legal-body">
+      <p>{d.intro}</p>
+      {
+        d.sections.map((s: { heading: string; body: string }) => (
+          <>
+            <h2>{s.heading}</h2>
+            <p>{s.body}</p>
+          </>
+        ))
+      }
+      <h2>{d.contactLabel}</h2>
+      <p><a class="legal-mail" href={`mailto:${d.email}`}>{d.email}</a></p>
     </div>
-  </article>
+  </main>
 </Base>
 
 <style>
   .legal {
-    max-width: 780px;
-    padding-top: clamp(48px, 8vh, 88px);
+    max-width: var(--maxw-legal);
+    margin-inline: auto;
+    /* Antes era `120px 64px 80px` fijo: ahora arranca debajo de la barra real
+     * y el lateral acompaña al gutter del resto del sitio. */
+    padding: calc(var(--nav-h) + 40px) var(--gutter) var(--section-y);
   }
-  .legal h1 {
+
+  .legal-title {
+    font-family: var(--font-display);
     font-size: clamp(34px, 6vw, 56px);
-    margin-top: 14px;
+    font-style: italic;
     text-transform: uppercase;
+    color: var(--ink-strong);
+    margin-top: 14px;
   }
+
   .legal-updated {
+    color: var(--ink-muted);
+    font-size: var(--fs-label);
     margin-top: 16px;
-    color: var(--ink-45);
-    font-size: 14px;
   }
+
   .legal-body {
     margin-top: 40px;
   }
-  .legal-body :global(h2) {
-    font-family: var(--font-display);
+
+  .legal-body p {
+    color: var(--ink-variant);
+    font-size: 16.5px;
+    line-height: 1.7;
+    margin-bottom: 14px;
+    overflow-wrap: break-word;
+  }
+
+  .legal-body h2 {
+    font-family: var(--font-label);
     font-weight: 800;
-    font-size: 14px;
+    font-size: var(--fs-label);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--accent);
     margin-top: 40px;
     margin-bottom: 14px;
   }
-  .legal-body :global(p) {
-    color: var(--ink-70);
-    font-size: 16.5px;
-    line-height: 1.7;
-    margin-bottom: 14px;
-  }
-  .legal-body :global(ul) {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin: 8px 0 18px;
-  }
-  .legal-body :global(li) {
-    position: relative;
-    padding-left: 22px;
-    color: var(--ink-70);
-    font-size: 16.5px;
-    line-height: 1.65;
-  }
-  .legal-body :global(li)::before {
-    content: '';
-    position: absolute;
-    left: 2px;
-    top: 11px;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--accent);
-  }
-  .legal-body :global(a) {
+
+  .legal-mail {
     color: var(--accent);
     text-decoration: underline;
     text-underline-offset: 2px;
-  }
-  .legal-body :global(strong) {
-    color: var(--ink);
-    font-weight: 700;
   }
 </style>

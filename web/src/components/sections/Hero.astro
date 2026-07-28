@@ -1,0 +1,178 @@
+---
+import { useTranslations } from '../../i18n';
+import { asset, type Lang } from '../../lib/urls';
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+---
+
+<section class="hero">
+  <div class="hero-bg" style={`background-image:url(${asset('hero-bg.png')});`}></div>
+  <div class="hero-scrim"></div>
+
+  <div class="hero-inner container">
+    <div class="hero-copy">
+      <span class="badge hero-badge">{t.hero.badge}</span>
+      <h1 class="hero-title">
+        <span class="hero-line reveal reveal-left">{t.hero.title1}</span>
+        <span class="hero-line hero-line--accent reveal reveal-right">{t.hero.title2}</span>
+      </h1>
+      <p class="hero-sub">{t.hero.subtitle}</p>
+      <div class="hero-actions">
+        <a href="#descargar" class="btn btn--lg btn--solid"><span>{t.hero.cta1}</span></a>
+        <a href="#features" class="btn btn--lg btn--ghost-white"><span>{t.hero.cta2}</span></a>
+      </div>
+      <p class="hero-free">
+        {t.hero.freeNote} <span>{t.hero.freeAccent}</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="hero-marquee" aria-hidden="true">
+    <h2 class="reveal reveal-left">CHAMPIONS ONLY CHAMPIONS ONLY CHAMPIONS ONLY</h2>
+  </div>
+</section>
+
+<style>
+  .hero {
+    position: relative;
+    min-height: 90vh;
+    min-height: 90dvh;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    padding-top: var(--nav-h);
+  }
+
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    background-size: auto 100%;
+    background-position: right center;
+    background-repeat: no-repeat;
+  }
+
+  .hero-scrim {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to right, var(--bg) 35%, rgba(13, 20, 30, 0.3) 70%, transparent);
+  }
+
+  .hero-inner {
+    position: relative;
+    z-index: 10;
+  }
+
+  .hero-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    max-width: 620px;
+  }
+
+  .hero-badge {
+    margin-bottom: 16px;
+  }
+
+  .hero-title {
+    font-family: var(--font-display);
+    font-size: var(--fs-hero);
+    line-height: 0.9;
+    font-style: italic;
+    text-transform: uppercase;
+    letter-spacing: -0.02em;
+    color: var(--ink-strong);
+  }
+
+  .hero-line {
+    display: block;
+    transition-delay: 0.7s;
+  }
+
+  .hero-line--accent {
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(255, 107, 26, 0.4);
+    transition-delay: 0.9s;
+  }
+
+  .hero-sub {
+    font-family: var(--font-body);
+    font-size: var(--fs-lead);
+    color: var(--ink-variant);
+    max-width: 500px;
+    margin-top: 16px;
+  }
+
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 32px;
+  }
+
+  .hero-free {
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
+    color: rgba(226, 191, 178, 0.5);
+    margin-top: 8px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+
+  .hero-free span {
+    color: var(--accent);
+  }
+
+  /* Texto decorativo gigante que sangra por los costados a propósito. */
+  .hero-marquee {
+    position: absolute;
+    bottom: -40px;
+    left: 0;
+    width: 100%;
+    overflow: hidden;
+    pointer-events: none;
+    opacity: 0.08;
+  }
+
+  .hero-marquee h2 {
+    font-family: var(--font-display);
+    font-size: var(--fs-marquee);
+    font-style: italic;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+    white-space: nowrap;
+    text-shadow: 0 0 40px rgba(0, 0, 0, 0.7), 0 0 80px rgba(0, 0, 0, 0.4);
+    transition-delay: 1s;
+    transition-duration: 1s;
+  }
+
+  @media (max-width: 720px) {
+    /* De costado la foto queda anclada a la derecha y se sale de pantalla;
+     * en angosto conviene encuadrarla y oscurecerla de arriba hacia abajo. */
+    .hero-bg {
+      background-size: cover;
+      background-position: center;
+    }
+
+    .hero-scrim {
+      background: linear-gradient(to bottom, rgba(13, 20, 30, 0.75) 0%, rgba(13, 20, 30, 0.85) 60%, var(--bg) 100%);
+    }
+
+    .hero {
+      padding-top: calc(var(--nav-h) + 24px);
+      padding-bottom: 48px;
+    }
+
+    .hero-marquee {
+      bottom: -12px;
+    }
+
+    .hero-actions .btn {
+      flex: 1 1 100%;
+    }
+  }
+</style>

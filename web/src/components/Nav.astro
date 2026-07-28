@@ -1,63 +1,252 @@
 ---
 import Logo from './Logo.astro';
+import LangSelector from './LangSelector.astro';
+import { useTranslations } from '../i18n';
+import { url, type Lang } from '../lib/urls';
+
+interface Props {
+  lang: Lang;
+  /** `landing` = anclas de la home · `legal` = navegación de los documentos. */
+  variant?: 'landing' | 'legal';
+  /** Marca en naranja el documento legal en el que estamos. */
+  current?: 'terms' | 'privacy';
+}
+const { lang, variant = 'landing', current } = Astro.props;
+const t = useTranslations(lang);
+
+const home = url(lang);
+const links =
+  variant === 'landing'
+    ? [
+        { href: '#features', label: t.nav.features, active: false },
+        { href: '#stats', label: t.nav.stats, active: false },
+        { href: '#descargar', label: t.nav.download, active: false },
+      ]
+    : [
+        { href: home, label: t.nav.home, active: false },
+        { href: url(lang, 'terminos'), label: t.footer.terms, active: current === 'terms' },
+        { href: url(lang, 'privacidad'), label: t.footer.privacy, active: current === 'privacy' },
+      ];
+
+const cta =
+  variant === 'landing'
+    ? { href: '#descargar', label: t.nav.getApp }
+    : { href: home, label: t.terms.back };
 ---
 
-<header class="nav">
-  <div class="container nav-inner">
-    <a href="/" class="nav-brand" aria-label="1of1 — inicio">
-      <Logo size={80} />
+<nav class="nav" data-nav data-open="false">
+  <div class="nav-inner container">
+    <a href={home} class="nav-brand" aria-label="1of1">
+      <Logo size={72} />
     </a>
 
-    <nav class="nav-links" aria-label="Principal">
-      <a href="/#caracteristicas">Características</a>
-      <a href="/#como-funciona">Cómo funciona</a>
-      <a href="/privacidad">Privacidad</a>
-    </nav>
+    <LangSelector current={lang} />
 
-    <a href="/#descargar" class="btn btn-primary nav-cta">Descargar</a>
+    <!-- En desktop es `display:contents`, así que los links y el CTA quedan
+         como hijos directos del flex (idéntico al layout original). En mobile
+         se convierte en el drawer. -->
+    <div class="nav-menu" id="nav-menu">
+      <div class="nav-links">
+        {
+          links.map((l) => (
+            <a href={l.href} class:list={['nav-link', { 'is-active': l.active }]}>
+              {l.label}
+            </a>
+          ))
+        }
+      </div>
+      <a href={cta.href} class="btn btn--solid btn--tracked nav-cta"><span>{cta.label}</span></a>
+    </div>
+
+    <button
+      type="button"
+      class="nav-toggle"
+      data-nav-toggle
+      aria-controls="nav-menu"
+      aria-expanded="false"
+      aria-label={t.nav.menu}
+    >
+      <span class="material-symbols-outlined nav-toggle-icon nav-toggle-open">menu</span>
+      <span class="material-symbols-outlined nav-toggle-icon nav-toggle-close">close</span>
+    </button>
   </div>
-</header>
+</nav>
 
 <style>
   .nav {
-    position: sticky;
+    position: fixed;
     top: 0;
+    left: 0;
+    /* Con barra de scroll clásica, el bloque contenedor de un elemento fijo y
+     * el ancho de la página no coinciden, y los navegadores no se ponen de
+     * acuerdo en cuál de las dos medidas incluye la barra: en unos `100%` es
+     * la mayor y en otros lo es `100vw`. El mínimo siempre es el viewport de
+     * layout, así que la barra queda alineada con el contenido en ambos casos
+     * (si no, el CTA/hamburguesa se iban detrás de la barra de scroll). */
+    width: min(100%, 100vw);
     z-index: 50;
-    background: rgba(10, 10, 10, 0.72);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border-bottom: 1px solid var(--ink-06);
+    background: rgba(13, 20, 30, 0.9);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 2px solid var(--border);
   }
+
   .nav-inner {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    height: 68px;
-    gap: 24px;
+    height: var(--nav-h);
   }
-  .nav-links {
+
+  .nav-brand {
     display: flex;
     align-items: center;
-    gap: 28px;
-    margin-left: auto;
+    --logo-size: 72px;
   }
+
+  .nav-menu {
+    display: contents;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 32px;
+  }
+
   .nav-links a {
-    font-weight: 600;
-    font-size: 15px;
-    color: var(--ink-70);
-    transition: color 0.15s ease;
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-size: var(--fs-label);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-variant);
+    font-style: italic;
   }
-  .nav-links a:hover {
-    color: var(--ink);
+
+  .nav-links a.is-active {
+    color: var(--accent);
   }
-  .nav-cta {
-    padding: 11px 20px;
-    font-size: 14px;
+
+  .nav-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin-right: -10px;
+    background: none;
+    border: none;
+    color: var(--ink-variant);
+    cursor: pointer;
+  }
+
+  .nav-toggle-icon {
+    font-size: 30px;
+  }
+
+  .nav-toggle-close {
+    display: none;
+  }
+
+  .nav[data-open='true'] .nav-toggle-open {
+    display: none;
+  }
+
+  .nav[data-open='true'] .nav-toggle-close {
+    display: inline;
   }
 
   @media (max-width: 720px) {
-    .nav-links {
+    .nav-brand {
+      --logo-size: 52px;
+    }
+
+    .nav-toggle {
+      display: inline-flex;
+    }
+
+    /* El drawer: cuelga de la barra fija y ocupa todo el ancho. */
+    .nav-menu {
       display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      flex-direction: column;
+      align-items: stretch;
+      background: rgba(13, 20, 30, 0.98);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 2px solid var(--border);
+      padding: 8px var(--gutter) 20px;
+      max-height: calc(100dvh - var(--nav-h));
+      overflow-y: auto;
+    }
+
+    .nav[data-open='true'] .nav-menu {
+      display: flex;
+    }
+
+    .nav-links {
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .nav-links a {
+      display: flex;
+      align-items: center;
+      min-height: 48px;
+      border-bottom: 1px solid rgba(90, 65, 55, 0.4);
+    }
+
+    .nav-cta {
+      margin-top: 16px;
+      align-self: flex-start;
     }
   }
 </style>
+
+<script is:inline>
+  (function () {
+    const nav = document.querySelector('[data-nav]');
+    const toggle = nav && nav.querySelector('[data-nav-toggle]');
+    if (!nav || !toggle) return;
+
+    function setOpen(open) {
+      nav.dataset.open = open ? 'true' : 'false';
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      // Bloquea el scroll de fondo mientras el drawer está abierto.
+      document.body.style.overflow = open ? 'hidden' : '';
+    }
+
+    toggle.addEventListener('click', function (e) {
+      e.stopPropagation();
+      setOpen(nav.dataset.open !== 'true');
+    });
+
+    // Cerrar al navegar, con Escape o tocando fuera.
+    nav.querySelectorAll('.nav-menu a').forEach(function (a) {
+      a.addEventListener('click', function () {
+        setOpen(false);
+      });
+    });
+
+    document.addEventListener('click', function (e) {
+      if (nav.dataset.open === 'true' && !nav.contains(e.target)) setOpen(false);
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && nav.dataset.open === 'true') {
+        setOpen(false);
+        toggle.focus();
+      }
+    });
+
+    // Si se agranda la ventana con el drawer abierto hay que soltar el scroll,
+    // porque arriba de 720px el drawer deja de existir.
+    const wide = window.matchMedia('(min-width: 721px)');
+    wide.addEventListener('change', function (e) {
+      if (e.matches) setOpen(false);
+    });
+  })();
+</script>

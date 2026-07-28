@@ -1,0 +1,646 @@
+---
+import { useTranslations } from '../../i18n';
+import { asset, type Lang } from '../../lib/urls';
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+const c = t.community;
+---
+
+<section class="community">
+  <div class="community-bg" style={`background-image:url(${asset('community-bg.png')});`}></div>
+  <div class="community-scrim"></div>
+
+  <div class="community-inner container">
+    <div class="section-head">
+      <h2 class="h2">{c.title}</h2>
+      <span class="eyebrow">{c.eyebrow}</span>
+    </div>
+
+    <div class="community-grid">
+      <div class="community-col">
+        <div class="community-pair">
+          <!-- Social hub -->
+          <article class="card card--glass card-hover reveal reveal-left">
+            <div class="card-head">
+              <span class="material-symbols-outlined card-head-icon">group</span>
+              <h3 class="h3">{c.socialHub.title}</h3>
+            </div>
+            <p class="body card-lead">{c.socialHub.body}</p>
+            <div class="friends">
+              <div class="friend">
+                <span class="friend-dot friend-dot--on"></span>
+                <div class="friend-text">
+                  <div class="friend-name">{c.socialHub.friend1}</div>
+                  <div class="friend-status friend-status--on">{c.socialHub.friend1Status}</div>
+                </div>
+              </div>
+              <div class="friend">
+                <span class="friend-dot friend-dot--on"></span>
+                <div class="friend-text">
+                  <div class="friend-name">{c.socialHub.friend2}</div>
+                  <div class="friend-status">{c.socialHub.friend2Status}</div>
+                </div>
+              </div>
+              <div class="friend">
+                <span class="friend-dot"></span>
+                <div class="friend-text">
+                  <div class="friend-name friend-name--off">{c.socialHub.friend3}</div>
+                  <div class="friend-status friend-status--off">{c.socialHub.friend3Status}</div>
+                </div>
+              </div>
+            </div>
+            <div class="friends-count">{c.socialHub.friendsActive}</div>
+          </article>
+
+          <!-- Pickups & events -->
+          <article class="card card--glass card-hover reveal reveal-right">
+            <div class="card-head">
+              <span class="material-symbols-outlined card-head-icon">event_available</span>
+              <h3 class="h3">{c.pickups.title}</h3>
+            </div>
+            <p class="body card-lead">{c.pickups.body}</p>
+            <div class="events">
+              <div class="event event--joined">
+                <span class="event-name">{c.pickups.event1}</span>
+                <span class="event-state event-state--joined">{c.pickups.event1Status}</span>
+              </div>
+              <div class="event">
+                <span class="event-name event-name--muted">{c.pickups.event2}</span>
+                <span class="event-state">{c.pickups.event2Status}</span>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <!-- Sistema de clanes -->
+        <article class="clan reveal reveal-left">
+          <div class="clan-shield" aria-hidden="true">
+            <span class="material-symbols-outlined">shield</span>
+          </div>
+          <div class="clan-body">
+            <span class="badge">{c.clan.badge}</span>
+            <h3 class="clan-title">{c.clan.title}</h3>
+            <p class="clan-lead">
+              {c.clan.body} <span class="clan-highlight">{c.clan.highlight}</span>.
+            </p>
+            <div class="clan-actions">
+              <div class="clan-rulers">
+                <div class="clan-rulers-icon">
+                  <span class="material-symbols-outlined">sports_kabaddi</span>
+                </div>
+                <div>
+                  <div class="clan-rulers-label">{c.clan.currentRulers}</div>
+                  <div class="clan-rulers-name">{c.clan.clanName}</div>
+                </div>
+              </div>
+              <a href="#descargar" class="btn btn--white"><span>{c.clan.cta}</span></a>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <!-- Leaderboard -->
+      <article class="card card--glass leaderboard reveal reveal-right">
+        <div class="card-head leaderboard-head">
+          <span class="material-symbols-outlined card-head-icon">military_tech</span>
+          <h3 class="h3">{c.leaderboard.title}</h3>
+        </div>
+        <div class="ranks">
+          <div class="rank">
+            <div class="rank-who">
+              <span class="rank-pos rank-pos--first">01</span>
+              <div>
+                <div class="rank-name">{c.leaderboard.rank1}</div>
+                <div class="rank-stats">{c.leaderboard.rank1Stats}</div>
+              </div>
+            </div>
+            <span class="material-symbols-outlined rank-medal">workspace_premium</span>
+          </div>
+          <div class="rank">
+            <div class="rank-who">
+              <span class="rank-pos">02</span>
+              <div>
+                <div class="rank-name">{c.leaderboard.rank2}</div>
+                <div class="rank-stats">{c.leaderboard.rank2Stats}</div>
+              </div>
+            </div>
+          </div>
+          <div class="rank">
+            <div class="rank-who">
+              <span class="rank-pos">03</span>
+              <div>
+                <div class="rank-name">{c.leaderboard.rank3}</div>
+                <div class="rank-stats">{c.leaderboard.rank3Stats}</div>
+              </div>
+            </div>
+          </div>
+          <div class="myrank">
+            <div class="myrank-inner">
+              <div>
+                <div class="myrank-label">{c.leaderboard.yourRank}</div>
+                <div class="myrank-value">{c.leaderboard.rankNumber}</div>
+              </div>
+              <div class="myrank-next">
+                <div class="myrank-label">{c.leaderboard.nextTier}</div>
+                <div class="myrank-xp">{c.leaderboard.nextTierXP}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <!-- Compartí tus resultados -->
+    <div class="share card card--glass reveal reveal-left">
+      <div class="share-icon">
+        <span class="material-symbols-outlined">share</span>
+      </div>
+      <div class="share-text">
+        <h3 class="share-title">{c.share.title}</h3>
+        <p class="body">{c.share.body}</p>
+      </div>
+      <div class="share-chips">
+        <div class="share-chip"><span class="material-symbols-outlined">group</span></div>
+        <div class="share-chip"><span class="material-symbols-outlined">public</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats vive dentro de esta sección para heredar la foto de fondo, igual
+       que en el diseño original. -->
+  <slot />
+</section>
+
+<style>
+  .community {
+    padding-block: var(--section-y);
+    background: var(--bg);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .community-bg {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+  }
+
+  .community-scrim {
+    position: absolute;
+    inset: 0;
+    background: rgba(13, 20, 30, 0.75);
+  }
+
+  .community-inner {
+    position: relative;
+    z-index: 1;
+  }
+
+  .community-grid {
+    display: grid;
+    grid-template-columns: 8fr 4fr;
+    gap: 24px;
+  }
+
+  .community-col {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    min-width: 0;
+  }
+
+  .community-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .card-head-icon {
+    color: var(--accent);
+    font-size: 32px;
+    flex-shrink: 0;
+  }
+
+  .card-lead {
+    margin-bottom: 24px;
+  }
+
+  /* Amigos */
+  .friends {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .friend {
+    background: rgba(8, 14, 24, 0.7);
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .friend-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--border);
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .friend-dot--on {
+    background: var(--ok);
+  }
+
+  .friend-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .friend-name {
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-size: var(--fs-micro);
+    color: var(--ink-strong);
+    font-style: italic;
+  }
+
+  .friend-name--off {
+    color: var(--ink-variant);
+  }
+
+  .friend-status {
+    font-family: var(--font-body);
+    font-size: var(--fs-nano);
+    color: var(--ink-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .friend-status--on {
+    color: var(--ok);
+  }
+
+  .friend-status--off {
+    color: var(--border);
+  }
+
+  .friends-count {
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-size: var(--fs-micro);
+    color: var(--accent);
+    font-style: italic;
+    text-transform: uppercase;
+  }
+
+  /* Eventos */
+  .events {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .event {
+    background: rgba(47, 53, 64, 0.5);
+    padding: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 4px 12px;
+    border-left: 4px solid var(--border);
+  }
+
+  .event--joined {
+    border-left-color: var(--accent);
+  }
+
+  .event-name,
+  .event-state {
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-size: var(--fs-micro);
+    color: var(--ink-strong);
+  }
+
+  .event-name {
+    font-style: italic;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .event-name--muted {
+    color: var(--ink-variant);
+  }
+
+  .event-state--joined {
+    color: var(--accent);
+  }
+
+  /* Clan */
+  .clan {
+    background: rgba(36, 42, 53, 0.7);
+    border: 2px solid var(--accent);
+    padding: 32px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .clan-shield {
+    position: absolute;
+    right: -40px;
+    top: -40px;
+    opacity: 0.1;
+    transform: rotate(12deg);
+    pointer-events: none;
+  }
+
+  .clan-shield span {
+    font-size: 200px;
+  }
+
+  .clan-body {
+    position: relative;
+    z-index: 1;
+  }
+
+  .clan-title {
+    font-family: var(--font-display);
+    font-size: var(--fs-h2);
+    font-style: italic;
+    color: var(--ink-strong);
+    margin-bottom: 8px;
+    margin-top: 16px;
+    text-transform: uppercase;
+  }
+
+  .clan-lead {
+    font-family: var(--font-body);
+    font-size: var(--fs-lead);
+    color: var(--ink-variant);
+    max-width: 600px;
+    margin-bottom: 24px;
+  }
+
+  .clan-highlight {
+    color: var(--accent);
+    font-style: italic;
+    font-weight: 700;
+  }
+
+  .clan-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .clan-rulers {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    /* Antes era `min-width:240px` fijo: en angosto forzaba desborde. */
+    min-width: min(240px, 100%);
+  }
+
+  .clan-rulers-icon {
+    width: 48px;
+    height: 48px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .clan-rulers-icon span {
+    color: var(--accent-ink);
+  }
+
+  .clan-rulers-label {
+    font-family: var(--font-body);
+    font-size: var(--fs-nano);
+    color: var(--ink-variant);
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+
+  .clan-rulers-name {
+    font-family: var(--font-display);
+    font-size: var(--fs-h3);
+    font-style: italic;
+    color: var(--ink-strong);
+    text-transform: uppercase;
+  }
+
+  /* Leaderboard */
+  .leaderboard-head {
+    margin-bottom: 32px;
+  }
+
+  .ranks {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .rank {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(90, 65, 55, 0.3);
+  }
+
+  .rank-who {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  .rank-pos {
+    font-family: var(--font-display);
+    font-size: var(--fs-h3);
+    font-style: italic;
+    color: var(--ink-strong);
+    opacity: 0.5;
+    flex-shrink: 0;
+  }
+
+  .rank-pos--first {
+    color: var(--accent);
+    opacity: 1;
+  }
+
+  .rank-name {
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-size: var(--fs-label);
+    color: var(--ink-strong);
+    font-style: italic;
+  }
+
+  .rank-stats {
+    font-family: var(--font-body);
+    font-size: var(--fs-nano);
+    color: var(--ink-variant);
+    text-transform: uppercase;
+  }
+
+  .rank-medal {
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .myrank {
+    margin-top: 48px;
+    background: rgba(255, 107, 26, 0.1);
+    border: 1px solid var(--accent);
+    padding: 16px;
+    transform: skewX(-4deg);
+  }
+
+  .myrank-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    transform: skewX(4deg);
+  }
+
+  .myrank-next {
+    text-align: right;
+  }
+
+  .myrank-label {
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-size: var(--fs-nano);
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .myrank-value {
+    font-family: var(--font-display);
+    font-size: var(--fs-h3);
+    font-style: italic;
+    color: var(--ink-strong);
+  }
+
+  .myrank-xp {
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-size: var(--fs-label);
+    color: var(--ink-strong);
+  }
+
+  /* Compartí tus resultados */
+  .share {
+    margin-top: 48px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 32px;
+  }
+
+  .share-icon {
+    width: 64px;
+    height: 64px;
+    background: rgba(255, 107, 26, 0.15);
+    border: 1px solid var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .share-icon span {
+    color: var(--accent);
+    font-size: 32px;
+  }
+
+  .share-text {
+    flex: 1;
+    min-width: 240px;
+  }
+
+  .share-title {
+    font-family: var(--font-display);
+    font-size: var(--fs-h3-sm);
+    font-style: italic;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+    margin-bottom: 4px;
+  }
+
+  .share-chips {
+    display: flex;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .share-chip {
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 107, 26, 0.1);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .share-chip span {
+    color: var(--accent);
+  }
+
+  @media (max-width: 1024px) {
+    .community-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .community-pair {
+      grid-template-columns: 1fr;
+    }
+
+    .clan {
+      padding: 24px;
+    }
+
+    .clan-shield span {
+      font-size: 140px;
+    }
+
+    .share {
+      gap: 20px;
+    }
+
+    .share-text {
+      min-width: 0;
+      flex-basis: 100%;
+      order: 3;
+    }
+  }
+</style>

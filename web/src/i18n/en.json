@@ -3,7 +3,9 @@
     "features": "Features",
     "stats": "Stats",
     "download": "Download",
-    "getApp": "GET THE APP"
+    "getApp": "GET THE APP",
+    "home": "Home",
+    "menu": "Open menu"
   },
   "hero": {
     "badge": "ELITE PERFORMANCE",
@@ -11,7 +13,9 @@
     "title2": "IS YOURS",
     "subtitle": "The ultimate tactical advantage for the modern hooper. Find premium courts near you, track every movement with GPS precision, and dominate the leaderboard with elite analytics.",
     "cta1": "DOWNLOAD NOW",
-    "cta2": "WATCH TRAILER"
+    "cta2": "WATCH TRAILER",
+    "freeNote": "No subscriptions. No hidden fees.",
+    "freeAccent": "100% free."
   },
   "features": {
     "title": "PLAYBOOK",
@@ -20,6 +24,14 @@
       { "icon": "location_on", "title": "FIND YOUR COURT", "body": "Real-time court scouting. See how many players are currently on court and get live condition reports." },
       { "icon": "distance", "title": "GPS GAME TRACKER", "body": "Automatic playtime logging and movement heatmaps. Know exactly where you dominate on the floor." },
       { "icon": "analytics", "title": "ELITE STATS", "body": "Professional-grade analytics. Track FG%, speed metrics, and verticality in every pickup game." }
+    ],
+    "liveTracking": "LIVE TRACKING",
+    "bars": [
+      { "label": "Shots", "value": "85%", "pct": 85 },
+      { "label": "Win Rate", "value": "62%", "pct": 62 },
+      { "label": "Heart", "value": "142bpm", "pct": 94 },
+      { "label": "Stamina", "value": "78%", "pct": 78 },
+      { "label": "Speed", "value": "18km/h", "pct": 71 }
     ]
   },
   "stats": {
@@ -29,7 +41,6 @@
     "winRate": "WIN RATE",
     "avgSpd": "AVG SPD",
     "speed": "18.2 MPH",
-    "liveChart": "LIVE_SHOT_CHART",
     "title": "MASTER YOUR",
     "titleAccent": "METRICS",
     "desc": "Don't just play—analyze. Our deep-learning algorithm breaks down your movement patterns, shot efficiency, and fatigue levels to give you a pro-ready profile.",
@@ -38,26 +49,35 @@
       "High-Speed Displacement Tracking",
       "Regional Leaderboard Progression"
     ],
-    "cta": "VIEW MY DATA"
+    "cta": "VIEW MY DATA",
+    "metrics": [
+      { "label": "Distance", "value": "4.8 km" },
+      { "label": "Active Time", "value": "48 min" },
+      { "label": "Calories", "value": "620 kcal" },
+      { "label": "Avg Heart", "value": "138 bpm" }
+    ]
   },
   "cta": {
     "title": "UNLEASH YOUR POTENTIAL",
     "subtitle": "Join over 50,000 hoopers who have leveled up their game with 1OF1. The next court is waiting for you.",
     "appStore": "APP STORE",
-    "playStore": "PLAY STORE"
+    "playStore": "PLAY STORE",
+    "freeNote": "No subscriptions. No hidden fees."
   },
   "footer": {
     "features": "Features",
     "stats": "Stats",
     "download": "Download",
     "terms": "Terms",
-    "privacy": "Privacy",
-    "support": "Support",
-    "contact": "Contact"
+    "privacy": "Privacy"
   },
   "community": {
     "title": "SQUAD & COMMUNITY",
     "eyebrow": "02 // THE ALLIANCE",
+    "share": {
+      "title": "Share your results",
+      "body": "Track your performance and share your stats with friends and on social media. Show your progress and challenge other players."
+    },
     "socialHub": {
       "title": "SOCIAL HUB",
       "body": "Stay connected. Chat with your crew, share highlights on social media, and scout the competition in real-time.",

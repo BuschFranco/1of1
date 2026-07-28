@@ -1,0 +1,253 @@
+---
+import { useTranslations } from '../../i18n';
+import type { Lang } from '../../lib/urls';
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+const items = t.features.items;
+const bars = t.features.bars;
+---
+
+<section id="features" class="features section">
+  <div class="container">
+    <div class="section-head">
+      <h2 class="h2">{t.features.title}</h2>
+      <span class="eyebrow">{t.features.eyebrow}</span>
+    </div>
+
+    <div class="features-grid">
+      <!-- Encontrá tu cancha -->
+      <article class="card card-hover feature reveal reveal-left">
+        <span class="material-symbols-outlined feature-icon">{items[0].icon}</span>
+        <h3 class="h3">{items[0].title}</h3>
+        <p class="body">{items[0].body}</p>
+        <div class="feature-visual">
+          <div class="feature-map">
+            <img
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuBRJvLLA6M1Mbi0b--QP_DPhA6sRLvgSumaLmZrj8YWLkiTmoevV0xJgyXyCvaN4mP9jk98hwkZiWczU4tyrDow5G3vzvcfpK2FjvgH-dU1oK1r-_I8c2sX-1SHN4yDYyVjO6ohf_I_7JBF0gsYAiaHyoh8MIiSyYPEF8jCqDylmIkboJZX9ONjJNYHGkn3SGSCXGDkiL67zV-v6PSREFQhhorbM0yjoHQtCPBVrCPMEUZ0jJBWtT5CxsCmgup4l-qQ9NsgX9Diojs"
+              alt=""
+              loading="lazy"
+              decoding="async"
+            />
+            <div class="feature-map-tint"></div>
+          </div>
+        </div>
+      </article>
+
+      <!-- GPS game tracker -->
+      <article class="card card-hover feature reveal reveal-left">
+        <span class="material-symbols-outlined feature-icon">{items[1].icon}</span>
+        <h3 class="h3">{items[1].title}</h3>
+        <p class="body">{items[1].body}</p>
+        <div class="feature-gps">
+          <div class="gps-axis gps-axis--h"></div>
+          <div class="gps-axis gps-axis--v"></div>
+          <div class="gps-dot gps-dot--1"></div>
+          <div class="gps-dot gps-dot--2"></div>
+          <div class="gps-dot gps-dot--3"></div>
+          <div class="gps-tag">{t.features.liveTracking}</div>
+        </div>
+      </article>
+
+      <!-- Stats élite -->
+      <article class="card card-hover feature reveal reveal-right">
+        <span class="material-symbols-outlined feature-icon">{items[2].icon}</span>
+        <h3 class="h3">{items[2].title}</h3>
+        <p class="body">{items[2].body}</p>
+        <div class="feature-bars">
+          {
+            bars.map((b: { label: string; value: string; pct: number }) => (
+              <div class="bar">
+                <span class="bar-label">{b.label}</span>
+                <div class="bar-track">
+                  <div class="bar-fill" style={`width:${b.pct}%;`} />
+                </div>
+                <span class="bar-value">{b.value}</span>
+              </div>
+            ))
+          }
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<style>
+  .features {
+    background: var(--bg-lowest);
+  }
+
+  /* auto-fit colapsa 3 → 2 → 1 columna sin necesidad de breakpoints. */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 24px;
+  }
+
+  .feature {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .feature-icon {
+    font-size: 48px;
+    color: var(--accent);
+  }
+
+  .feature-visual {
+    margin-top: auto;
+    padding-top: 16px;
+  }
+
+  /* min-height en vez de height: mismo alto en desktop, pero si el contenido
+   * crece en angosto no queda recortado. */
+  .feature-map {
+    position: relative;
+    min-height: 160px;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .feature-map img {
+    width: 100%;
+    height: 160px;
+    object-fit: cover;
+    filter: grayscale(1);
+    transition: filter 0.5s;
+  }
+
+  @media (hover: hover) {
+    .feature-map:hover img {
+      filter: grayscale(0);
+    }
+  }
+
+  .feature-map-tint {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 107, 26, 0.15);
+    mix-blend-mode: overlay;
+  }
+
+  .feature-gps {
+    margin-top: auto;
+    position: relative;
+    min-height: 120px;
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: var(--bg-lowest);
+  }
+
+  .gps-axis {
+    position: absolute;
+    background: var(--border);
+    opacity: 0.3;
+  }
+  .gps-axis--h {
+    top: 50%;
+    left: 0;
+    width: 100%;
+    height: 1px;
+  }
+  .gps-axis--v {
+    left: 50%;
+    top: 0;
+    width: 1px;
+    height: 100%;
+  }
+
+  .gps-dot {
+    position: absolute;
+    background: var(--accent);
+    border-radius: 50%;
+  }
+  .gps-dot--1 {
+    top: 30%;
+    left: 20%;
+    width: 6px;
+    height: 6px;
+    box-shadow: 0 0 8px rgba(255, 107, 26, 0.8);
+  }
+  .gps-dot--2 {
+    top: 60%;
+    left: 45%;
+    width: 8px;
+    height: 8px;
+    box-shadow: 0 0 10px rgba(255, 107, 26, 0.8);
+  }
+  .gps-dot--3 {
+    top: 40%;
+    left: 70%;
+    width: 5px;
+    height: 5px;
+    box-shadow: 0 0 6px rgba(255, 107, 26, 0.6);
+    opacity: 0.7;
+  }
+
+  .gps-tag {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-size: var(--fs-nano);
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-style: italic;
+  }
+
+  .feature-bars {
+    margin-top: auto;
+    padding-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    justify-content: center;
+    height: 100%;
+  }
+
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .bar-label,
+  .bar-value {
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-size: var(--fs-nano);
+    text-transform: uppercase;
+  }
+
+  .bar-label {
+    color: var(--ink-variant);
+    width: 60px;
+    flex-shrink: 0;
+  }
+
+  .bar-value {
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .bar-track {
+    flex: 1;
+    min-width: 0;
+    height: 8px;
+    background: var(--bg-highest);
+  }
+
+  .bar-fill {
+    height: 100%;
+    background: var(--accent);
+  }
+</style>

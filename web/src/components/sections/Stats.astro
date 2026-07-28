@@ -1,0 +1,299 @@
+---
+import { useTranslations } from '../../i18n';
+import type { Lang } from '../../lib/urls';
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+const s = t.stats;
+---
+
+<div id="stats" class="stats container">
+  <!-- Tarjeta con inclinación 3D. El seguimiento del mouse lo activa Base.astro
+       solo en punteros finos y pantallas anchas. -->
+  <div class="statcard reveal reveal-left" data-tilt>
+    <div class="statcard-head">
+      <div class="statcard-who">
+        <div class="statcard-avatar">
+          <span class="material-symbols-outlined">person</span>
+        </div>
+        <div>
+          <div class="statcard-label statcard-label--accent">{s.playerId}</div>
+          <div class="statcard-name">{s.playerName}</div>
+        </div>
+      </div>
+      <div class="statcard-level">
+        <div class="statcard-label">{s.level}</div>
+        <div class="statcard-name">42</div>
+      </div>
+    </div>
+
+    <div class="statcard-kpis">
+      <div class="kpi">
+        <div class="kpi-label">{s.winRate}</div>
+        <div class="kpi-value">78.4%</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">{s.avgSpd}</div>
+        <div class="kpi-value">{s.speed}</div>
+      </div>
+    </div>
+
+    <div class="statcard-metrics">
+      {
+        s.metrics.map((m: { label: string; value: string }) => (
+          <div class="metric">
+            <div class="metric-label">{m.label}</div>
+            <div class="metric-value">{m.value}</div>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+
+  <div class="stats-copy reveal reveal-right">
+    <h2 class="h2 stats-title">{s.title} <span>{s.titleAccent}</span></h2>
+    <p class="lead">{s.desc}</p>
+    <ul class="stats-list">
+      {
+        s.list.map((item: string) => (
+          <li>
+            <span class="material-symbols-outlined">check_circle</span>
+            <span class="stats-list-text">{item}</span>
+          </li>
+        ))
+      }
+    </ul>
+    <div class="stats-cta">
+      <a href="#descargar" class="btn btn--ghost-accent"><span>{s.cta}</span></a>
+    </div>
+  </div>
+</div>
+
+<style>
+  .stats {
+    padding-block: var(--section-y);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+  }
+
+  .statcard {
+    background: rgba(36, 42, 53, 0.7);
+    border: 2px solid var(--border);
+    padding: 32px;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+    transform: rotateY(-10deg) rotateX(5deg);
+    min-width: 0;
+  }
+
+  .statcard-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+
+  .statcard-who {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .statcard-avatar {
+    width: 48px;
+    height: 48px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .statcard-avatar span {
+    color: var(--accent-ink);
+    font-size: 28px;
+    font-variation-settings: 'FILL' 1;
+  }
+
+  .statcard-label {
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-size: var(--fs-micro);
+    color: var(--ink-variant);
+    text-transform: uppercase;
+  }
+
+  .statcard-label--accent {
+    color: #ffb596;
+    letter-spacing: 0.1em;
+  }
+
+  .statcard-name {
+    font-family: var(--font-display);
+    font-size: var(--fs-h3);
+    font-style: italic;
+    color: var(--ink-strong);
+    text-transform: uppercase;
+    line-height: 1;
+    overflow-wrap: anywhere;
+  }
+
+  .statcard-level {
+    text-align: right;
+  }
+
+  .statcard-kpis {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .kpi {
+    padding: 12px;
+    background: rgba(47, 53, 64, 0.7);
+    border-left: 4px solid var(--accent);
+    min-width: 0;
+  }
+
+  .kpi-label {
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-size: var(--fs-micro);
+    color: var(--ink-variant);
+    text-transform: uppercase;
+  }
+
+  .kpi-value {
+    font-family: var(--font-display);
+    font-size: var(--fs-h3);
+    font-style: italic;
+    color: var(--ink-strong);
+  }
+
+  /* min-height en lugar de height fija: en desktop mide lo mismo (256px), pero
+   * si las tarjetas se apilan en angosto el contenido no queda recortado. */
+  .statcard-metrics {
+    position: relative;
+    min-height: 256px;
+    background: rgba(8, 14, 24, 0.7);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    padding: 24px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .metric {
+    background: rgba(47, 53, 64, 0.5);
+    border-left: 3px solid var(--accent);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .metric-label {
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-size: var(--fs-nano);
+    color: var(--ink-variant);
+    text-transform: uppercase;
+  }
+
+  .metric-value {
+    font-family: var(--font-display);
+    font-size: clamp(22px, 3.4vw, 28px);
+    font-style: italic;
+    color: var(--ink-strong);
+  }
+
+  .stats-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  .stats-title {
+    line-height: 1;
+  }
+
+  .stats-title span {
+    color: var(--accent);
+  }
+
+  .stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  .stats-list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .stats-list li > .material-symbols-outlined {
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .stats-list-text {
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-size: var(--fs-label);
+    text-transform: uppercase;
+    font-style: italic;
+    color: var(--ink-strong);
+  }
+
+  .stats-cta {
+    margin-top: 32px;
+  }
+
+  @media (max-width: 1024px) {
+    .stats {
+      grid-template-columns: 1fr;
+    }
+
+    /* Apilada y a pantalla completa, la inclinación 3D estorba. */
+    .statcard {
+      transform: none;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .statcard {
+      padding: 20px;
+    }
+
+    .statcard-metrics {
+      padding: 16px;
+    }
+
+    .statcard-level {
+      text-align: left;
+    }
+  }
+
+  @media (max-width: 430px) {
+    .statcard-kpis,
+    .statcard-metrics {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

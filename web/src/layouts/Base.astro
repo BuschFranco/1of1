@@ -1,61 +1,67 @@
 ---
-import '../styles/global.css';
+import '../styles/tokens.css';
+import '../styles/base.css';
+import Logo from '../components/Logo.astro';
 import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
+import { asset, type Lang } from '../lib/urls';
 
 interface Props {
-  title?: string;
+  lang: Lang;
+  title: string;
   description?: string;
+  variant?: 'landing' | 'legal';
+  /** Solo para `legal`: marca el documento activo en la navegación. */
+  current?: 'terms' | 'privacy';
 }
-const {
-  title = '1of1 — Encontrá cancha. Jugá. Registrá cada partido.',
-  description =
-    '1of1 es la app de básquet para encontrar canchas cerca, registrar tus partidos automáticamente y seguir tu progreso: stats, rankings y logros.',
-} = Astro.props;
-
-const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+const { lang, title, description, variant = 'landing', current } = Astro.props;
 ---
 
 <!doctype html>
-<html lang="es">
+<html lang={lang}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/png" href="/logo_1of1.png" />
+    <link rel="icon" type="image/png" href={asset('logo_1of1.png')} />
     <title>{title}</title>
-    <meta name="description" content={description} />
-    <link rel="canonical" href={canonical} />
-    <meta name="theme-color" content="#0a0a0a" />
-
-    <!-- Open Graph -->
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content={title} />
-    <meta property="og:description" content={description} />
-    <meta property="og:url" content={canonical} />
-    <meta property="og:locale" content="es_AR" />
-    <meta name="twitter:card" content="summary_large_image" />
-
-    <!-- Tipografía de marca: Jost (geometric sans, estilo Futura/Nike) -->
+    {description && <meta name="description" content={description} />}
+    <meta name="theme-color" content="#0d141e" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700;800;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Narrow:wght@400;500;600;700&family=Anybody:wght@400;500;600;700;800;900&display=swap"
       rel="stylesheet"
     />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+      rel="stylesheet"
+    />
+    <noscript><style>.loader { display: none; }</style></noscript>
   </head>
   <body>
-    <Nav />
-    <main>
-      <slot />
-    </main>
-    <Footer />
+    <div id="loader" class="loader">
+      <Logo size={80} />
+    </div>
+
+    <Nav lang={lang} variant={variant} current={current} />
+
+    <slot />
+
+    <Footer lang={lang} variant={variant} />
 
     <script is:inline>
-      // Reveal on scroll — realza sin ser imprescindible (todo es visible sin JS).
-      const els = document.querySelectorAll('.reveal');
-      if ('IntersectionObserver' in window && els.length) {
+      // Entrada de elementos al hacer scroll.
+      (function () {
+        const els = document.querySelectorAll('.reveal');
+        if (!els.length) return;
+        if (!('IntersectionObserver' in window)) {
+          els.forEach(function (el) {
+            el.classList.add('in');
+          });
+          return;
+        }
         const io = new IntersectionObserver(
-          (entries) => {
+          function (entries) {
             for (const e of entries) {
               if (e.isIntersecting) {
                 e.target.classList.add('in');
@@ -65,10 +71,115 @@ const canonical = new URL(Astro.url.pathname, Astro.site).toString();
           },
           { rootMargin: '0px 0px -8% 0px' }
         );
-        els.forEach((el) => io.observe(el));
-      } else {
-        els.forEach((el) => el.classList.add('in'));
-      }
+        els.forEach(function (el) {
+          io.observe(el);
+        });
+      })();
+
+      // Loader.
+      window.addEventListener('load', function () {
+        const loader = document.getElementById('loader');
+        if (!loader) return;
+        setTimeout(function () {
+          loader.style.opacity = '0';
+          loader.style.visibility = 'hidden';
+        }, 600);
+      });
+
+      // Scroll suave propio. Solo con puntero fino: en touch el `wheel` no
+      // existe y hacer preventDefault rompería el scroll nativo, así que ahí
+      // se usa `scroll-behavior:smooth` de CSS.
+      (function () {
+        if (!window.matchMedia('(pointer: fine)').matches) return;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+        let currentScroll = window.scrollY;
+        let targetScroll = window.scrollY;
+        const ease = 0.08;
+        let isScrolling = false;
+
+        function step() {
+          const diff = targetScroll - currentScroll;
+          currentScroll += diff * ease;
+          if (Math.abs(diff) > 0.5) {
+            window.scrollTo(0, currentScroll);
+            requestAnimationFrame(step);
+          } else {
+            currentScroll = targetScroll;
+            window.scrollTo(0, targetScroll);
+            isScrolling = false;
+          }
+        }
+
+        function maxScroll() {
+          return Math.max(0, document.body.scrollHeight - window.innerHeight);
+        }
+
+        window.addEventListener(
+          'wheel',
+          function (e) {
+            // Con el drawer abierto el scroll de fondo está bloqueado.
+            if (document.body.style.overflow === 'hidden') return;
+            e.preventDefault();
+            targetScroll = Math.max(0, Math.min(targetScroll + e.deltaY, maxScroll()));
+            if (!isScrolling) {
+              isScrolling = true;
+              requestAnimationFrame(step);
+            }
+          },
+          { passive: false }
+        );
+
+        // El offset sale de la altura real de la barra, que cambia por
+        // breakpoint (antes estaba hardcodeado en 80).
+        function navHeight() {
+          const v = getComputedStyle(document.documentElement).getPropertyValue('--nav-h');
+          return parseInt(v, 10) || 80;
+        }
+
+        document.querySelectorAll('a[href^="#"]').forEach(function (anchor) {
+          anchor.addEventListener('click', function (e) {
+            const id = this.getAttribute('href');
+            if (!id || id === '#') return;
+            const target = document.querySelector(id);
+            if (!target) return;
+            e.preventDefault();
+            currentScroll = window.scrollY;
+            targetScroll = Math.max(
+              0,
+              Math.min(target.getBoundingClientRect().top + window.scrollY - navHeight(), maxScroll())
+            );
+            if (!isScrolling) {
+              isScrolling = true;
+              requestAnimationFrame(step);
+            }
+          });
+        });
+      })();
+
+      // Inclinación 3D de la tarjeta de stats. Sin equivalente táctil, y
+      // apilada en angosto molesta, así que se limita a mouse + pantalla ancha.
+      (function () {
+        const card = document.querySelector('[data-tilt]');
+        if (!card) return;
+        if (!window.matchMedia('(hover: hover) and (min-width: 1025px)').matches) return;
+
+        document.addEventListener('mousemove', function (e) {
+          const rect = card.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          if (x > 0 && x < rect.width && y > 0 && y < rect.height) {
+            card.style.transform =
+              'rotateY(' +
+              ((x / rect.width - 0.5) * 20 - 10) +
+              'deg) rotateX(' +
+              ((y / rect.height - 0.5) * -20 + 5) +
+              'deg)';
+          } else {
+            card.style.transform = 'rotateY(-10deg) rotateX(5deg)';
+          }
+        });
+      })();
     </script>
   </body>
 </html>

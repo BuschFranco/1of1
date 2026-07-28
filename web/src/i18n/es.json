@@ -3,7 +3,9 @@
     "features": "Características",
     "stats": "Estadísticas",
     "download": "Descargar",
-    "getApp": "OBTENER LA APP"
+    "getApp": "OBTENER LA APP",
+    "home": "Home",
+    "menu": "Abrir menú"
   },
   "hero": {
     "badge": "RENDIMIENTO ÉLITE",
@@ -11,7 +13,9 @@
     "title2": "ES TUYA",
     "subtitle": "La ventaja táctica definitiva para el jugador moderno. Encontrá canchas premium cerca tuyo, trackea cada movimiento con precisión GPS y dominá el leaderboard con analytics de élite.",
     "cta1": "DESCARGAR AHORA",
-    "cta2": "VER CARACTERÍSTICAS"
+    "cta2": "VER CARACTERÍSTICAS",
+    "freeNote": "Sin suscripciones. Sin costos ocultos.",
+    "freeAccent": "100% gratis."
   },
   "features": {
     "title": "MANUAL DE JUEGO",
@@ -20,6 +24,14 @@
       { "icon": "location_on", "title": "ENCONTRÁ TU CANCHA", "body": "Búsqueda en tiempo real. Mirá cuántos jugadores hay en cada cancha y el estado actual." },
       { "icon": "distance", "title": "GPS GAME TRACKER", "body": "Registro automático de tiempo de juego y mapas de calor. Dominá la cancha con datos precisos." },
       { "icon": "analytics", "title": "STATS ÉLITE", "body": "Analítica de nivel profesional. Seguí tu % de tiros, velocidad y verticalidad en cada pickup." }
+    ],
+    "liveTracking": "LIVE TRACKING",
+    "bars": [
+      { "label": "Tiros", "value": "85%", "pct": 85 },
+      { "label": "Win Rate", "value": "62%", "pct": 62 },
+      { "label": "Ritmo", "value": "142bpm", "pct": 94 },
+      { "label": "Resist.", "value": "78%", "pct": 78 },
+      { "label": "Veloc.", "value": "18km/h", "pct": 71 }
     ]
   },
   "stats": {
@@ -29,7 +41,6 @@
     "winRate": "TASA VICTORIA",
     "avgSpd": "VEL. PROMEDIO",
     "speed": "18.2 KM/H",
-    "liveChart": "GRÁFICO_EN_VIVO",
     "title": "DOMINÁ TUS",
     "titleAccent": "MÉTRICAS",
     "desc": "No solo juegues — analizá. Nuestro algoritmo de deep-learning desglosa tus patrones de movimiento, eficiencia de tiro y niveles de fatiga para darte un perfil de nivel profesional.",
@@ -38,26 +49,35 @@
       "Tracking de Desplazamiento de Alta Velocidad",
       "Progresión en Leaderboard Regional"
     ],
-    "cta": "VER MIS DATOS"
+    "cta": "VER MIS DATOS",
+    "metrics": [
+      { "label": "Km Recorridos", "value": "4.8 km" },
+      { "label": "Tiempo Activo", "value": "48 min" },
+      { "label": "Calorías", "value": "620 kcal" },
+      { "label": "Ritmo Prom.", "value": "138 bpm" }
+    ]
   },
   "cta": {
     "title": "LIBERÁ TU POTENCIAL",
     "subtitle": "Unite a más de 50,000 jugadores que mejoraron su juego con 1OF1. La próxima cancha te está esperando.",
     "appStore": "APP STORE",
-    "playStore": "PLAY STORE"
+    "playStore": "PLAY STORE",
+    "freeNote": "Sin suscripciones. Sin costos ocultos."
   },
   "footer": {
     "features": "Características",
     "stats": "Estadísticas",
     "download": "Descargar",
     "terms": "Términos",
-    "privacy": "Privacidad",
-    "support": "Soporte",
-    "contact": "Contacto"
+    "privacy": "Privacidad"
   },
   "community": {
     "title": "SQUAD & COMMUNITY",
     "eyebrow": "02 // LA ALIANZA",
+    "share": {
+      "title": "Compartí tus resultados",
+      "body": "Monitorizá tu rendimiento y compartí tus estadísticas con amigos y en redes sociales. Mostrá tu progreso y desafiá a otros jugadores."
+    },
     "socialHub": {
       "title": "SOCIAL HUB",
       "body": "Mantenete conectado. Chateá con tu crew, compartí highlights en redes y espeá a la competencia en tiempo real.",
