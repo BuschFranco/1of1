@@ -1,6 +1,7 @@
 import 'dart:isolate';
 import 'dart:ui';
 import 'package:native_geofence/native_geofence.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/courts.dart';
 import 'notifications_service.dart';
 import 'session_alarms.dart';
@@ -27,6 +28,12 @@ Future<void> geofenceTriggered(GeofenceCallbackParams params) async {
   }
   // App cerrada (isolate de background).
   if (params.event == GeofenceEvent.enter) {
+    // Sin sesión no notificamos: el usuario tocaría la notificación, la app lo
+    // mandaría al login y quedaría sin saber dónde se registró su partido.
+    // Token laxo: un JWT vencido no debe impedir cancelar el cierre de un
+    // partido que sigue en curso.
+    final prefs = await SharedPreferences.getInstance();
+    if (!await hasBgSession(prefs, requireFreshToken: false)) return;
     // Si volviste a la cancha durante la gracia de salida, cancelamos el cierre
     // automático (el isolate principal no está vivo para hacerlo). Así no se
     // cierra el partido en falso por haberte alejado un momento.

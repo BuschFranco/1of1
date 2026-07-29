@@ -348,6 +348,56 @@ eventos de geofence ni GPS en background sin `always`).
 - Regla de producto: **no agregar auto-requests** de permisos fuera del modal
   y los puntos en-contexto documentados en `CLAUDE.md` §3.
 
+### 7.1 Invariante: SIN SESIÓN no se detecta ni se notifica nada
+
+Sin sesión iniciada el sistema queda **completamente inerte**: no siembra
+permanencia, no arranca partidos, no programa alarmas y no muestra ninguna
+notificación. El motivo es de producto: el usuario tocaría la notificación, la
+app lo mandaría al login y quedaría sin saber dónde se registró su partido.
+
+Como las tres capas **no comparten memoria**, cada una tiene su propio gate con
+su propia señal de sesión. Al agregar un camino de detección nuevo, gatealo en
+la capa que corresponda:
+
+| Capa | Señal | Dónde está el gate |
+| --- | --- | --- |
+| App viva | `_userKey.isNotEmpty` (getter `_hasSession`) | `play_session_service.dart`: `_evaluate()`, `_startStream()`, `reconcileFromPrefs()`, `_renderSessionNotif()` |
+| Cableado | `_session.profile != null` | `sync_coordinator.dart`: `_onSessionChanged()` y el gate compuesto de `_syncGeofences()` |
+| Isolate background | `session_email` + `session_profile` + `session_jwt` en prefs | `hasBgSession()` en `session_alarms.dart`, llamado al inicio de los 8 callbacks de alarma y en `geofenceTriggered()` |
+
+Detalles que importan:
+
+- **El gate NO mira la red, a propósito.** Con sesión guardada pero sin internet
+  la detección sigue funcionando: el registro es offline-resiliente (se encola en
+  `pending_matches::$userKey` y se sube al volver la conexión). Así un bache de
+  señal nunca corta un partido en curso.
+- **Token laxo para cerrar.** Los callbacks que solo *cierran* o avisan sobre un
+  partido ya en curso usan `hasBgSession(requireFreshToken: false)`: si el JWT
+  vence a mitad de partido, igual hay que poder cerrarlo (con el gate estricto
+  quedaría abierto para siempre, con su notificación pegada). Quien expulsa al
+  usuario es el 401 del próximo `GET /me`, no el gate.
+- **Al cerrar sesión** `SyncCoordinator` llama `cancelAllPlayAlarms()`: cancela
+  todas las alarmas y borra `kBgUserKey`. Sin eso, una permanencia sembrada antes
+  del logout hacía que `alarmStartCallback` arrancara un partido y notificara con
+  la sesión ya cerrada. La limpieza corre **también cuando la app arranca ya
+  deslogueada** (no solo si hubo tracking en esta corrida), pero **nunca**
+  mientras `Session.restoring/verifying` sigue en curso — ahí todavía no se sabe
+  si hay sesión y cancelaríamos el cierre de un partido legítimo.
+- **La sesión activa persistida no se borra en el logout**: es namespaced por
+  usuario y se readopta al volver a loguearse (si tiene menos de 6 h).
+
+### 7.2 Arranque sin red con un partido sin terminar
+
+Al arrancar, `Session._verifyStartupSession()` valida la sesión cacheada con
+`GET /me` (timeout 4 s) y, si falla, manda al login. **Excepción**: si el fallo
+es por falta de red (o el server no responde bien: 5xx / cold start de Render) y
+`_hasUnfinishedMatch()` encuentra un partido en curso (< 6 h), pendiente de
+resultado (< 48 h) o encolado sin subir, se entra con el **perfil cacheado** y se
+marca `startedOffline` → `MainShell` muestra el aviso "Sin conexión. Tu partido
+se registra igual…".
+
+Un **401 siempre expulsa**: ahí la sesión está realmente vencida.
+
 ## 8. Gotchas conocidos
 
 ### 8.1 Constantes gemelas (¡mantener en sync!)

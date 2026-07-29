@@ -70,9 +70,11 @@ const String _kAlarmEnd = 'play_alarm_end';
 const String _kAlarmWarn = 'play_alarm_warn';
 const String _kAlarmHardEnd = 'play_alarm_hardend';
 
-// Claves base de PlaySessionService (deben coincidir EXACTO).
-const String _kActiveBase = 'play_active_session';
-const String _kPendingBase = 'play_pending_result';
+// Claves base de PlaySessionService (deben coincidir EXACTO). Públicas porque
+// Session también las lee al arrancar: para decidir si, sin red, entra con el
+// perfil cacheado en vez de mandar al login (hay un partido sin terminar).
+const String kActiveSessionBase = 'play_active_session';
+const String kPendingResultBase = 'play_pending_result';
 // Snooze de "No juego": {courtId, untilMillis}. El radar no debe volver a
 // sembrar la permanencia en la cancha silenciada mientras siga vigente.
 const String _kDwellSnoozeBase = 'play_dwell_snooze';
@@ -96,9 +98,66 @@ const Duration _kConfirmAfter = Duration(hours: 2);
 const Duration _kConfirmTimeout = Duration(minutes: 20);
 const Duration _kDwellSnooze = Duration(hours: 2, minutes: 30);
 
-String _nsKey(String base, String uk) => uk.isEmpty ? base : '$base::$uk';
+String bgNsKey(String base, String uk) => uk.isEmpty ? base : '$base::$uk';
 
 bool get _isAndroid => defaultTargetPlatform == TargetPlatform.android;
+
+// ── Gate de sesión en background ────────────────────────────────────────────
+//
+// Sin sesión iniciada NO se detecta ni se notifica nada: el usuario tocaría la
+// notificación, la app lo mandaría al login y quedaría sin saber dónde se
+// registró su partido. El isolate no comparte memoria con el principal, así que
+// la única señal de sesión que puede ver son las claves que Session escribe en
+// prefs (y borra en el logout).
+//
+// Ojo: el gate NO mira la red a propósito. Con sesión guardada pero sin
+// internet la detección debe seguir funcionando — el registro es
+// offline-resiliente (se encola en pending_matches y se sube al volver).
+
+/// JWT usable desde background: presente y no vencido. null si falta o venció.
+/// Única implementación de la decodificación/exp (la usan el gate de sesión y
+/// [_setNotionPresence]): si cambia el criterio, cambia en un solo lugar.
+String? validBgJwt(SharedPreferences prefs) {
+  try {
+    final jwt = prefs.getString(ApiConfig.jwtPrefsKey);
+    if (jwt == null || jwt.isEmpty) return null;
+    final exp = ApiClient.decodePayload(jwt)['exp'];
+    final expired = exp is num &&
+        DateTime.now().isAfter(
+            DateTime.fromMillisecondsSinceEpoch(exp.toInt() * 1000));
+    return expired ? null : jwt;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// ¿Hay sesión iniciada, visto desde el isolate de background? Lee las tres
+/// claves que borra `Session.logout()` (email + perfil cacheado + JWT).
+///
+/// [requireFreshToken] en false para los caminos que solo CIERRAN un partido ya
+/// en curso: si el token vence a mitad de partido, igual hay que poder cerrarlo
+/// (con el gate estricto quedaría abierto para siempre, con su notificación
+/// pegada). Quien expulsa al usuario es el 401 del próximo GET /me, no esto.
+Future<bool> hasBgSession(SharedPreferences prefs,
+    {bool requireFreshToken = true}) async {
+  try {
+    // El isolate arranca con una copia vieja de prefs: sin reload podría ver
+    // una sesión que ya se cerró (o no ver una que se acaba de abrir).
+    await prefs.reload();
+    final email = prefs.getString('session_email') ?? '';
+    final profile = prefs.getString('session_profile') ?? '';
+    if (email.isEmpty || profile.isEmpty) return false;
+    // Build sin API_BASE_URL (modo degradado): nunca hay JWT y la app funciona
+    // local, así que no lo exigimos.
+    if (!ApiConfig.isConfigured) return true;
+    if (!requireFreshToken) return true;
+    return validBgJwt(prefs) != null;
+  } catch (_) {
+    // Ante la duda no detectamos: mejor perder una detección que notificar un
+    // partido que no tiene dónde registrarse.
+    return false;
+  }
+}
 
 /// Programa una alarma exacta con fallback: si el SO rechaza la exacta (p. ej.
 /// el usuario revocó "Alarmas y recordatorios" en Android 14+), reintenta como
@@ -238,7 +297,7 @@ Future<void> cancelEndAlarmOnReenter() async {
 /// quedó sin efecto). Sin esto, un _restore posterior vería un fin-de-gracia
 /// "vencido" y cerraría un partido que en realidad sigue en curso.
 Future<void> _clearExitStateInActive(SharedPreferences prefs, String uk) async {
-  final activeKey = _nsKey(_kActiveBase, uk);
+  final activeKey = bgNsKey(kActiveSessionBase, uk);
   final raw = prefs.getString(activeKey);
   if (raw == null) return;
   try {
@@ -338,6 +397,30 @@ Future<void> cancelHardEndAlarm() async {
   await prefs.remove(_kAlarmHardEnd);
 }
 
+/// Deja el background COMPLETAMENTE apagado. Se llama al cerrar sesión: sin
+/// esto, una permanencia sembrada antes del logout hace que
+/// [alarmStartCallback] arranque un partido y notifique "¡Arrancó tu partido!"
+/// con la sesión ya cerrada (el gate de cada callback lo frena, pero igual
+/// conviene no dejar alarmas colgadas despertando el equipo al vacío).
+///
+/// Vive acá porque las claves de target (`play_alarm_*`) son privadas de este
+/// archivo: SyncCoordinator no puede limpiarlas por su cuenta.
+Future<void> cancelAllPlayAlarms() async {
+  if (!_isAndroid) return;
+  // cancelEndAlarm ya cancela el aviso previo (warn) junto con el cierre.
+  await cancelStartAlarm();
+  await cancelEndAlarm();
+  await cancelBatteryWatch();
+  await cancelConfirmAlarm();
+  await cancelConfirmTimeoutAlarm();
+  await cancelHardEndAlarm();
+  await cancelRadarWatch();
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(kBgUserKey);
+  } catch (_) {/* best-effort: el gate de sesión ya cubre el caso */}
+}
+
 /// Target de la alarma de arranque pendiente (permanencia sembrada por el radar
 /// o por _beginDwell), para que el isolate principal la adopte al volver al
 /// frente en vez de reiniciar la cuenta regresiva.
@@ -364,6 +447,9 @@ Future<void> alarmStartCallback() async {
   final raw = prefs.getString(_kAlarmStart);
   if (raw == null) return;
   await prefs.remove(_kAlarmStart);
+  // Es el que notifica "¡Arrancó tu partido!": sin sesión no arrancamos nada
+  // (el target ya quedó consumido arriba, así que no vuelve a dispararse).
+  if (!await hasBgSession(prefs)) return;
 
   Map<String, dynamic> t;
   try {
@@ -387,7 +473,7 @@ Future<void> alarmStartCallback() async {
   // que el partido lo arrancó esta alarma con el proceso muerto (no hay
   // latidos) y que sigue EN CURSO: debe resumirlo, no cerrarlo por "gap".
   await prefs.setString(
-    _nsKey(_kActiveBase, uk),
+    bgNsKey(kActiveSessionBase, uk),
     jsonEncode({
       'courtId': courtId,
       'courtName': courtName,
@@ -429,6 +515,10 @@ Future<void> alarmEndCallback() async {
   final raw = prefs.getString(_kAlarmEnd);
   if (raw == null) return;
   await prefs.remove(_kAlarmEnd);
+  // Token laxo: este camino CIERRA un partido en curso. Si el JWT venció a
+  // mitad de partido igual hay que poder cerrarlo (si no, queda abierto para
+  // siempre con su notificación pegada).
+  if (!await hasBgSession(prefs, requireFreshToken: false)) return;
 
   Map<String, dynamic> t;
   try {
@@ -443,7 +533,7 @@ Future<void> alarmEndCallback() async {
   // Momento en que el partido DEBE cerrarse (fin de gracia): tope de la duración.
   final atMillis = (t['atMillis'] as num?)?.toInt();
 
-  final activeKey = _nsKey(_kActiveBase, uk);
+  final activeKey = bgNsKey(kActiveSessionBase, uk);
   if (prefs.getString(activeKey) == null) return; // ya no hay partido en curso
 
   // ¿Volviste a la cancha? Si hay fix y estás dentro, NO cerramos. Sin fix,
@@ -471,6 +561,8 @@ Future<void> alarmWarnCallback() async {
   final raw = prefs.getString(_kAlarmWarn);
   if (raw == null) return;
   await prefs.remove(_kAlarmWarn);
+  // Token laxo: solo avisa sobre un partido ya en curso (ver alarmEndCallback).
+  if (!await hasBgSession(prefs, requireFreshToken: false)) return;
   // Gracia cancelada (volviste y el isolate principal o el geofence limpiaron
   // la alarma de cierre): no hay nada que avisar.
   if (prefs.getString(_kAlarmEnd) == null) return;
@@ -487,7 +579,7 @@ Future<void> alarmWarnCallback() async {
   final lng = (t['lng'] as num?)?.toDouble() ?? 0;
 
   // ¿Sigue habiendo partido en curso?
-  if (prefs.getString(_nsKey(_kActiveBase, uk)) == null) return;
+  if (prefs.getString(bgNsKey(kActiveSessionBase, uk)) == null) return;
   // ¿Seguís afuera? Con fix adentro no avisamos; sin fix avisamos igual (la
   // salida ya se detectó y el aviso de más no cierra nada).
   if (!await _leftArea(lat, lng, defaultWhenNoFix: true)) return;
@@ -506,8 +598,13 @@ Future<void> alarmBatteryCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
   await prefs.reload();
+  // Token laxo: solo cierra un partido ya en curso (ver alarmEndCallback).
+  if (!await hasBgSession(prefs, requireFreshToken: false)) {
+    await cancelBatteryWatch();
+    return;
+  }
   final uk = prefs.getString(kBgUserKey) ?? '';
-  if (prefs.getString(_nsKey(_kActiveBase, uk)) == null) {
+  if (prefs.getString(bgNsKey(kActiveSessionBase, uk)) == null) {
     // No hay partido en curso: la vigilancia ya no hace falta.
     await cancelBatteryWatch();
     return;
@@ -533,8 +630,10 @@ Future<void> alarmConfirmCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
   await prefs.reload();
+  // Token laxo: pregunta sobre un partido ya en curso (ver alarmEndCallback).
+  if (!await hasBgSession(prefs, requireFreshToken: false)) return;
   final uk = prefs.getString(kBgUserKey) ?? '';
-  final activeKey = _nsKey(_kActiveBase, uk);
+  final activeKey = bgNsKey(kActiveSessionBase, uk);
   final raw = prefs.getString(activeKey);
   if (raw == null) return; // no hay partido: nada que preguntar
   Map<String, dynamic> a;
@@ -567,8 +666,10 @@ Future<void> alarmConfirmTimeoutCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
   await prefs.reload();
+  // Token laxo: descarta un partido ya en curso (ver alarmEndCallback).
+  if (!await hasBgSession(prefs, requireFreshToken: false)) return;
   final uk = prefs.getString(kBgUserKey) ?? '';
-  final raw = prefs.getString(_nsKey(_kActiveBase, uk));
+  final raw = prefs.getString(bgNsKey(kActiveSessionBase, uk));
   if (raw == null) return;
   Map<String, dynamic> a;
   try {
@@ -592,8 +693,10 @@ Future<void> alarmHardEndCallback() async {
   await prefs.reload();
   final raw = prefs.getString(_kAlarmHardEnd);
   await prefs.remove(_kAlarmHardEnd);
+  // Token laxo: cierra y GUARDA un partido ya en curso (ver alarmEndCallback).
+  if (!await hasBgSession(prefs, requireFreshToken: false)) return;
   final uk = prefs.getString(kBgUserKey) ?? '';
-  final activeRaw = prefs.getString(_nsKey(_kActiveBase, uk));
+  final activeRaw = prefs.getString(bgNsKey(kActiveSessionBase, uk));
   if (activeRaw == null) return;
   int? atMillis;
   if (raw != null) {
@@ -612,7 +715,7 @@ Future<void> alarmHardEndCallback() async {
     final courtId = (a['courtId'] ?? '') as String;
     if (courtId.isNotEmpty) {
       await prefs.setString(
-        _nsKey(_kDwellSnoozeBase, uk),
+        bgNsKey(_kDwellSnoozeBase, uk),
         jsonEncode({
           'courtId': courtId,
           'untilMillis':
@@ -639,11 +742,11 @@ Future<void> alarmHardEndCallback() async {
 /// el dwell re-arrancaría enseguida) y avisa por notificación.
 Future<void> _discardActive(
     SharedPreferences prefs, String uk, Map<String, dynamic> a) async {
-  await prefs.remove(_nsKey(_kActiveBase, uk));
+  await prefs.remove(bgNsKey(kActiveSessionBase, uk));
   final courtId = (a['courtId'] ?? '') as String;
   if (courtId.isNotEmpty) {
     await prefs.setString(
-      _nsKey(_kDwellSnoozeBase, uk),
+      bgNsKey(_kDwellSnoozeBase, uk),
       jsonEncode({
         'courtId': courtId,
         'untilMillis':
@@ -683,6 +786,15 @@ Future<void> alarmRadarCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
   await prefs.reload();
+  // Es el ÚNICO camino que siembra detección nueva con la app cerrada: sin
+  // sesión, además de frenarlo, apagamos el radar para no despertar el equipo
+  // cada 15 min al vacío (se reprograma al volver a loguearse, vía
+  // SyncCoordinator._syncGeofences). El gate va antes de leer el mock: si te
+  // deslogueás con el modo prueba activo, el radar también se apaga.
+  if (!await hasBgSession(prefs)) {
+    await cancelRadarWatch();
+    return;
+  }
   final uk = prefs.getString(kBgUserKey) ?? '';
 
   final pos = await _currentLatLng();
@@ -690,7 +802,7 @@ Future<void> alarmRadarCallback() async {
   await prefs.setInt(
       kLastBgFixKey, DateTime.now().millisecondsSinceEpoch);
 
-  final activeKey = _nsKey(_kActiveBase, uk);
+  final activeKey = bgNsKey(kActiveSessionBase, uk);
   final activeRaw = prefs.getString(activeKey);
 
   if (activeRaw != null) {
@@ -740,7 +852,7 @@ Future<void> alarmRadarCallback() async {
 
   // "No juego" vigente en esta cancha: no sembramos (arranque manual desde la
   // app). Si el snooze ya venció, lo limpiamos de paso.
-  final snoozeRaw = prefs.getString(_nsKey(_kDwellSnoozeBase, uk));
+  final snoozeRaw = prefs.getString(bgNsKey(_kDwellSnoozeBase, uk));
   if (snoozeRaw != null) {
     try {
       final s = jsonDecode(snoozeRaw) as Map<String, dynamic>;
@@ -748,7 +860,7 @@ Future<void> alarmRadarCallback() async {
       if (until > DateTime.now().millisecondsSinceEpoch) {
         if (s['courtId'] == near.$1) return;
       } else {
-        await prefs.remove(_nsKey(_kDwellSnoozeBase, uk));
+        await prefs.remove(bgNsKey(_kDwellSnoozeBase, uk));
       }
     } catch (_) {}
   }
@@ -848,7 +960,7 @@ Future<void> _closeActiveToPending(
   String? notifTitle,
   String? notifBody,
 }) async {
-  final activeKey = _nsKey(_kActiveBase, uk);
+  final activeKey = bgNsKey(kActiveSessionBase, uk);
   final activeRaw = prefs.getString(activeKey);
   if (activeRaw == null) return;
   Map<String, dynamic> a;
@@ -888,7 +1000,7 @@ Future<void> _closeActiveToPending(
   if (seconds >= _kMinMatchSeconds) {
     // Partido válido → pendiente de resultado (mismo formato que PlaySession).
     await prefs.setString(
-      _nsKey(_kPendingBase, uk),
+      bgNsKey(kPendingResultBase, uk),
       jsonEncode({
         'courtId': courtId,
         'courtName': courtName,
@@ -968,13 +1080,8 @@ Future<void> _setNotionPresence(
 }) async {
   try {
     if (!ApiConfig.isConfigured) return;
-    final jwt = prefs.getString(ApiConfig.jwtPrefsKey);
-    final payload = ApiClient.decodePayload(jwt);
-    final exp = payload['exp'];
-    final expired = exp is num &&
-        DateTime.now().isAfter(
-            DateTime.fromMillisecondsSinceEpoch(exp.toInt() * 1000));
-    if (jwt == null || jwt.isEmpty || expired) {
+    final jwt = validBgJwt(prefs);
+    if (jwt == null) {
       await prefs.setBool('presence_dirty', true);
       return;
     }

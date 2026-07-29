@@ -55,6 +55,9 @@ class SyncCoordinator {
   // Evita arrancar el tracking más de una vez por sesión (Session notifica en
   // cada cambio de perfil, no solo al loguear).
   bool _trackingStarted = false;
+  // Si ya apagamos el background por falta de sesión (mismo motivo de
+  // idempotencia que _trackingStarted).
+  bool _alarmsCleared = false;
   // Cantidad de canchas con la que se registraron geofences por última vez
   // (para no re-registrar en cada notify del catálogo).
   int _geofencedCount = -1;
@@ -214,6 +217,9 @@ class SyncCoordinator {
         final ok = i < results.length && (results[i] as Map)['ok'] == true;
         if (!ok) failed.add(pending[i]);
       }
+      // El server respondió: volvió la red, así que el aviso de "sin conexión"
+      // (si entramos offline con un partido sin terminar) ya no corresponde.
+      _session.clearOfflineFlag();
     } catch (_) {
       failed.addAll(pending); // sin red: reintento completo en el próximo flush
     }
@@ -288,6 +294,11 @@ class SyncCoordinator {
   void _onSessionChanged() {
     final p = _session.profile;
     if (p == null) {
+      // Ventana de arranque: todavía no sabemos si hay sesión (restore/verify en
+      // curso). NO tocar las alarmas acá o cancelaríamos el cierre de un partido
+      // legítimo en curso en CADA arranque de la app.
+      if (_session.restoring || _session.verifying) return;
+
       // Cierre de sesión: frenamos el tracking y limpiamos el estado en memoria
       // (puntos, logros, historial) para que NO se filtren a la próxima cuenta.
       if (_trackingStarted) {
@@ -297,13 +308,32 @@ class SyncCoordinator {
         _blocked.clearForLogout();
         ApiCache.clear(); // no filtrar datos cacheados a la próxima cuenta
         _trackingStarted = false;
+      }
+
+      // Sin sesión: apagar TODO el background una sola vez. Va FUERA del if de
+      // arriba a propósito: el caso más común es que la app arranque ya
+      // deslogueada (_trackingStarted == false), y si no limpiamos, una
+      // permanencia sembrada en la corrida anterior arranca un partido y
+      // notifica sin sesión. La sesión activa persistida NO se borra: es
+      // namespaced por usuario y se readopta al volver a loguearse (si tiene
+      // menos de 6 h).
+      if (!_alarmsCleared) {
+        _alarmsCleared = true;
         _geofencedCount = -1;
-        GeofenceService.instance.clear();
         _radarOn = false;
-        unawaited(cancelRadarWatch());
+        GeofenceService.instance.clear();
+        unawaited(cancelAllPlayAlarms());
+        // Notificaciones ya posteadas que sobrevivirían al logout.
+        unawaited(NotificationsService.instance.cancelSession());
+        unawaited(NotificationsService.instance.cancelContinueCheck());
       }
       return;
     }
+    _alarmsCleared = false; // hay sesión: al cerrarla hay que volver a limpiar
+    // No sembrar detección con una sesión que todavía se está verificando: si el
+    // GET /me devuelve 401 vamos a cerrar sesión enseguida. El notify del
+    // finally de _verifyStartupSession nos vuelve a llamar ya confirmada.
+    if (_session.verifying) return;
     if (_trackingStarted) return;
     _trackingStarted = true;
     // Clave por usuario: aísla los datos locales de cada cuenta en el dispositivo.

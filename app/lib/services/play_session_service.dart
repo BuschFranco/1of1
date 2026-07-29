@@ -84,6 +84,20 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   String _userKey = '';
   String _k(String base) => _userKey.isEmpty ? base : '$base::$_userKey';
 
+  /// ¿Hay sesión iniciada? [_userKey] solo se fija en [startTracking] (que corre
+  /// con perfil cargado) y se vacía en [resetForLogout], así que equivale a
+  /// "Session tiene perfil".
+  ///
+  /// Sin sesión no se detecta ni se notifica nada: el usuario tocaría la
+  /// notificación, la app lo mandaría al login y quedaría sin saber dónde se
+  /// registró su partido.
+  ///
+  /// NO mira la red a propósito: con sesión guardada pero sin internet la
+  /// detección debe seguir funcionando (el registro es offline-resiliente, se
+  /// encola en pending_matches y se sube al volver la conexión). Así un bache de
+  /// señal tampoco corta un partido en curso.
+  bool get _hasSession => _userKey.isNotEmpty;
+
   String get _kActive => _k('play_active_session');
   String get _kDwellSnooze => _k('play_dwell_snooze');
   String get _kTotals => _k('play_totals_by_court');
@@ -166,7 +180,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// Vuelve a dibujar (o limpia) la notificación de sesión según el estado
   /// actual. En primer plano siempre la limpia.
   void _renderSessionNotif() {
-    if (_foreground) {
+    // Red de seguridad: sin sesión no se dibuja NINGUNA notificación de sesión,
+    // incluso si algún camino nuevo llegara hasta acá.
+    if (_foreground || !_hasSession) {
       onClearSessionNotif?.call();
       return;
     }
@@ -855,6 +871,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// Adopta el estado que una alarma de background pudo haber escrito (arranque
   /// o cierre automático del partido) mientras la app estaba dormida/cerrada.
   Future<void> reconcileFromPrefs() async {
+    // La invoca el puerto del isolate de background sin filtrar. Sin sesión,
+    // _kActive/_kPending apuntarían a las claves SIN namespace (`play_active_
+    // session` "pelada") y podríamos adoptar basura como partido en curso.
+    if (!_hasSession) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
     final activeRaw = prefs.getString(_kActive);
@@ -1502,6 +1522,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// ticker con getCurrentPosition (funciona aunque estés quieto).
   Future<void> _startStream() async {
     if (_posSub != null) return;
+    // Sin sesión no levantamos el servicio en primer plano (con su notificación
+    // persistente). Hace falta acá además del gate de _evaluate porque
+    // enterCourtArea/reconcileFromPrefs llegan por caminos que no pasan por ahí.
+    if (!_hasSession) return;
     // NO pedimos permiso acá (lo pide el modal). Solo arrancamos el servicio en
     // primer plano si el permiso ya está concedido.
     final perm = await Geolocator.checkPermission();
@@ -1668,6 +1692,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _evaluate(Position pos) {
+    // Embudo único de TODAS las transiciones (permanencia, arranque, gracia de
+    // salida): sin sesión no detectamos nada. Ver [_hasSession].
+    if (!_hasSession) return;
     // Descartamos lecturas demasiado imprecisas para un radio de 110m.
     if (pos.accuracy > radiusMeters * 1.5) return;
 

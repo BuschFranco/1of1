@@ -5,6 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models.dart';
 import 'api/api_client.dart';
 import 'friends_service.dart';
+// Claves base del partido persistido (fuente única, compartida con el isolate
+// de las alarmas): las lee _hasUnfinishedMatch.
+import 'session_alarms.dart';
 
 /// Estado de sesión del usuario. Maneja signup/login/logout contra el backend
 /// propio (JWT) y persiste la sesión en SharedPreferences para restaurarla al
@@ -40,6 +43,10 @@ class Session extends ChangeNotifier {
   // Mensaje si la verificación de arranque falló (sin conexión / error del
   // server / sesión vencida). La UI manda al login y lo muestra.
   String? _startupError;
+  // Entramos sin haber podido verificar contra el backend (sin red) porque hay
+  // un partido sin terminar. La UI muestra un aviso: explica por qué las listas
+  // están vacías y que el partido se sube cuando vuelva la conexión.
+  bool _startedOffline = false;
   // Campos del perfil modificados localmente sin subir. El batch los sube
   // juntos en flush(). Usar un Set en vez de bool permite enviar solo los
   // campos que realmente cambiaron (PATCH parcial), reduciendo el payload.
@@ -68,6 +75,15 @@ class Session extends ChangeNotifier {
   bool get restoring => _restoring;
   bool get verifying => _verifying;
   String? get startupError => _startupError;
+  bool get startedOffline => _startedOffline;
+
+  /// La UI llama a esto cuando una carga con red funcionó: el aviso de "sin
+  /// conexión" ya no corresponde.
+  void clearOfflineFlag() {
+    if (!_startedOffline) return;
+    _startedOffline = false;
+    notifyListeners();
+  }
   /// La consume la pantalla de login para no repetir el mensaje en rebuilds.
   void clearStartupError() => _startupError = null;
   bool get isLoggedIn => _profile != null;
@@ -106,6 +122,8 @@ class Session extends ChangeNotifier {
       return 'Respuesta inválida del servidor.';
     }
     await _api.setToken(token);
+    // Login exitoso = hubo red: el aviso de "sin conexión" ya no corresponde.
+    _startedOffline = false;
     final prof = _withAdmin(
       Profile.fromJson(profJson.cast<String, dynamic>()),
     );
@@ -159,10 +177,65 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// ¿Este usuario tiene un partido EN CURSO, esperando resultado, o resuelto
+  /// pero sin subir? Se usa para decidir si, sin red, entramos con el perfil
+  /// cacheado en vez de mandar al login: el registro de partidos es
+  /// offline-resiliente, y expulsarlo lo deja sin saber dónde quedó su partido.
+  ///
+  /// Namespace igual que PlaySessionService: `base::$userKey`, con
+  /// userKey = email en minúsculas.
+  Future<bool> _hasUnfinishedMatch(String email) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Imprescindible: el partido pudo haberlo escrito el isolate de las
+      // alarmas mientras la app estaba muerta, y esta copia no lo vería.
+      await prefs.reload();
+      final uk = email.trim().toLowerCase();
+      final now = DateTime.now();
+
+      // Partido en curso. Misma ventana de 6 h que usa PlaySessionService al
+      // restaurar: más viejo se descarta igual, así que no cuenta.
+      final activeRaw = prefs.getString(bgNsKey(kActiveSessionBase, uk));
+      if (activeRaw != null) {
+        final start = (jsonDecode(activeRaw) as Map<String, dynamic>)['startMillis'];
+        if (start is num &&
+            now
+                    .difference(
+                        DateTime.fromMillisecondsSinceEpoch(start.toInt()))
+                    .inHours <
+                6) {
+          return true;
+        }
+      }
+
+      // Partido esperando que el usuario cargue el resultado. Acotado a 48 h
+      // para que un pendiente olvidado no saltee la verificación para siempre.
+      final pendingRaw = prefs.getString(bgNsKey(kPendingResultBase, uk));
+      if (pendingRaw != null) {
+        final ended = (jsonDecode(pendingRaw) as Map<String, dynamic>)['endedAtMillis'];
+        if (ended is num &&
+            now
+                    .difference(
+                        DateTime.fromMillisecondsSinceEpoch(ended.toInt()))
+                    .inHours <
+                48) {
+          return true;
+        }
+      }
+
+      // Partidos ya resueltos que esperan subir a la DB.
+      final queued = prefs.getStringList('pending_matches::$uk') ?? const [];
+      return queued.isNotEmpty;
+    } catch (_) {
+      // Nunca romper el arranque por esto.
+      return false;
+    }
+  }
+
   /// Verifica la sesión cacheada contra el backend al arrancar y de paso refresca
   /// el perfil. Éxito → entra. 401 → sesión vencida, al login. Sin conexión /
-  /// error del server → al login con un mensaje (no se entra en modo offline).
-  /// Timeout corto para no dejar el splash colgado.
+  /// server caído → al login, SALVO que haya un partido sin terminar (ahí entra
+  /// con el cache y avisa). Timeout corto para no dejar el splash colgado.
   Future<void> _verifyStartupSession(String email) async {
     try {
       final json = await _api.me().timeout(const Duration(seconds: 4));
@@ -173,15 +246,30 @@ class Session extends ChangeNotifier {
         await _persist(email, fresh);
       }
     } on ApiException catch (e) {
-      _startupError = e.statusCode == 401
-          ? 'Tu sesión expiró. Iniciá sesión de nuevo.'
-          : 'No pudimos conectar con el servidor. Revisá tu conexión e iniciá sesión de nuevo.';
-      await logout(flushFirst: false);
+      if (e.statusCode == 401) {
+        // Sesión realmente vencida: SIEMPRE al login, haya partido o no.
+        _startupError = 'Tu sesión expiró. Iniciá sesión de nuevo.';
+        await logout(flushFirst: false);
+      } else if (await _hasUnfinishedMatch(email)) {
+        // El server no responde bien (5xx, cold start de Render). Eso no es
+        // "tu sesión venció": mismo trato que la falta de red.
+        _startedOffline = true;
+      } else {
+        _startupError =
+            'No pudimos conectar con el servidor. Revisá tu conexión e iniciá sesión de nuevo.';
+        await logout(flushFirst: false);
+      }
     } catch (_) {
-      // Sin red / timeout.
-      _startupError =
-          'No hay conexión. Revisá tu internet e iniciá sesión de nuevo.';
-      await logout(flushFirst: false);
+      // Sin red / timeout. Con un partido sin terminar entramos con el perfil
+      // cacheado: el registro funciona offline y echarlo al login lo deja sin
+      // saber dónde quedó su partido.
+      if (await _hasUnfinishedMatch(email)) {
+        _startedOffline = true;
+      } else {
+        _startupError =
+            'No hay conexión. Revisá tu internet e iniciá sesión de nuevo.';
+        await logout(flushFirst: false);
+      }
     } finally {
       _verifying = false;
       notifyListeners();
@@ -589,6 +677,7 @@ class Session extends ChangeNotifier {
       await flush(); // subir lo que haya quedado pendiente antes de cerrar
     }
     _dirtyFields.clear();
+    _startedOffline = false;
     await _api.clearToken();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kEmail);

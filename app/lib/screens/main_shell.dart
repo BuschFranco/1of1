@@ -599,6 +599,16 @@ class _MainShellState extends State<MainShell> {
                 child: MatchStatusPill(onTap: () => _selectTab(AppTab.home)),
               ),
             ),
+          // Entramos sin poder verificar contra el backend (sin red) porque hay
+          // un partido sin terminar: hay que decirlo. Si no, el usuario ve
+          // listas vacías y no entiende dónde se está registrando su partido.
+          if (context.watch<Session>().startedOffline && !hideTabs)
+            Positioned(
+              top: MediaQuery.of(context).viewPadding.top,
+              left: 0,
+              right: 0,
+              child: _offlineBanner(),
+            ),
           // Banner de recompensas (logro/título/nivel) por encima de todo.
           // Va dentro de un Positioned para no alterar el tamaño del Stack.
           Positioned(
@@ -615,6 +625,33 @@ class _MainShellState extends State<MainShell> {
           Positioned.fill(child: AppLoader(visible: loaderVisible)),
         ],
       ),
+      ),
+    );
+  }
+
+  /// Aviso de que entramos sin conexión (hay un partido sin terminar). Tranquiliza
+  /// sobre lo importante: el partido no se pierde. Se va solo al recuperar la red.
+  Widget _offlineBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.bgElev,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        border: Border.all(color: AppColors.busy.withAlpha(90)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.cloud_off, size: 16, color: AppColors.busy),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Sin conexión. Tu partido se registra igual y se sube cuando vuelva el internet.',
+              style: AppText.grotesk(
+                  size: 12, color: AppColors.white(0.75), height: 1.35),
+            ),
+          ),
+        ],
       ),
     );
   }
