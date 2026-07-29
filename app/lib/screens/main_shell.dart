@@ -708,7 +708,9 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
           ),
         );
 
-    Widget field(String label, TextEditingController ctrl) {
+    // [isLast] cierra el teclado en vez de seguir avanzando.
+    Widget field(String label, TextEditingController ctrl,
+        {bool isLast = false}) {
       return Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -725,6 +727,11 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
               controller: ctrl,
               keyboardType: TextInputType.number,
               textAlign: TextAlign.center,
+              // El teclado muestra "Siguiente" y salta al input de al lado sin
+              // tener que cerrarlo y tocar cada campo a mano. El orden lo da el
+              // árbol: puntos → 3PT → 2PT → TL.
+              textInputAction:
+                  isLast ? TextInputAction.done : TextInputAction.next,
               style: AppText.archivo(size: 16, weight: FontWeight.w800),
               cursorColor: AppColors.accent,
               inputFormatters: [
@@ -811,6 +818,7 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                       keyboardType: TextInputType.number,
                       textAlign: TextAlign.center,
                       autofocus: true,
+                      textInputAction: TextInputAction.next,
                       style: AppText.archivo(size: 22, weight: FontWeight.w800),
                       cursorColor: AppColors.accent,
                       inputFormatters: [
@@ -828,7 +836,7 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                         const SizedBox(width: 10),
                         field('2PT', widget.t2Ctrl),
                         const SizedBox(width: 10),
-                        field('TL', widget.tlCtrl),
+                        field('TL', widget.tlCtrl, isLast: true),
                       ],
                     ),
                     const SizedBox(height: 18),
