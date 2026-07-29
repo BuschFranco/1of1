@@ -59,9 +59,10 @@
   },
   "cta": {
     "title": "UNLEASH YOUR POTENTIAL",
-    "subtitle": "Join over 50,000 hoopers who have leveled up their game with 1OF1. The next court is waiting for you.",
+    "subtitle": "Find where to play, log every game and take your progress with you. The next court is waiting for you.",
     "appStore": "APP STORE",
     "playStore": "PLAY STORE",
+    "comingSoon": "Coming soon",
     "freeNote": "No subscriptions. No hidden fees."
   },
   "footer": {
@@ -91,11 +92,13 @@
     },
     "pickups": {
       "title": "PICKUPS & EVENTS",
-      "body": "Host private runs or join public events. Get matched with players at your skill level for the best competition.",
+      "body": "Set up a run at any court, invite your crew and sort it all out in the chat: teams, tip-off time and how many points you play to.",
       "event1": "SUNDAY_RUN_@_9PM",
       "event1Status": "JOINED",
       "event2": "OPEN_INVITE",
-      "event2Status": "SIGN UP"
+      "event2Status": "SIGN UP",
+      "publicTag": "Public runs",
+      "publicBody": "Post your game and anyone can jump in straight from the map, no invite needed. Perfect when you're two players short and don't want to sit out."
     },
     "clan": {
       "badge": "NEW: CLAN SYSTEM",
@@ -119,6 +122,60 @@
       "nextTier": "NEXT TIER",
       "nextTierXP": "120 XP"
     }
+  },
+  "discover": {
+    "title": "LEAVE YOUR MARK",
+    "eyebrow": "03 // EXPLORATION",
+    "lead": "We don't build the map — the people who go out looking do. Know a court that isn't listed? Add it, and it stays signed with your name for good, in plain sight of everyone who plays there after you.",
+    "body": "Every court you add is one more court where someone in your neighborhood gets to play tomorrow. Discoverers don't get erased: your signature stays as long as the court does.",
+    "note": "We review every court before publishing it to keep the map reliable. We'll let you know once it's approved.",
+    "signature": {
+      "court": "Municipal Court",
+      "meta": "Outdoor · Concrete",
+      "label": "Shared by:",
+      "clan": "[MDG]",
+      "handle": "@franco.b"
+    }
+  },
+  "seasons": {
+    "title": "TWO SEASONS A YEAR",
+    "eyebrow": "04 // SEASONS",
+    "lead": "Competition is split into calendar halves. It's not a rolling window: they're fixed dates, the same for everyone, easy to remember.",
+    "splits": [
+      { "range": "JAN 1 — JUN 30", "label": "First season" },
+      { "range": "JUL 1 — DEC 31", "label": "Second season" }
+    ],
+    "whyTitle": "WHY HALVES?",
+    "why": [
+      {
+        "icon": "restart_alt",
+        "title": "Everyone starts over",
+        "body": "Join today and you're not years behind the leader. Every January 1st and July 1st the table resets and you compete on level ground."
+      },
+      {
+        "icon": "workspace_premium",
+        "title": "Titles go back on the line",
+        "body": "King of the court and Court conquered by clan last one season. Nobody keeps the crown forever: you have to go out and defend it."
+      },
+      {
+        "icon": "event_available",
+        "title": "Six months is real time",
+        "body": "Long enough that whoever actually played wins, not whoever had one good week — but short enough that a rematch is always around the corner."
+      }
+    ],
+    "keepTitle": "Your progress isn't wiped",
+    "keepBody": "A season resets the competition, not your history: your level, your achievements and your lifetime XP stay for good. You can view your numbers by week, month, season or all time."
+  },
+  "wearables": {
+    "title": "PLAY WITH YOUR WATCH ON",
+    "eyebrow": "05 // YOUR BODY",
+    "lead": "If you play wearing a smartwatch or a band, 1of1 reads the real effort of every game —heart rate, calories, steps and distance— and turns it into metrics you can't eyeball.",
+    "comboTitle": "Your body and your game, together",
+    "comboBody": "The watch tells you how hard you pushed; the points you log at the end tell you how it went on court. Cross both halves and you see what neither shows alone: whether your stamina improves game after game, whether you play differently once your heart rate spikes, and where you're actually getting better.",
+    "chartTitle": "YOUR PROGRESSION",
+    "chartPhysical": "Body",
+    "chartGame": "Game",
+    "chartFoot": "Game after game, season after season."
   },
   "terms": {
     "badge": "1OF1",

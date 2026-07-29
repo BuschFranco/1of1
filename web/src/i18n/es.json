@@ -59,9 +59,10 @@
   },
   "cta": {
     "title": "LIBERÁ TU POTENCIAL",
-    "subtitle": "Unite a más de 50,000 jugadores que mejoraron su juego con 1OF1. La próxima cancha te está esperando.",
+    "subtitle": "Encontrá dónde jugar, registrá cada partido y llevá tu progreso con vos. La próxima cancha te está esperando.",
     "appStore": "APP STORE",
     "playStore": "PLAY STORE",
+    "comingSoon": "Próximamente",
     "freeNote": "Sin suscripciones. Sin costos ocultos."
   },
   "footer": {
@@ -91,11 +92,13 @@
     },
     "pickups": {
       "title": "PICKUPS & EVENTS",
-      "body": "Organizá partidos privados o unite a eventos públicos. Encontrá jugadores de tu nivel para la mejor competencia.",
+      "body": "Armá un pickup en la cancha que quieras, invitá a tu crew y coordinen todo desde el chat: equipos, horario y a cuántos puntos se juega.",
       "event1": "PARTIDO_DOMINGO_@_9PM",
       "event1Status": "UNIDO",
       "event2": "INVITACION_ABIERTA",
-      "event2Status": "INSCRIBITE"
+      "event2Status": "INSCRIBITE",
+      "publicTag": "Pickups públicos",
+      "publicBody": "Publicá el partido y cualquiera puede sumarse desde el mapa, sin invitación. Ideal para cuando faltan dos y no querés quedarte afuera."
     },
     "clan": {
       "badge": "NUEVO: SISTEMA DE CLANES",
@@ -119,6 +122,60 @@
       "nextTier": "SIGUIENTE NIVEL",
       "nextTierXP": "120 XP"
     }
+  },
+  "discover": {
+    "title": "DEJÁ TU FIRMA",
+    "eyebrow": "03 // EXPLORACIÓN",
+    "lead": "El mapa no lo armamos nosotros: lo arman los que salen a buscar. ¿Conocés un playón que no figura? Sumalo y queda firmado con tu nombre para siempre, a la vista de todos los que jueguen ahí después.",
+    "body": "Cada cancha que agregás es una cancha más donde alguien de tu barrio va a poder jugar mañana. Los descubridores no se borran: la firma queda mientras la cancha exista.",
+    "note": "Revisamos cada cancha antes de publicarla para que el mapa sea confiable. Te avisamos cuando se apruebe.",
+    "signature": {
+      "court": "Playón Municipal",
+      "meta": "Exterior · Cemento",
+      "label": "Compartida por:",
+      "clan": "[MDG]",
+      "handle": "@franco.b"
+    }
+  },
+  "seasons": {
+    "title": "DOS TEMPORADAS POR AÑO",
+    "eyebrow": "04 // TEMPORADAS",
+    "lead": "La competencia se corta en semestres de calendario. No es una ventana que se arrastra: son fechas fijas, iguales para todos, que sabés de memoria.",
+    "splits": [
+      { "range": "1 ENE — 30 JUN", "label": "Primera temporada" },
+      { "range": "1 JUL — 31 DIC", "label": "Segunda temporada" }
+    ],
+    "whyTitle": "¿POR QUÉ SEMESTRES?",
+    "why": [
+      {
+        "icon": "restart_alt",
+        "title": "Todos vuelven a arrancar",
+        "body": "Si entrás hoy no estás a años de distancia del primero. Cada 1 de enero y cada 1 de julio la tabla se pone en cero y competís de igual a igual."
+      },
+      {
+        "icon": "workspace_premium",
+        "title": "Los títulos se ponen en juego",
+        "body": "Rey de la cancha y Cancha conquistada por el clan duran una temporada. Nadie se queda con la corona para siempre: hay que salir a defenderla."
+      },
+      {
+        "icon": "event_available",
+        "title": "Seis meses es tiempo real",
+        "body": "Alcanza para que gane el que jugó de verdad y no el que tuvo una buena semana, pero es lo bastante corto para que siempre haya una revancha cerca."
+      }
+    ],
+    "keepTitle": "Tu progreso no se borra",
+    "keepBody": "La temporada reinicia la competencia, no tu historia: tu nivel, tus logros y tu EXP acumulada quedan para siempre. Podés mirar tus números por semana, mes, temporada o total."
+  },
+  "wearables": {
+    "title": "JUGÁ CON TU RELOJ PUESTO",
+    "eyebrow": "05 // TU FÍSICO",
+    "lead": "Si jugás con un smartwatch o una banda, 1of1 lee el esfuerzo real de cada partido —pulso, calorías, pasos y distancia— y lo convierte en métricas que no se pueden estimar a ojo.",
+    "comboTitle": "El cuerpo y el juego, juntos",
+    "comboBody": "El reloj cuenta cuánto pusiste el cuerpo; los puntos que cargás al terminar cuentan cómo te fue en la cancha. Cruzando las dos mitades ves lo que ninguna muestra sola: si tu resistencia mejora partido a partido, si rendís distinto cuando el pulso se va arriba, y en qué estás avanzando de verdad.",
+    "chartTitle": "TU EVOLUCIÓN",
+    "chartPhysical": "Físico",
+    "chartGame": "Juego",
+    "chartFoot": "Partido a partido, temporada a temporada."
   },
   "terms": {
     "badge": "1OF1",

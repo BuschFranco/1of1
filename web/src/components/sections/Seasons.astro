@@ -1,0 +1,173 @@
+---
+import { useTranslations } from '../../i18n';
+import type { Lang } from '../../lib/urls';
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+const s = t.seasons;
+---
+
+<section id="temporadas" class="seasons section">
+  <div class="container">
+    <div class="section-head">
+      <h2 class="h2">{s.title}</h2>
+      <span class="eyebrow">{s.eyebrow}</span>
+    </div>
+
+    <p class="lead seasons-lead reveal">{s.lead}</p>
+
+    <!-- Los dos semestres, como un calendario partido al medio. -->
+    <div class="seasons-splits reveal">
+      {
+        s.splits.map((sp: { range: string; label: string }) => (
+          <div class="split">
+            <span class="split-range">{sp.range}</span>
+            <span class="split-label">{sp.label}</span>
+          </div>
+        ))
+      }
+    </div>
+
+    <h3 class="seasons-why-title">{s.whyTitle}</h3>
+    <div class="seasons-why">
+      {
+        s.why.map((w: { icon: string; title: string; body: string }) => (
+          <article class="card card-hover season-card reveal">
+            <span class="material-symbols-outlined season-icon">{w.icon}</span>
+            <h4 class="season-card-title">{w.title}</h4>
+            <p class="body">{w.body}</p>
+          </article>
+        ))
+      }
+    </div>
+
+    <div class="seasons-keep reveal">
+      <span class="material-symbols-outlined">shield_lock</span>
+      <div>
+        <h4 class="seasons-keep-title">{s.keepTitle}</h4>
+        <p class="body">{s.keepBody}</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* Alterna con el --bg de Discover (la sección anterior). */
+  .seasons {
+    background: var(--bg-lowest);
+  }
+
+  .seasons-lead {
+    max-width: 68ch;
+  }
+
+  .seasons-splits {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 32px;
+  }
+
+  /* La franja de fechas es el dato duro de la sección: va grande y en display. */
+  .split {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .split-range {
+    font-family: var(--font-display);
+    font-size: var(--fs-h3-sm);
+    font-style: italic;
+    color: var(--ink-strong);
+    letter-spacing: 0.01em;
+  }
+
+  .split-label {
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-style: italic;
+    font-size: var(--fs-micro);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+
+  .seasons-why-title {
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-style: italic;
+    font-size: var(--fs-label);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-top: 48px;
+    margin-bottom: 20px;
+  }
+
+  .seasons-why {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 24px;
+  }
+
+  .season-card {
+    min-width: 0;
+  }
+
+  .season-icon {
+    color: var(--accent);
+    font-size: 32px;
+  }
+
+  .season-card-title {
+    font-family: var(--font-display);
+    font-size: var(--fs-h3-sm);
+    font-style: italic;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+    margin: 12px 0 8px;
+  }
+
+  /* Cierre tranquilizador: la temporada no borra tu historia. */
+  .seasons-keep {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-top: 32px;
+    padding: 24px;
+    background: rgba(255, 107, 26, 0.06);
+    border: 1px solid var(--border);
+  }
+
+  .seasons-keep > .material-symbols-outlined {
+    color: var(--accent);
+    font-size: 28px;
+    flex: none;
+  }
+
+  .seasons-keep-title {
+    font-family: var(--font-label);
+    font-weight: 800;
+    font-style: italic;
+    font-size: var(--fs-label);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+    margin-bottom: 6px;
+  }
+
+  @media (max-width: 720px) {
+    .seasons-splits {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

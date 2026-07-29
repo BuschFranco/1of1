@@ -4,6 +4,9 @@ import Hero from '../../components/sections/Hero.astro';
 import Features from '../../components/sections/Features.astro';
 import Community from '../../components/sections/Community.astro';
 import Stats from '../../components/sections/Stats.astro';
+import Discover from '../../components/sections/Discover.astro';
+import Seasons from '../../components/sections/Seasons.astro';
+import Wearables from '../../components/sections/Wearables.astro';
 import DownloadCta from '../../components/sections/DownloadCta.astro';
 
 const lang = 'en' as const;
@@ -19,5 +22,8 @@ const lang = 'en' as const;
   <Community lang={lang}>
     <Stats lang={lang} />
   </Community>
+  <Discover lang={lang} />
+  <Seasons lang={lang} />
+  <Wearables lang={lang} />
   <DownloadCta lang={lang} />
 </Base>
