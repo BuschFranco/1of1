@@ -244,7 +244,7 @@ class ApiClient {
   }) =>
       _map(_send('GET', '/courts/$courtId/posts', query: {
         'limit': limit.toString(),
-        if (cursor != null) 'cursor': cursor,
+        'cursor': ?cursor,
       }));
 
   Future<Map<String, dynamic>> createPost(

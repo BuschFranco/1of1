@@ -319,8 +319,8 @@ Si lo hacés, cambiá **de forma consistente**:
 
 ## 6. Convenciones y gotchas
 
-- **`flutter analyze lib` debe quedar sin issues nuevos.** Hay un deprecado
-  preexistente conocido (`setMapStyle`); no sumes otros.
+- **`flutter analyze lib` está en CERO issues.** Mantenelo así: cualquier cosa
+  que aparezca es de tu cambio, no ruido preexistente.
 - **google_maps_flutter_android está pineado a `2.19.7`** en `pubspec.yaml`: la
   2.19.8 migró a Pigeon/Kotlin y **rompe el build**. No lo actualices sin verificar.
 - **Windows/adb:** `adb` no está en PATH; usá la ruta completa (§0).

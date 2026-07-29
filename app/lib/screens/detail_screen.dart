@@ -1749,20 +1749,23 @@ class _PostsSectionState extends State<_PostsSection> {
                     ),
                     onSelected: (v) async {
                       if (v == 'report') {
+                        // El messenger se resuelve ANTES del await: el context
+                        // de acá es del StatefulBuilder de la card, que puede
+                        // morir durante el reporte (la lista se recarga) y el
+                        // `mounted` de esta sección no lo cubre.
+                        final messenger = ScaffoldMessenger.of(context);
                         await ReportService.report(
                           tipo: 'publicación',
                           referencia: '${p.userHandle} — ${p.pageId}',
                           detalle: 'Publicación reportada desde detalle de cancha',
                         );
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Publicación reportada',
-                                  style: AppText.grotesk(size: 13)),
-                              backgroundColor: AppColors.bgElev,
-                            ),
-                          );
-                        }
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text('Publicación reportada',
+                                style: AppText.grotesk(size: 13)),
+                            backgroundColor: AppColors.bgElev,
+                          ),
+                        );
                       }
                     },
                     itemBuilder: (_) => [
