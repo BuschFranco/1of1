@@ -386,6 +386,13 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         : RewardEvent.courtRejected(courtName));
   }
 
+  /// El creador reprogramó un pickup en el que participo. Lo detecta
+  /// SyncCoordinator al recargar los pickups (no hay push entre usuarios: el
+  /// aviso dispara cuando el usuario abre la app).
+  void addPickupReschedule(String pickupTitle, String dateLabel) {
+    _emit(RewardEvent.pickupRescheduled(pickupTitle, dateLabel));
+  }
+
   Future<void> _persistNotifs() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
@@ -2917,7 +2924,15 @@ class PlaySession {
 }
 
 /// Tipo de recompensa que dispara una notificación in-app.
-enum RewardKind { achievement, title, levelUp, chatCreated, courtApproved, courtRejected }
+enum RewardKind {
+  achievement,
+  title,
+  levelUp,
+  chatCreated,
+  courtApproved,
+  courtRejected,
+  pickupRescheduled,
+}
 
 /// Un evento de recompensa a mostrar como banner: logro o título desbloqueado,
 /// o subida de nivel. Lleva ya resuelto el texto, el ícono y el color a mostrar.
@@ -2996,6 +3011,19 @@ class RewardEvent {
         color: AppColors.busy,
       );
 
+  /// El creador cambió la fecha/hora de un pickup en el que estoy. [refId] lleva
+  /// "título del pickup|fecha nueva" para poder reconstruir el texto completo
+  /// desde el historial persistido.
+  factory RewardEvent.pickupRescheduled(String pickupTitle, String dateLabel) =>
+      RewardEvent(
+        kind: RewardKind.pickupRescheduled,
+        refId: '$pickupTitle|$dateLabel',
+        headline: 'Cambió el horario del pickup',
+        name: '$pickupTitle · $dateLabel',
+        icon: Icons.edit_calendar_outlined,
+        color: AppColors.busy,
+      );
+
   /// Reconstruye el evento a partir de su tipo y [refId] (al cargar el historial
   /// persistido), re-resolviendo ícono/color/textos desde el catálogo.
   factory RewardEvent.restore(RewardKind kind, String refId) {
@@ -3014,6 +3042,10 @@ class RewardEvent {
         return RewardEvent.courtApproved(refId);
       case RewardKind.courtRejected:
         return RewardEvent.courtRejected(refId);
+      case RewardKind.pickupRescheduled:
+        final parts = refId.split('|');
+        return RewardEvent.pickupRescheduled(
+            parts.first, parts.length > 1 ? parts[1] : '');
     }
     // Catálogo cambió y ya no existe: fallback neutro.
     return RewardEvent(

@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models.dart';
 import 'api/api_client.dart';
 import 'cache/api_cache.dart';
@@ -111,6 +113,15 @@ class PickupsProvider extends ChangeNotifier {
 
   bool _eq(String a, String b) =>
       a.trim().toLowerCase() == b.trim().toLowerCase();
+
+  /// Reprograma el pickup (fecha y/o hora). Solo lo usa el creador desde el chat
+  /// del pickup; el backend valida que quien llama sea miembro.
+  ///
+  /// [iso] va en hora LOCAL sin zona (`toIso8601String()` de un DateTime local),
+  /// igual que al crear el pickup: el backend lo interpreta con parseUtc, así
+  /// que mezclar formatos desfasaría el horario mostrado.
+  Future<Pickup> reschedule(Pickup p, DateTime when) =>
+      _update(p.copyWith(dateTime: when.toIso8601String()));
 
   /// Acepta la invitación: agrega a aceptados y saca de rechazados.
   Future<Pickup> accept(Pickup p, String email) async {
@@ -242,5 +253,77 @@ class PickupsProvider extends ChangeNotifier {
     _pickups = [];
     _email = '';
     notifyListeners();
+  }
+
+  // ── Aviso de pickup reprogramado ────────────────────────────────────────────
+  //
+  // No hay canal push entre usuarios: cuando el creador cambia la fecha, los
+  // demás se enteran (a) por el mensaje que queda en el chat, y (b) por esta
+  // comparación, que corre al recargar los pickups y avisa los cambios nuevos.
+  // Mismo patrón que las decisiones de moderación de canchas.
+
+  String _datesKey(String email) => 'notified_pickup_dates::$email';
+
+  Future<Map<String, String>> _readKnownDates(String email) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_datesKey(email));
+      if (raw == null) return {};
+      final m = jsonDecode(raw) as Map<String, dynamic>;
+      return m.map((k, v) => MapEntry(k, v.toString()));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> _writeKnownDates(String email, Map<String, String> d) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_datesKey(email), jsonEncode(d));
+    } catch (_) {}
+  }
+
+  /// Devuelve los pickups cuya fecha cambió desde la última vez que los vimos.
+  /// La primera observación se registra en silencio (si no, al reinstalar
+  /// avisaría de todos los pickups como si recién los hubieran movido).
+  ///
+  /// Excluye los que creé yo: si cambié la fecha, ya lo sé.
+  Future<List<({String title, String dateIso})>> pollRescheduled(
+      String email) async {
+    final e = email.trim().toLowerCase();
+    if (e.isEmpty || _pickups.isEmpty) return const [];
+    final known = await _readKnownDates(e);
+    final out = <({String title, String dateIso})>[];
+    var changed = false;
+    final seen = <String>{};
+
+    for (final p in _pickups) {
+      if (p.pageId.isEmpty) continue;
+      seen.add(p.pageId);
+      final cur = p.dateTime ?? '';
+      final prev = known[p.pageId];
+      // Solo avisamos si participo de verdad y no soy el creador.
+      final involved = !p.isCreator(e) && (p.hasAccepted(e) || p.teamOf(e) != null);
+      if (prev != null && prev != cur && cur.isNotEmpty && involved) {
+        out.add((title: p.title, dateIso: cur));
+      }
+      if (prev != cur) {
+        known[p.pageId] = cur;
+        changed = true;
+      }
+    }
+
+    // Los pickups que ya no están (borrados/expirados) salen del registro para
+    // que no crezca sin límite.
+    final stale = known.keys.where((k) => !seen.contains(k)).toList();
+    if (stale.isNotEmpty) {
+      for (final k in stale) {
+        known.remove(k);
+      }
+      changed = true;
+    }
+
+    if (changed) await _writeKnownDates(e, known);
+    return out;
   }
 }

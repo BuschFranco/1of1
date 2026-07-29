@@ -315,6 +315,7 @@ class Pickup {
   }
 
   Pickup copyWith({
+    String? dateTime,
     List<String>? teamAMembers,
     List<String>? teamBMembers,
     List<String>? acceptedMembers,
@@ -325,7 +326,7 @@ class Pickup {
       title: title,
       courtId: courtId,
       createdBy: createdBy,
-      dateTime: dateTime,
+      dateTime: dateTime ?? this.dateTime,
       maxPlayers: maxPlayers,
       vibe: vibe,
       notes: notes,

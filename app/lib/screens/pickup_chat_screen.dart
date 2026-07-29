@@ -13,6 +13,7 @@ import '../services/pickups_provider.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
 import '../theme/app_theme.dart';
+import '../widgets/pickup_schedule_picker.dart';
 import '../widgets/pressable_widget.dart';
 
 /// Chat de un pickup: solo lectura (no se puede escribir todavía), con un panel
@@ -338,7 +339,13 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
           // Lugar / fecha / formato.
           _infoRow(Icons.place_outlined, _courtName(pickup)),
           const SizedBox(height: 8),
-          _infoRow(Icons.calendar_today_outlined, _dateLabel(pickup.dateTime)),
+          // La fecha es lo único del pickup que el creador puede cambiar acá:
+          // los planes se mueven y no queremos que tenga que rehacer el pickup.
+          if (isCreator)
+            _editableDateRow(pickup)
+          else
+            _infoRow(
+                Icons.calendar_today_outlined, _dateLabel(pickup.dateTime)),
           const SizedBox(height: 8),
           _infoRow(Icons.sports_basketball_outlined,
               '${pickup.teamSize}v${pickup.teamSize} · a ${pickup.targetScore} pts'),
@@ -371,6 +378,76 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
   }
 
   Widget _hairline() => Container(height: 1, color: AppColors.white(0.06));
+
+  /// Cancha del pickup (null si no está en el catálogo cargado). El picker la
+  /// usa para ofrecer solo horarios dentro del horario de apertura.
+  Court? _court(Pickup p) {
+    for (final Court c in context.read<CourtsProvider>().courts) {
+      if (c.id == p.courtId) return c;
+    }
+    return null;
+  }
+
+  /// Fila de fecha/hora tocable (solo creador): abre el picker y reprograma.
+  Widget _editableDateRow(Pickup pickup) {
+    return PressableWidget(
+      onTap: _busy ? null : () => _reschedule(pickup),
+      child: Row(
+        children: [
+          Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.accent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(_dateLabel(pickup.dateTime),
+                style:
+                    AppText.grotesk(size: 13, color: AppColors.white(0.85))),
+          ),
+          Text('CAMBIAR',
+              style: AppText.grotesk(
+                  size: 10,
+                  weight: FontWeight.w800,
+                  color: AppColors.accent,
+                  letterSpacing: 0.06)),
+          const SizedBox(width: 2),
+          Icon(Icons.edit_calendar_outlined, size: 14, color: AppColors.accent),
+        ],
+      ),
+    );
+  }
+
+  /// Reprograma el pickup y avisa a los que ya están dentro.
+  ///
+  /// No hay canal push entre usuarios, así que el aviso va en dos capas:
+  ///  1. un mensaje en el chat (los que lo tengan abierto lo ven en segundos,
+  ///     por el polling; el resto al entrar),
+  ///  2. una notificación del sistema que dispara en el device del otro cuando
+  ///     abre la app y detecta el cambio (ver SyncCoordinator).
+  Future<void> _reschedule(Pickup pickup) async {
+    final previous = pickup.dateTime;
+    DateTime? initial;
+    if (previous != null && previous.isNotEmpty) {
+      try {
+        initial = DateTime.parse(previous);
+      } catch (_) {/* fecha corrupta: el picker arranca en hoy */}
+    }
+    final picked =
+        await pickPickupDateTime(context, _court(pickup), initial: initial);
+    if (picked == null || !mounted) return;
+
+    final iso = picked.toIso8601String();
+    if (iso == previous) return; // no cambió nada
+
+    final provider = context.read<PickupsProvider>();
+    await _run(() async {
+      await provider.reschedule(pickup, picked);
+      // El mensaje al chat es best-effort: si falla, la fecha ya quedó
+      // cambiada y no tiene sentido revertirla por no poder avisar.
+      try {
+        final text = 'Cambié el partido para el ${_dateLabel(iso)}.';
+        await _api.sendPickupMessage(widget.pickupId, text);
+        if (mounted) await _loadMessages();
+      } catch (_) {/* el aviso al abrir la app sigue funcionando */}
+    });
+  }
 
   /// Fila del código de invitación (solo creador): tap para copiar.
   Widget _inviteCodeRow(String code) {

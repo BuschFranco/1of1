@@ -344,7 +344,10 @@ class SyncCoordinator {
     if (_courts.courts.isEmpty) unawaited(_courts.load());
     // Cargar los pickups/invitaciones del usuario (para el badge de la campana y
     // las notificaciones del perfil, sin depender de abrir la pestaña Crew).
-    unawaited(_pickups.loadForUser(userKey));
+    // Con la lista ya cargada, avisamos los que el creador reprogramó.
+    unawaited(_pickups
+        .loadForUser(userKey)
+        .then((_) => _checkRescheduledPickups(userKey)));
     // Lista local de usuarios bloqueados de esta cuenta.
     unawaited(_blocked.loadForUser(userKey));
     // Sembrar desde Notion para no perder progreso tras reinstalar.
@@ -434,6 +437,32 @@ class SyncCoordinator {
         _play.addCourtDecision(d.name, d.approved);
       }
     } catch (_) {/* best-effort: no rompe el arranque */}
+  }
+
+  /// Avisa los pickups que el creador reprogramó desde la última vez que el
+  /// usuario abrió la app (no hay push entre usuarios; ver PickupsProvider).
+  /// Corre DESPUÉS de que los pickups estén cargados, si no no hay con qué
+  /// comparar.
+  Future<void> _checkRescheduledPickups(String email) async {
+    try {
+      final moved = await _pickups.pollRescheduled(email);
+      for (final m in moved) {
+        _play.addPickupReschedule(m.title, _pickupDateLabel(m.dateIso));
+      }
+    } catch (_) {/* best-effort: no rompe el arranque */}
+  }
+
+  /// Fecha legible para el aviso ("12/8/2026 · 20:30"). Mismo formato que el
+  /// panel del chat del pickup.
+  String _pickupDateLabel(String iso) {
+    try {
+      final dt = DateTime.parse(iso);
+      final h = dt.hour.toString().padLeft(2, '0');
+      final m = dt.minute.toString().padLeft(2, '0');
+      return '${dt.day}/${dt.month}/${dt.year} · $h:$m';
+    } catch (_) {
+      return '';
+    }
   }
 
   void dispose() {
