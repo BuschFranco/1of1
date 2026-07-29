@@ -86,7 +86,7 @@ El servicio está siempre en uno de estos estados (por usuario, namespaced):
   todo y la notif vuelve a "jugando".
 - Al cerrar, el partido queda **pendiente de resultado**: la app pregunta
   "¿Cómo te fue?" y recién ahí `resolvePending()` computa puntos, logros,
-  historial y lo encola para subir a Notion.
+  historial y lo encola en `pending_matches` para subir con `POST /matches`.
 
 ### 3.1 Partido largo: AWAITING CONFIRM (pregunta de las 2h)
 
@@ -147,11 +147,11 @@ Casos especiales:
 | salís del radio | Arranca la **gracia de salida**: **6 min** continuos afuera para cerrar. Aviso "se cierra pronto" cuando faltan **3 min**. Si volvés **15 s** continuos adentro, se cancela. La gracia CUENTA como tiempo jugado. | `exitGrace` 6 min · `endNotifLeadTime` 3 min |
 | **1:30 h** | El multiplicador de puntos por duración llega a su tope (×1.8). | `multiplierCap` 90 min |
 | **2 h netas** | El tiempo deja de sumar puntos Y salta la **pregunta "¿Seguís jugando?"**: el cronómetro se PAUSA hasta que respondas. | `pointsTimeCap` 2 h |
-| +20' sin respuesta | Partido **CANCELADO por completo** (sin puntos/historial/tiempo) + snooze 1 h + botón manual. | `confirmTimeout` 20 min |
-| respondés "No" | Cierre normal con el tiempo congelado en 2 h (pendiente de "¿Cómo te fue?") + snooze 1 h + botón manual. | — |
+| +20' sin respuesta | Partido **CANCELADO por completo** (sin puntos/historial/tiempo) + snooze 2 h 30 min + botón manual. | `confirmTimeout` 20 min |
+| respondés "No" | Cierre normal con el tiempo congelado en 2 h (pendiente de "¿Cómo te fue?") + snooze 2 h 30 min + botón manual. | — |
 | respondés "Sí" | Reanuda (la espera no cuenta) con **1 h más** como máximo. | `overtimeMax` 1 h |
-| **3 h netas** | **Tope duro**: cierra y GUARDA solo + "llegaste al tiempo límite" + snooze 1 h + botón manual. | 2 h + 1 h |
-| tras cerrar/cancelar | La cancha queda silenciada **1 h** ("No juego"/DETENER/límite/timeout): arranque solo manual. El snooze se limpia si estás **2 min** continuos fuera del radio. | `dwellSnooze` 1 h · `snoozeExitClear` 2 min |
+| **3 h netas** | **Tope duro**: cierra y GUARDA solo + "llegaste al tiempo límite" + snooze 2 h 30 min + botón manual. | 2 h + 1 h |
+| tras cerrar/cancelar | La cancha queda silenciada **1 h** ("No juego"/DETENER/límite/timeout): arranque solo manual. El snooze se limpia si estás **2 min** continuos fuera del radio. | `dwellSnooze` 2 h 30 min · `snoozeExitClear` 2 min |
 | al reabrir la app | Si el latido quedó > **3 min** viejo (proceso muerto), se guarda con el tiempo del último latido. Una sesión activa de > **6 h** se descarta por corrupta. | `resumeGapMax` 3 min · tope 6 h |
 | batería ≤ **5 %** | (Sin cargar) el partido se cierra para proteger el registro. | `batteryEndPercent` |
 
@@ -240,14 +240,14 @@ SharedPreferences para que el callback sepa qué hacer sin memoria compartida.
 
 | Alarma | ID | Cuándo se programa | Qué hace el callback |
 | --- | --- | --- | --- |
-| **Arranque** | 100011 | Al empezar un dwell, a +6 min | Verifica que sigas en la cancha (best-effort; sin fix arranca igual) → persiste la sesión activa, notifica "¡Arrancó tu partido!", escribe presencia en Notion, arranca vigilancia de batería. |
+| **Arranque** | 100011 | Al empezar un dwell, a +6 min | Verifica que sigas en la cancha (best-effort; sin fix arranca igual) → persiste la sesión activa, notifica "¡Arrancó tu partido!", escribe presencia vía `PATCH /me/presence`, arranca vigilancia de batería. |
 | **Cierre** | 100012 | Al empezar la gracia, a +6 min | Verifica que sigas afuera (sin fix, cierra: la salida ya se detectó hace 6 min) → mueve la sesión activa a "pendiente de resultado", notifica, limpia presencia. |
 | **Aviso** | 100014 | Junto con la de cierre, a -3 min | "Tu partido se cierra en 3 minutos. Volvé a la cancha para seguir jugando." Solo si la gracia sigue vigente y seguís afuera. |
 | **Batería** | 100013 | Al arrancar un partido, periódica 15 min | Si el partido sigue y la batería ≤5 % sin cargar, cierra para proteger el registro. |
 | **Radar** | 100015 | Ver §5.5 | — |
 | **Pregunta 2h** | 100016 | Al arrancar el partido, a +2 h (reprogramada al reanudar una pausa: el umbral es juego neto) | Si el partido sigue (sin gracia ni pregunta previa): estampa `confirmAskedAtMillis` en la sesión activa ("pausa" en background), muestra "¿Seguís jugando?" con SÍ/NO y programa el timeout. |
-| **Timeout pregunta** | 100017 | Al preguntar, a +20 min | Si nadie respondió (el flag sigue en la sesión activa): descarta el partido POR COMPLETO (sin pendiente), snooze 1 h de la cancha, notifica "Partido cancelado". |
-| **Cierre duro 3h** | 100018 | Al responder "Sí", a +1 h de juego neto | Cierra y GUARDA el partido (pendiente de resultado) con el tope como fin, snooze 1 h, notifica "Llegaste al tiempo límite". |
+| **Timeout pregunta** | 100017 | Al preguntar, a +20 min | Si nadie respondió (el flag sigue en la sesión activa): descarta el partido POR COMPLETO (sin pendiente), snooze 2 h 30 min de la cancha, notifica "Partido cancelado". |
+| **Cierre duro 3h** | 100018 | Al responder "Sí", a +1 h de juego neto | Cierra y GUARDA el partido (pendiente de resultado) con el tope como fin, snooze 2 h 30 min, notifica "Llegaste al tiempo límite". |
 
 Detalle importante del arranque en background: la sesión que escribe la
 alarma va **sin** `lastSeenMillis` a propósito. Su ausencia le dice a
@@ -454,5 +454,5 @@ vía principal — pero no bajes la cadencia esperando precisión.
 
 > **Nota**: que el puntito azul del mapa "salte" al reabrir la app **no es un
 > síntoma de falla** — es la consecuencia esperada de que no hay rastreo
-> continuo (§4). El indicador de §9.1 existe precisamente porque el mapa no
+> continuo (§4). El indicador de §9 existe precisamente porque el mapa no
 > sirve para verificar el background.

@@ -78,10 +78,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // Ancla de la sección "Últimos partidos" para hacer scroll hacia ella al
   // tocar el mazo de puntos que va debajo del nivel.
   final GlobalKey _historyKey = GlobalKey();
+  final ScrollController _scrollCtrl = ScrollController();
 
-  // Historial paginado. El ListView del perfil NO es lazy (ListView(children:)),
-  // y el log llega a 100 partidos: expandirlo entero de una construiría las 100
-  // filas en un solo frame. De a tandas se mantiene fluido.
+  // Historial paginado: el log llega a 100 partidos y mostrarlos todos de una
+  // hace una lista interminable de scrollear. De a tandas también evita
+  // construir 100 filas de golpe cuando el usuario llega al final.
   static const int _historyPreview = 5;
   static const int _historyPage = 10;
   int _historyShown = _historyPreview;
@@ -97,6 +98,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadRankFriends());
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
   }
 
   /// Carga los amigos (con sus puntos de perfil) para calcular mi posición en
@@ -150,13 +157,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  void _scrollToHistory() {
+  /// Lleva la vista a "Últimos partidos" (se toca el mazo de EXP del nivel).
+  ///
+  /// Va en dos pasos porque `ListView(children:)` **no monta todos sus hijos**:
+  /// su delegate solo infla los elementos que entran en el viewport, así que
+  /// mientras el historial está fuera de pantalla su Element no existe y el
+  /// GlobalKey no tiene context (ensureVisible no tendría a dónde ir).
+  ///
+  /// 1) Se scrollea al final, que es donde vive el historial (última sección del
+  ///    perfil). Eso lo monta.
+  /// 2) Con el Element ya creado, se ajusta con ensureVisible para dejar el
+  ///    título arriba en vez del final de la lista.
+  Future<void> _scrollToHistory() async {
+    if (!_scrollCtrl.hasClients) return;
+    const curve = Curves.easeOutCubic;
+
+    if (_historyKey.currentContext == null) {
+      await _scrollCtrl.animateTo(
+        _scrollCtrl.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 400),
+        curve: curve,
+      );
+      if (!mounted) return;
+      // El montaje del hijo ocurre durante el frame del scroll: esperamos uno
+      // para que el GlobalKey ya tenga context.
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+    }
+
     final ctx = _historyKey.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(
+    // El guard va sobre el context del key, no sobre el del State: es ese el
+    // que se usa después del gap async.
+    if (ctx == null || !ctx.mounted) return;
+    await Scrollable.ensureVisible(
       ctx,
-      duration: const Duration(milliseconds: 450),
-      curve: Curves.easeOutCubic,
+      duration: const Duration(milliseconds: 300),
+      curve: curve,
       alignment: 0.05,
     );
   }
@@ -353,6 +389,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _profileView(Profile profile) {
     final ps = context.watch<PlaySessionService>();
     return ListView(
+      controller: _scrollCtrl,
       padding: const EdgeInsets.only(top: 4, bottom: 180),
       clipBehavior: Clip.none,
       children: [
@@ -588,15 +625,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              RevealOnScroll(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SectionTitle(
-                        key: _historyKey,
-                        title: 'Últimos partidos'),
-                    _historySection(),
-                  ],
+              // El ancla del scroll va AFUERA del RevealOnScroll: ese widget
+              // desplaza a su hijo con un SlideTransition cuyo offset es una
+              // FRACCIÓN del alto del hijo (12x), así que mientras la sección no
+              // se reveló su contenido está renderizado miles de píxeles más
+              // abajo. Scrollable.ensureVisible lee la posición renderizada, no
+              // la del layout, y con el key adentro apuntaba a la nada.
+              KeyedSubtree(
+                key: _historyKey,
+                child: RevealOnScroll(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SectionTitle(title: 'Últimos partidos'),
+                      _historySection(),
+                    ],
+                  ),
                 ),
               ),
             ],

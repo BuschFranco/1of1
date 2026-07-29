@@ -3,10 +3,10 @@
 Explicación del sistema de puntos ("Ranking" en el perfil), niveles y ranking de amigos, tal como está implementado hoy.
 
 **Código fuente:**
-- Fórmula y acumulación: `app/lib/services/play_session_service.dart` (`resolvePending`, ~línea 1769)
+- Fórmula y acumulación: `app/lib/services/play_session_service.dart` (`resolvePending`, ~línea 1971)
 - Curva de niveles: `app/lib/data/achievements.dart` (`pointsForLevel` / `levelForPoints`)
 - UI (tarjeta de nivel, celda "Rating", hoja de ranking): `app/lib/screens/profile_screen.dart`
-- Backend del ranking por período: `POST /matches` + `GET /ranking` (NestJS)
+- Backend del ranking por período: `POST /matches` + `GET /matches/ranking` (NestJS)
 
 ---
 
@@ -134,7 +134,7 @@ Se abre tocando la celda **"Rating"** del perfil (`_showRanking` → `_RankingSh
 
 Las temporadas son **semestres de calendario** (1 ene–30 jun / 1 jul–31 dic; `PlaySessionService.seasonStart`/`seasonEnd`, backend `season.ts`). Son el eje de la competencia: al terminar una, **todo lo puntuable se reinicia**.
 
-- **Se reinicia por temporada**: el ranking de jugadores y de clanes por período, y la **conquista de canchas** (usuario y clan). "Reiniciar" no borra nada: los partidos viven fechados en la DB Partidos y cada agregación de temporada **filtra por `EndedAt >= inicio de temporada`**. Una temporada nueva arranca sola en 0 y el histórico queda intacto para siempre.
+- **Se reinicia por temporada**: el ranking de jugadores y de clanes por período, y la **conquista de canchas** (usuario y clan). "Reiniciar" no borra nada: los partidos viven fechados en la tabla `matches` de Postgres y cada agregación de temporada **filtra por `EndedAt >= inicio de temporada`**. Una temporada nueva arranca sola en 0 y el histórico queda intacto para siempre.
 - **Se conserva** (NO depende de la temporada): el nivel, los logros, los títulos y cualquier desbloqueable — todos derivan de `Profile.points` (total de por vida), que nunca se resetea. También el ranking "Total" del perfil (histórico).
 - **UI**: pestaña "Temporada" propia en el Ranking global (con banner de fechas + días restantes + aviso de reset) y chip destacado con trofeo en el ranking del perfil. El detalle de cancha muestra "Puntos esta temporada" y "Puntos históricos" por separado, "Conquistada esta temporada por" (clan) y "Rey de la cancha esta temporada" (`GET /matches/court-king`, el jugador con más puntos ahí en la temporada).
 
@@ -147,7 +147,7 @@ Pantalla propia (`RankingScreen`) accesible desde el botón flotante de trofeo d
 - Abajo, una sección fija con **tu posición** como jugador y la de **tu clan** en el período, aunque estén fuera del top 50.
 - El **ranking del perfil** (entre amigos) también se navega por swipe entre Semana/Mes/Total/Temporada, y el botón "Ranking" del perfil muestra **tu posición (#N) entre amigos** en vez de los puntos totales (con loader anti-doble-modal).
 - El detalle de cancha y la miniatura del mapa muestran el **rey de la cancha** (jugador con más puntos esta temporada) además del clan que la conquistó.
-- Un solo endpoint (`GET /rankings/global?since=`) resuelve todo server-side con una pasada por la DB Partidos desde el corte: agrega por jugador y por clan, ordena, corta a 50 y calcula tu puesto sobre el ranking completo. Las identidades (nombre/handle/clan por email) se cachean 60 s.
+- Un solo endpoint (`GET /rankings/global?since=`) resuelve todo server-side con una pasada por la tabla `matches` de Postgres desde el corte: agrega por jugador y por clan, ordena, corta a 50 y calcula tu puesto sobre el ranking completo. Las identidades (nombre/handle/clan por email) se cachean 60 s.
 - **Un clan = la insignia de texto** (≤4 chars) que cada usuario escribe en su perfil, normalizada (`trim` + mayúsculas): "nba" y "NBA" son el mismo clan. Sin entidad Clan: cualquiera "se une" escribiendo la misma insignia. Empates: menos miembros primero, luego alfabético.
 - **Cancha conquistada**: el detalle de cada cancha muestra el clan con más puntos históricos acumulados ahí (`GET /clans/court-owner?courtId=`). Sin jugadores con clan que hayan puntuado, la card no aparece; si el dueño es tu clan, la card se tinta con el acento.
 - Existe también `GET /clans/ranking?since=` (agregado global de clanes con modo Total), hoy sin uso en la UI.
@@ -156,12 +156,12 @@ Pantalla propia (`RankingScreen`) accesible desde el botón flotante de trofeo d
 
 El detalle de cada cancha muestra "Puntos acá" (total del usuario en esa cancha) y "Tus partidos acá" (historial):
 
-- **Puntos**: se suman **server-side desde la DB Partidos** (`GET /matches/court-points?courtId=…`, email del token) — sobreviven reinstalaciones y no están capados. Mientras el backend no respondió, o si la suma local del log supera a la de la DB (partidos pendientes de subir), se muestra la suma local.
+- **Puntos**: se suman **server-side desde la tabla `matches` de Postgres** (`GET /matches/court-points?courtId=…`, email del token) — sobreviven reinstalaciones y no están capados. Mientras el backend no respondió, o si la suma local del log supera a la de la DB (partidos pendientes de subir), se muestra la suma local.
 - **Historial**: sale del **log local** (últimos 100 partidos del dispositivo), filtrado por cancha, hasta 10 filas (resultado, duración, fecha, puntos).
 
 **Cómo funciona el modo por período:**
 1. Cada partido que sumó puntos se encola local (`pending_matches::$userKey`) y el `SyncCoordinator` lo sube en lote vía `POST /matches` (offline-first: si falla, reintenta en el próximo flush).
-2. La hoja de ranking llama `GET /ranking?since=<ISO>&emails=…`; el backend agrupa y suma por email server-side.
+2. La hoja de ranking llama `GET /matches/ranking?since=<ISO>&emails=…`; el backend agrupa y suma por email server-side.
 3. Mis puntos del período salen del **log local** (`pointsThisWeek/Month/Season`), no del backend — por eso mi número puede diferir del que ven mis amigos si hay partidos aún no subidos.
 4. Sin conexión, los amigos quedan en 0 para el período (fallo silencioso).
 
@@ -172,7 +172,7 @@ El detalle de cada cancha muestra "Puntos acá" (total del usuario en esa cancha
 - Todo lo local se guarda en `SharedPreferences` **namespaced por usuario** (`clave::email`): puntos (`play_points`), log (últimos 100 partidos), racha, récord de calorías, badges.
 - Los agregados (puntos, jugadas, racha…) se suben al perfil del backend cada ~2 min durante el juego (batch) y en el flush.
 - Al loguearse en un dispositivo nuevo, los puntos se **siembran desde el perfil** (`seedPoints`): se toma el mayor entre el valor local y el remoto (`if (seedPoints > _points)`), así reinstalar no pierde progreso pero tampoco pisa un local más avanzado.
-- El **historial de partidos y el detalle no se suben**: solo agregados. Por eso el ranking por período necesita la DB de Partidos en el backend.
+- El **historial de partidos y el detalle no se suben**: solo agregados. Por eso el ranking por período necesita la tabla `matches` en el backend.
 
 ---
 

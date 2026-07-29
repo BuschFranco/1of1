@@ -120,32 +120,68 @@ texto en `courts.img`. La DB nunca ve bytes de imagen.
 | --- | --- | --- |
 | `POST /matches` | `{matches: [{points, endedAt, courtId?, courtName?, result?, seconds?}]}` — lote; el email sale del token | `{results: [{ok}]}` por ítem (el cliente reintenta solo los fallidos) |
 | `GET /matches/ranking` | `?since=<ISO>&emails=a,b,c` (máx 100) | `[{email, points}]` |
+| `GET /matches/mine` | — | partidos del usuario del token |
+| `GET /matches/court-king` | `?courtId=` | `{name, handle, points}` — rey de la cancha en la temporada |
+| `GET /matches/court-points` | `?courtId=` | mis puntos acumulados en esa cancha |
 
-## Notion
+### Rankings y clanes
 
-- `notion/notion.service.ts` es el único cliente (portado del NotionService de
-  la app: mismos builders/parsers/filtros + `queryDatabaseAll` paginado y los
-  filtros `filterOr/filterAnd/filterTextContains/filterDateOnOrAfter`).
-- `ProfilesService.onModuleInit()` corre al arrancar y asegura (idempotente) las
-  columnas de las bases — espejo del `_ensureNotionSchema` de la app. **Nunca
-  declara columnas `select` existentes** (`Aprobacion`, `Status`, `Result`):
-  el PATCH de Notion las dejaría sin opciones y borraría los valores.
-- Bases (env `NOTION_DB_*`, defaults embebidos): users, profiles, courts,
-  reviews, pickups, friends, matches, chats (vacío = feature off).
+| Endpoint | Request | Response |
+| --- | --- | --- |
+| `GET /rankings/global` | `?since=<ISO>` | ranking global del período |
+| `GET /clans/ranking` | `?since=<ISO>` | ranking por insignia de clan |
+| `GET /clans/court-owner` | `?courtId=` | `{clan, points}` — clan que conquistó la cancha |
+
+### Publicaciones de cancha
+
+| Endpoint | Request | Response |
+| --- | --- | --- |
+| `GET /courts/:courtId/posts` | `?limit=&cursor=` | página de publicaciones |
+| `POST /courts/:courtId/posts` | `{content}` | la publicación creada |
+| `DELETE /posts/:id` | — | archiva (dueño o admin) |
+| `POST /posts/:id/comments` | `{content}` | el comentario creado |
+
+### Otros
+
+| Endpoint | Request | Response |
+| --- | --- | --- |
+| `POST /uploads/court-image` | multipart | `{url}` — sube al bucket `media` de Supabase Storage |
+| `GET /health` | — | `{ok: true}`. Lo usa el ping keep-alive contra el sleep de Render |
+
+> `PATCH /pickups/:pageId` también cubre la **reprogramación** (campo `dateTime`):
+> es lo que usa el creador para mover fecha/hora desde el chat del pickup. El
+> guard del endpoint es "miembro del pickup", no "creador": la restricción a
+> creador la impone el cliente.
+
+## Base de datos
+
+- **Prisma sobre Supabase Postgres.** El schema es
+  [`prisma/schema.prisma`](prisma/schema.prisma) y se cambia con migraciones
+  (`npx prisma migrate dev --name <algo>`); no hay código de arranque que ajuste
+  columnas.
+- **`src/domain/wire.ts`** es el traductor entre la fila de la base y el JSON que
+  consume la app (`profileWire` / `profilePatchToData` y sus pares por dominio).
+  Si agregás un campo, va acá además del schema.
 - Google sign-in: `POST /auth/google` verifica el idToken server-side con
   `google-auth-library`; `GOOGLE_CLIENT_IDS` (CSV) restringe el `aud`.
 
+> **`src/notion/` es código muerto**: quedó de la etapa en que la base era Notion
+> y **no está registrado en `app.module.ts`**. No lo tomes como referencia; se
+> conserva solo por el script de migración.
+
 ## Estado
 
-- La app YA consume esta API (Fase A' completada): el token de Notion salió de
-  la APK y vive solo en `.env`. En beta el server corre en la PC del dev
-  (`app.listen` en `0.0.0.0`; la app se conecta por la IP LAN, ver
-  `app/dart_defines.json` → `API_BASE_URL`).
-- Smoke tests end-to-end pasados contra el workspace real (register, PATCH /me,
-  courts con `openTime/closeTime`, review propia crear/borrar, DELETE /me).
+Corre en **Render** (`https://oneofone-backend.onrender.com`, HTTPS) con la base
+en Supabase. `app/dart_defines.json` apunta ahí, así que la app no necesita un
+backend local. Deploy: push a `main` → Render redeploya leyendo `render.yaml` de
+la raíz del repo; las variables de entorno viven en su dashboard.
+
+El free tier duerme tras ~15 min sin tráfico (**cold start de 30-60 s**): tenelo
+en cuenta al pensar timeouts y feedback de carga en la app.
 
 ## Pendiente
 
-- Hosting con TLS (al migrar, borrar `network_security_config.xml` de la app).
 - Hardening producción: migrar hash a bcrypt (re-hash en login), rate limiting,
   helmet.
+- **No hay push a los clientes** (ni FCM ni websockets): todo lo que un usuario
+  tiene que saber de otro se resuelve con polling desde la app.

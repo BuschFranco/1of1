@@ -71,8 +71,8 @@ más de 2 años, contando el piso de 11 MB.
 ## 4. Media (imágenes) — el driver real
 
 Sin cambios de fondo: una foto de cancha (~1,5 MB) pesa más que **miles** de
-filas de partidos. Hoy la base solo guarda **URLs** (avatar de Google, fotos
-externas); cuando se hosteen imágenes propias van a **Supabase Storage** (1 GB
+filas de partidos. La base guarda **URLs**: el avatar de Google y las fotos externas son links, y
+las fotos de cancha que suben los usuarios se hostean en **Supabase Storage** (1 GB
 free) o **Cloudflare R2**, NUNCA a la base.
 
 | Usuarios | Avatares (~0,3 MB) | Fotos de cancha (~1,5 MB, 1 c/5 usuarios) | Total media |
@@ -82,8 +82,10 @@ free) o **Cloudflare R2**, NUNCA a la base.
 | 500 | ~150 MB | ~1,5 GB | **~1,65 GB** |
 | 1.000 | ~300 MB | ~3 GB | **~3,3 GB** |
 
-Comprimiendo al subir (máx 1280px, WebP ~200 KB) esto baja **5–10×**. Muy
-recomendable implementarlo en la subida.
+Comprimiendo al subir (máx 1280px, WebP ~200 KB) esto baja **5–10×**. **Ya está
+implementado**: `_compressToWebp` en `app/lib/screens/add_court_screen.dart`
+(WebP calidad 80, máximo 1280 px, con fallback a JPEG), y la subida va por
+`POST /uploads/court-image` al bucket `media` de Supabase Storage.
 
 ## 5. Recomendación de plan por escala (actualizada)
 

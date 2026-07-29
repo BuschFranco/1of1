@@ -14,7 +14,7 @@ existentes.
 
 - Monorepo: la raíz git es `D:\dev\1of1`. **Todo el código de la app vive
   en `app/`** (este directorio). `backend/` es el gateway NestJS que la app
-  consume (la app YA NO habla con Notion directo: ver §2).
+  consume (la app nunca habla con la base directamente: ver §2).
 - Entorno de desarrollo: **Windows + PowerShell**. Hay un shell Bash (Git Bash)
   disponible para scripts POSIX.
 
@@ -30,18 +30,19 @@ dart run build_runner build --delete-conflicting-outputs   # regenerar freezed/j
 
 - **Secretos:** `dart_defines.json` (`MAPS_API_KEY` + `API_BASE_URL`) **no se
   commitea** (`.gitignore`). Ver `lib/config.template.dart` para el formato.
-  El token de Notion vive SOLO en `backend/.env` (server-side). Antes de correr
-  la app hay que levantar el backend: `cd backend && npm run start:dev` (y que
-  `API_BASE_URL` apunte a la IP LAN de esa PC).
+  Por defecto `API_BASE_URL` apunta al backend de producción (Render), así que
+  **no hace falta levantar nada local** para correr la app. Si querés trabajar
+  contra un backend local: `cd backend && npm run start:dev` y apuntá
+  `API_BASE_URL` a la IP LAN de esa PC.
 - **Instalar en el device** (adb no está en PATH; usar ruta completa):
 
   ```bash
-  "C:\Users\yochi\AppData\Local\Android\Sdk\platform-tools\adb.exe" install -r build/app/outputs/flutter-apk/app-release.apk
+  "C:\Android\platform-tools\adb.exe" install -r build/app/outputs/flutter-apk/app-release.apk
   ```
 
   Si da `INSTALL_FAILED_UPDATE_INCOMPATIBLE` (firma distinta), desinstalá primero:
   `adb uninstall com.buschfranco.oneofone` (se pierden datos locales; las stats se
-  recuperan de Notion al loguear).
+  vuelven a sembrar desde el perfil del backend al loguear).
 
 ### Reglas de commits / push
 
@@ -54,7 +55,7 @@ dart run build_runner build --delete-conflicting-outputs   # regenerar freezed/j
 ## 1. Arquitectura en 30 segundos
 
 ```
-Notion (BD) ◀──▶ backend/ (NestJS, JWT) ◀──HTTP──▶ ApiClient ◀── Providers (ChangeNotifier) ◀── UI
+Postgres (Supabase) ◀─Prisma─▶ backend/ (NestJS, JWT) ◀─HTTP─▶ ApiClient ◀── Providers ◀── UI
                                                       ▲
                                             SyncCoordinator (pegamento)
 ```
@@ -92,6 +93,21 @@ Notion (BD) ◀──▶ backend/ (NestJS, JWT) ◀──HTTP──▶ ApiClient
 | `sync_coordinator.dart` | Cablea todo: presencia→API, batch, flush de partidos (`POST /matches`), geofences, callbacks. |
 | `notifications_service.dart` | Notificaciones locales del sistema. |
 | `app_permissions.dart` | Chequeo/pedido de permisos (ubicación, notif, alarmas exactas). |
+| `geofence_service.dart` | Geofences del SO por cancha (vía rápida de detección con la app cerrada). |
+| `health_service.dart` | Métricas del partido desde Health Connect (pulso, calorías, pasos, distancia). |
+| `court_owner_cache.dart` | Clan que conquistó la cancha y rey de la cancha, con cache. |
+| `blocked_provider.dart` | Usuarios bloqueados (local). |
+| `report_service.dart` | Reporte de contenido/usuarios (abre el cliente de mail). |
+
+### Widgets compartidos que conviene reusar (`lib/widgets/`)
+
+| Archivo | Para qué |
+| --- | --- |
+| `busy_overlay.dart` | `runBusy()` + `BusySpinner`: feedback de escrituras sin botón propio (ver §3). |
+| `pickup_schedule_picker.dart` | `pickPickupDateTime()`: fecha + horarios válidos de la cancha. Lo comparten crear pickup y reprogramarlo desde el chat. |
+| `pressable_widget.dart` | Scale-down al presionar. Envolvé con esto, no con `GestureDetector` pelado. |
+| `section_title.dart` | Etiqueta de sección (13px, sin halo). |
+| `under_construction.dart` | `showUnderConstruction()` + badge, para features todavía no operativas. |
 
 - **`SyncCoordinator`** se crea con `lazy: false` en `main.dart`: es donde se
   conectan los callbacks entre servicios. Si agregás un evento nuevo entre
@@ -100,11 +116,15 @@ Notion (BD) ◀──▶ backend/ (NestJS, JWT) ◀──HTTP──▶ ApiClient
 
 ---
 
-## 2. Backend propio (la app YA NO habla con Notion)
+## 2. Backend propio (la app no toca la base directamente)
 
 La app consume la API REST de `backend/` (NestJS) con **JWT propio**; el backend
-es quien habla con Notion (y quien asegura el schema al arrancar, en
-`ProfilesService.onModuleInit`). Contratos completos en `backend/README.md`.
+es quien habla con la base (**Supabase Postgres vía Prisma**). El schema lo
+gobiernan las migraciones de Prisma, no código que corre al arrancar. Contratos
+completos en `backend/README.md`.
+
+> Queda `backend/src/notion/` de la etapa anterior: es **código muerto**, no está
+> registrado en `app.module.ts`. No lo tomes como referencia.
 
 ### Cómo funciona la capa de datos
 
@@ -143,9 +163,10 @@ Render redeploya solo (lee `render.yaml` en la raíz del repo).
 
 1. **Modelo (app)** — agregá el campo a `Profile` en [`lib/data/models.dart`](lib/data/models.dart)
    con `@Default(...)`. El `toJson/fromJson` generado ya viaja por la API.
-2. **Backend** — mapealo en `profileFromNotion`/`profileToNotionProps`
-   (`backend/src/notion/models.ts`) y sumá la columna al schema-ensure de
-   `ProfilesService.onModuleInit` (¡nunca declarar selects existentes!).
+2. **Backend** — sumá la columna a `backend/prisma/schema.prisma`, corré
+   `npx prisma migrate dev --name <algo>` y mapeala en `profileWire` /
+   `profilePatchToData` de `backend/src/domain/wire.ts` (ese archivo es el
+   traductor entre la fila de Postgres y el JSON que consume la app).
 3. **Codegen** — corré `dart run build_runner build --delete-conflicting-outputs`
    (regenera `models.freezed.dart` y `models.g.dart`). Ver §4.
 4. **Escritura** — si el usuario lo edita, agregá un setter en `session.dart` que
@@ -161,6 +182,36 @@ Render redeploya solo (lee `render.yaml` en la raíz del repo).
 - El **swipe horizontal** entre pestañas (todas menos el mapa) está en `main_shell`
   (`_handleTabSwipe` + `_swipeTabs`). Si sumás una pestaña, decidí si entra en
   `_swipeTabs`.
+
+### Escrituras: SIEMPRE con feedback de carga
+
+Toda operación que cree, modifique o borre algo en el server tiene que mostrar que
+está en curso. El backend duerme (cold start de 30-60 s), así que sin feedback el
+usuario toca dos veces y se duplica la operación.
+
+- Si la acción tiene un **botón propio**: spinner dentro del botón + `onTap: null`
+  mientras vuela (patrón de `auth_screen`, `pickup_create_screen`).
+- Si **no** tiene botón (menú contextual, fila de un sheet, algo que cierra la
+  pantalla al terminar): `runBusy(context, action)` de
+  [`lib/widgets/busy_overlay.dart`](lib/widgets/busy_overlay.dart) — overlay
+  bloqueante que resuelve navigator y messenger **antes** de empezar, así se puede
+  cerrar aunque el árbol se desmonte. `BusySpinner` es el spinner de la app.
+  - **La navegación no va adentro de `runBusy`**: con el overlay arriba del stack,
+    un `Navigator.pop` cerraría el overlay en vez de la pantalla. Que la acción
+    devuelva si salió bien y navegá afuera (ver `_confirmDelete` del chat).
+- Escrituras **locales** (SharedPreferences: favoritos, privacidad, cosméticos, el
+  resultado del partido) son instantáneas y **no** llevan loader.
+- El chat de pickups usa **mensaje optimista**: la burbuja aparece en gris con
+  "Enviando" y se reemplaza por la real al confirmar (`ChatMessage.pending`).
+
+### Notificaciones a OTROS usuarios: no hay push
+
+**No existe canal server→cliente** (nada de FCM; `notifications_service.dart` es
+100% local). Un aviso que dependa de otro usuario —invitación a un pickup, pickup
+reprogramado— se resuelve por *polling* y dispara **cuando el otro abre la app**
+(patrón de `PickupsProvider.pollRescheduled` + `SyncCoordinator`). No prometas
+inmediatez en la UI; si algún día hace falta, es infra nueva (Firebase + tabla de
+tokens + endpoint).
 
 ### Puntos, logros, niveles, detección de partido
 
@@ -186,12 +237,12 @@ Render redeploya solo (lee `render.yaml` en la raíz del repo).
   en curso); la usan tanto el getter `pointsSeason` como la UI del ranking. Si cambiás
   la definición de temporada, cambiala **solo ahí**.
 - Los puntos por período de **amigos** salen del backend (`GET /matches/ranking`,
-  que agrupa y suma por email server-side sobre la DB "Partidos"). Se escribe con
+  que agrupa y suma por email server-side sobre la tabla `matches`). Se escribe con
   staging+flush offline-resiliente: `resolvePending()` encola en
   `pending_matches::$userKey` y `SyncCoordinator._flushPendingMatches()` sube el
   lote con `POST /matches` (los ítems con `ok:false` quedan en el buffer).
   Mis propios puntos del período salen del historial local (frescos), los de amigos de
-  esa DB — así no hay doble conteo. "Total" sigue usando el acumulado `Profile.points`.
+  esa tabla — así no hay doble conteo. "Total" sigue usando el acumulado `Profile.points`.
 
 ### Background / notificaciones (leer antes de tocar)
 
@@ -239,8 +290,8 @@ Render redeploya solo (lee `render.yaml` en la raíz del repo).
   `dart run build_runner build --delete-conflicting-outputs`.
 - Si el build de codegen falla, suele ser por un `@Default` mal tipado o un import
   faltante. Los mapeos `fromApi`/`toApiJson` de los modelos planos (Court, Review,
-  Friend, Pickup, CrewChat) son **manuales**: actualizalos vos (y su gemelo en
-  `backend/src/notion/entities.ts`).
+  Friend, Pickup, CrewChat, CourtPost, PostComment, ChatMessage) son
+  **manuales**: actualizalos vos (y su gemelo en `backend/src/domain/wire.ts`).
 
 ---
 
@@ -251,8 +302,32 @@ El branding está centralizado. Seguí este checklist en orden.
 ### 5.1 Colores y tipografía (bajo riesgo)
 
 - **Todo el color y la tipografía** salen de [`lib/theme/app_theme.dart`](lib/theme/app_theme.dart):
-  - `AppColors` (acento `accent`/`accentDark`, fondos `bg`/`bgElev`, estados
-    `open`/`busy`/`closed`).
+  - `AppColors`. La paleta está **alineada con el sitio web**
+    (`web/src/styles/tokens.css`): azules muy oscuros, no negro puro. La rampa de
+    superficies, de más oscura a más clara, es
+    `lilac` #080E18 → `bg` #0D141E → `bgElev` #141B26 → `card`/`panel` #1A202A.
+    - `lilac` es el fondo de **Canchas y Crew**, más oscuro que `bg` a propósito.
+    - `bgElev` es un paso **intermedio** entre `bg` y `card`: los modales se
+      pintan con `bgElev` y sus secciones con `card`, así que igualarlos aplana
+      los sheets y los diálogos.
+    - Acento `accent` #FF6B1A (idéntico al del sitio) / `accentDark`; estados
+      `open`/`busy`/`closed`; borde `line` #2B3444.
+    - `sun`/`red`/`cream`/`olive`/`blush` son **aliases históricos** de `bg` y
+      `charcoal`/`paper`/`glass` de `bgElev`: se conservan para no romper
+      call-sites, pero ya no tienen color propio.
+    - `lineWarm`, `inkVariant`, `inkMuted` existen pero **todavía no se usan**:
+      son los tokens cálidos del sitio, para una pasada futura. La jerarquía
+      secundaria de la app se sigue expresando con `AppColors.white(op)`.
+  - **Efectos: [`lib/theme/app_fx.dart`](lib/theme/app_fx.dart)**. Para texto,
+    `AppFx.accentGlow()` (halo naranja sobre texto de acento, como el titular del
+    sitio), `AppFx.inkGlow()` (halo blanco muy tenue para titulares en tinta) y
+    `AppFx.readableGlow()` (halo negro de legibilidad sobre foto). Para cajas,
+    `AppFx.ambientShadow()` (sombra difusa de lo que flota sobre el mapa) además
+    de las sombras duras históricas. Los tres helpers de `AppText` aceptan
+    `shadows:`, así que el patrón es
+    `AppText.display(..., shadows: AppFx.inkGlow())` — **no** uses `.copyWith`.
+    Los titulares grandes van con halo; los `SectionTitle` (13px) no, porque a
+    ese tamaño cualquier blur se lee como texto sucio.
   - `AppText`, con un helper por rol tipográfico. Las tres familias son **las
     mismas que la web** (`web/src/styles/tokens.css`) y están **bundleadas** en
     `assets/fonts/` (no se bajan en runtime):
@@ -330,8 +405,8 @@ Si lo hacés, cambiá **de forma consistente**:
 - **Batch, no spam:** las escrituras de stats van por `stageStats()` + `flush()`
   (cada ~2 min / al pausar / al cerrar), no una petición por evento. La presencia
   "Jugando" sí se escribe al instante (con reintento vía `_dirty`).
-- **Fallback offline:** si Notion falla o no hay token, la app degrada a mock y no
-  debe crashear. Mantené ese comportamiento (try/catch que preserva el fallback).
+- **Fallback offline:** si el backend falla o no hay `API_BASE_URL`, la app
+  degrada a listas vacías/mock y no debe crashear. Mantené ese comportamiento (try/catch que preserva el fallback).
 - **Isolates de background:** `Date.now()`/red/estado compartido se manejan distinto
   ahí. Si algo "no anda con la app cerrada pero sí abierta", el problema está en el
   isolate (§3).
@@ -342,9 +417,8 @@ Si lo hacés, cambiá **de forma consistente**:
 
 1. `flutter analyze lib` → 0 issues nuevos.
 2. Si tocaste `@freezed` → corriste `build_runner` y compila.
-3. Si agregaste un campo de la BD → está en `fromApi`/`toApiJson` (app), en la
-   entidad del backend (`entities.ts`/`models.ts`) y en el schema-ensure de
-   `ProfilesService.onModuleInit` (sin selects existentes).
+3. Si agregaste un campo de la BD → está en `fromApi`/`toApiJson` (app), en
+   `prisma/schema.prisma` con su migración corrida, y en `domain/wire.ts`.
 4. Si tocaste estado del partido → revisaste el **servicio principal y**
    `session_alarms.dart` (isolate), y las constantes gemelas.
 5. Estado local nuevo → namespaced por usuario y limpiado en logout.
