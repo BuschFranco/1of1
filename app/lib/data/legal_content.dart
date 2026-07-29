@@ -19,11 +19,11 @@ library;
 /// ≤ 24 h y atender pedidos de datos (acceso / eliminación).
 const String kSupportEmail = 'francobusch130@gmail.com';
 
-/// URLs públicas de los documentos legales. Vacías por ahora (no hay sitio):
-/// cuando existan, la ficha de cada tienda debe apuntar acá y [LegalScreen]
-/// ofrecerá abrirlas. Con string vacío se usa solo la versión in-app.
-const String kPrivacyPolicyUrl = '';
-const String kTermsUrl = '';
+/// URLs públicas de los documentos legales (sitio Astro en `web/`, publicado
+/// vía GitHub Pages por `.github/workflows/astro.yml`). La ficha de cada
+/// tienda debe apuntar acá, y [LegalScreen] ofrece abrirlas.
+const String kPrivacyPolicyUrl = 'https://buschfranco.github.io/1of1/privacidad';
+const String kTermsUrl = 'https://buschfranco.github.io/1of1/terminos';
 
 /// Fecha de última actualización de los documentos (mostrada al usuario).
 const String kLegalLastUpdated = '22 de julio de 2026';
