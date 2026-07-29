@@ -130,6 +130,7 @@ class DetailScreen extends StatelessWidget {
                     ),
                     _playingNow(court),
                     _MyCourtHistory(courtId: court.id),
+                    _publicPickupsSection(court),
                     const SizedBox(height: 22),
                     const SectionTitle(title: 'Amenities'),
                     Wrap(
@@ -418,6 +419,148 @@ class DetailScreen extends StatelessWidget {
         ),
       );
     });
+  }
+
+  /// Partidas públicas disponibles para unirse en esta cancha. Feature EN
+  /// CONSTRUCCIÓN: por ahora es solo la UI (adelanto). Muestra un badge y una
+  /// fila de ejemplo deshabilitada; no consulta ni permite unirse todavía.
+  Widget _publicPickupsSection(Court court) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Encabezado con el badge de construcción (SectionTitle no soporta un
+          // trailing custom, así que armamos la fila a mano con su mismo estilo).
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              children: [
+                Text(
+                  'PARTIDAS PÚBLICAS',
+                  style: AppText.archivo(
+                    size: 13,
+                    weight: FontWeight.w700,
+                    color: AppColors.ink,
+                    letterSpacing: 0.1,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _soonBadge(),
+              ],
+            ),
+          ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(AppShape.rCard),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Pronto vas a poder ver acá los pickups abiertos de esta cancha y unirte con un solo toque.',
+                  style: AppText.grotesk(
+                    size: 13,
+                    color: AppColors.white(0.6),
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                // Fila de ejemplo (mock) atenuada: da a entender cómo se va a ver.
+                Opacity(
+                  opacity: 0.45,
+                  child: IgnorePointer(
+                    child: _publicPickupExampleRow(court),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Fila mock de un pickup público (visual, no interactiva).
+  Widget _publicPickupExampleRow(Court court) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.white(0.04),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.accent.withAlpha(30),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.groups, size: 20, color: AppColors.accent),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Pickup 3v3 · 21 pts',
+                    style: AppText.grotesk(
+                        size: 13,
+                        weight: FontWeight.w700,
+                        color: Colors.white)),
+                const SizedBox(height: 2),
+                Text('4/6 jugadores · hoy 19:00',
+                    style: AppText.grotesk(
+                        size: 11, color: AppColors.white(0.5))),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.accent,
+              borderRadius: BorderRadius.circular(AppShape.rBtn),
+            ),
+            child: Text('UNIRME',
+                style: AppText.archivo(
+                    size: 11,
+                    weight: FontWeight.w800,
+                    letterSpacing: 0.04,
+                    color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Badge chico "EN CONSTRUCCIÓN" para features todavía no operativas.
+  static Widget _soonBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.busy.withAlpha(38),
+        borderRadius: BorderRadius.circular(AppShape.rChip),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.construction, size: 11, color: AppColors.busy),
+          const SizedBox(width: 4),
+          Text('EN CONSTRUCCIÓN',
+              style: AppText.grotesk(
+                size: 9,
+                weight: FontWeight.w800,
+                color: AppColors.busy,
+                letterSpacing: 0.06,
+              )),
+        ],
+      ),
+    );
   }
 
   Widget _ratingStrip(Court court, {CourtRating? courtRating}) {

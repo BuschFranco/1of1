@@ -26,6 +26,23 @@ flutter run --dart-define-from-file=dart_defines.json
 
 Todavía no implementado. Ver [`backend/README.md`](backend/README.md).
 
+## Pendientes / Roadmap
+
+Features con UI ya presente pero **todavía no funcionales** (marcadas
+"EN CONSTRUCCIÓN" en la app):
+
+- **Pickups públicos.** Al crear un pickup hay un toggle *"Pickup público"*
+  ([`pickup_create_screen.dart`](app/lib/screens/pickup_create_screen.dart)) y en
+  el detalle de cada cancha una sección *"Partidas públicas"*
+  ([`detail_screen.dart`](app/lib/screens/detail_screen.dart)). Hoy son **solo
+  visuales**. Falta:
+  - Modelo/backend: campo `isPublic` en `Pickup` (app + `entities.ts` + schema
+    del backend) y endpoint para listar pickups públicos por cancha
+    (`GET /courts/:id/pickups` o `GET /pickups/public?courtId=`).
+  - Unión abierta sin invitación (respetar `maxPlayers`).
+  - Reemplazar la fila de ejemplo mock del detalle por la lista real y quitar
+    los badges "EN CONSTRUCCIÓN".
+
 ## Estructura
 
 ```
