@@ -14,6 +14,7 @@ import '../services/profiles_provider.dart';
 import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/pickup_schedule_picker.dart';
+import '../widgets/busy_overlay.dart';
 import '../widgets/pressable_widget.dart';
 
 /// Chat de un pickup: solo lectura (no se puede escribir todavía), con un panel
@@ -83,12 +84,16 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
   }
 
   /// Guarda los últimos ~50 mensajes en [ApiCache] para la próxima apertura.
+  /// Los pendientes NO se guardan: son mensajes que el server todavía no
+  /// confirmó, y cacheados reaparecerían al reabrir el chat sin forma de
+  /// resolverse (el reintento vive en la sesión que los creó).
   void _cacheMessages() {
-    if (_messages.isEmpty) return;
-    final tail = _messages.length > 50
-        ? _messages.sublist(_messages.length - 50)
-        : _messages;
-    ApiCache.put(_cacheKey, List<ChatMessage>.from(tail));
+    final confirmados = _messages.where((m) => !m.pending).toList();
+    if (confirmados.isEmpty) return;
+    final tail = confirmados.length > 50
+        ? confirmados.sublist(confirmados.length - 50)
+        : confirmados;
+    ApiCache.put(_cacheKey, tail);
   }
 
   Future<void> _loadMessages({bool initial = false}) async {
@@ -137,22 +142,58 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
   Future<void> _sendMessage() async {
     final text = _msgCtrl.text.trim();
     if (text.isEmpty || _sending) return;
-    setState(() => _sending = true);
+
+    // Mensaje optimista: aparece al instante en gris con un spinner, así el
+    // chat responde al toque en vez de quedarse quieto hasta que contesta el
+    // server. Tres cuidados, cada uno evita un bug distinto:
+    //  - `id` vacío: el dedupe del polling es por id de server, así que el
+    //    pendiente nunca choca con el real ni entra a _seenIds.
+    //  - NO toca `_lastIso`: si le pusiéramos la hora local, el `sinceIso` del
+    //    próximo poll podría adelantarse al createdAt real y el mensaje del
+    //    server no volvería nunca.
+    //  - No se cachea (ver _cacheMessages): si no, un pendiente que falló
+    //    reaparecería al reabrir el chat, ya sin forma de resolverse.
+    final pendiente = ChatMessage(
+      id: '',
+      email: _myEmail,
+      text: text,
+      createdAt: '',
+      createdAtMillis: DateTime.now().millisecondsSinceEpoch,
+      pending: true,
+    );
+    setState(() {
+      _sending = true;
+      _messages.add(pendiente);
+      // Se limpia YA: el mensaje ya está a la vista, dejar el texto en el input
+      // hacía que se borrara solo al llegar la respuesta (y se perdía lo que el
+      // usuario hubiera seguido tipeando).
+      _msgCtrl.clear();
+    });
+    _scrollToBottom();
+
     try {
       final res = await _api.sendPickupMessage(widget.pickupId, text);
       final m = ChatMessage.fromApi(res);
       if (!mounted) return;
-      _msgCtrl.clear();
-      if (m.id.isNotEmpty && !_seenIds.contains(m.id)) {
-        _seenIds.add(m.id);
-        _messages.add(m);
-        if (m.createdAt.compareTo(_lastIso) > 0) _lastIso = m.createdAt;
-      }
-      setState(() => _sending = false);
+      setState(() {
+        _sending = false;
+        _messages.remove(pendiente);
+        if (m.id.isNotEmpty && !_seenIds.contains(m.id)) {
+          _seenIds.add(m.id);
+          _messages.add(m);
+          if (m.createdAt.compareTo(_lastIso) > 0) _lastIso = m.createdAt;
+        }
+      });
+      _cacheMessages();
       _scrollToBottom();
     } catch (_) {
       if (!mounted) return;
-      setState(() => _sending = false);
+      // Falló: se saca la burbuja y el texto vuelve al input para reintentar.
+      setState(() {
+        _sending = false;
+        _messages.remove(pendiente);
+        if (_msgCtrl.text.trim().isEmpty) _msgCtrl.text = text;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('No se pudo enviar. Reintentá.',
@@ -199,12 +240,18 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
     return email;
   }
 
-  Future<void> _run(Future<void> Function() action) async {
-    if (_busy) return;
+  /// Corre una escritura del pickup con overlay bloqueante. Devuelve true si
+  /// salió bien, para que el caller decida si navegar (la navegación NO puede ir
+  /// dentro de [action]: con el overlay arriba del stack, un pop cerraría el
+  /// overlay en vez de la pantalla).
+  Future<bool> _run(Future<void> Function() action) async {
+    if (_busy) return false;
     setState(() => _busy = true);
+    var ok = true;
     try {
-      await action();
+      await runBusy(context, action);
     } catch (_) {
+      ok = false;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -216,6 +263,7 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
       }
     }
     if (mounted) setState(() => _busy = false);
+    return ok;
   }
 
   @override
@@ -823,7 +871,11 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
               ),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: isMe ? AppColors.accent : AppColors.card,
+                // Mientras no confirma el server va en gris (no en acento): se
+                // distingue de un mensaje ya enviado sin sacarlo de su lugar.
+                color: m.pending
+                    ? AppColors.white(0.12)
+                    : (isMe ? AppColors.accent : AppColors.card),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(14),
                   topRight: const Radius.circular(14),
@@ -849,18 +901,38 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
                     m.text,
                     style: AppText.grotesk(
                       size: 14,
-                      color: isMe ? Colors.black : Colors.white,
+                      color: m.pending
+                          ? AppColors.white(0.6)
+                          : (isMe ? Colors.black : Colors.white),
                       height: 1.3,
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    _timeLabel(m.createdAtMillis),
-                    style: AppText.grotesk(
-                      size: 9,
-                      color: isMe ? Colors.black.withAlpha(120) : AppColors.white(0.35),
+                  if (m.pending)
+                    // "Enviando" con el spinner al lado, en lugar de la hora:
+                    // todavía no hay hora de server que mostrar.
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        BusySpinner(size: 8, color: AppColors.white(0.45)),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Enviando',
+                          style: AppText.grotesk(
+                              size: 9, color: AppColors.white(0.45)),
+                        ),
+                      ],
+                    )
+                  else
+                    Text(
+                      _timeLabel(m.createdAtMillis),
+                      style: AppText.grotesk(
+                        size: 9,
+                        color: isMe
+                            ? Colors.black.withAlpha(120)
+                            : AppColors.white(0.35),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -973,13 +1045,16 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
       ),
     );
     if (ok != true) return;
-    await _run(() async {
-      await context.read<PickupsProvider>().deletePickup(pickup);
-      if (mounted) Navigator.pop(context);
-    });
+    // La navegación va afuera del _run: adentro el pop cerraría el overlay.
+    final deleted =
+        await _run(() => context.read<PickupsProvider>().deletePickup(pickup));
+    if (deleted && mounted) Navigator.pop(context);
   }
 
   Future<void> _confirmLeave(Pickup pickup) async {
+    // El email se lee ANTES del diálogo: después del await el context puede
+    // estar desmontado.
+    final email = context.read<Session>().email ?? '';
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1007,11 +1082,9 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
       ),
     );
     if (ok != true) return;
-    await _run(() async {
-      await context
-          .read<PickupsProvider>()
-          .leave(pickup, context.read<Session>().email ?? '');
-      if (mounted) Navigator.pop(context);
-    });
+    // La navegación va afuera del _run: adentro el pop cerraría el overlay.
+    final left = await _run(
+        () => context.read<PickupsProvider>().leave(pickup, email));
+    if (left && mounted) Navigator.pop(context);
   }
 }

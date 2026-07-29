@@ -22,6 +22,7 @@ import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/pop_button.dart';
+import '../widgets/busy_overlay.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/section_title.dart';
 import '../widgets/status_dot.dart';
@@ -687,10 +688,11 @@ class DetailScreen extends StatelessWidget {
             ],
           ),
         );
-        if (confirm != true) return;
+        if (confirm != true || !context.mounted) return;
         try {
-          // El server archiva la cancha y sus reseñas (solo admin).
-          await courtsProvider.deleteCourt(court.id);
+          // El server archiva la cancha y sus reseñas (solo admin). Overlay:
+          // borra en cascada y se dispara desde un diálogo, sin botón propio.
+          await runBusy(context, () => courtsProvider.deleteCourt(court.id));
           if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1036,9 +1038,9 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
     if (confirm != true || !mounted) return;
     try {
       // El server valida: dueño de la reseña o admin.
-      await context
-          .read<CourtRatingService>()
-          .deleteReview(r.pageId, courtId: widget.courtId);
+      final ratings = context.read<CourtRatingService>();
+      await runBusy(context,
+          () => ratings.deleteReview(r.pageId, courtId: widget.courtId));
       if (mounted) {
         _refresh();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1130,8 +1132,16 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
                         setLocal(() => saving = false);
                       }
                     },
-              child: Text('Publicar',
-                  style: AppText.grotesk(size: 13, weight: FontWeight.w700, color: AppColors.accent)),
+              // Spinner mientras publica: antes el botón solo se apagaba y el
+              // label seguía diciendo "Publicar" (parecía que no había pasado
+              // nada). Mismo patrón que el botón de publicación de al lado.
+              child: saving
+                  ? const BusySpinner(size: 16)
+                  : Text('Publicar',
+                      style: AppText.grotesk(
+                          size: 13,
+                          weight: FontWeight.w700,
+                          color: AppColors.accent)),
             ),
           ],
         ),
@@ -1807,11 +1817,18 @@ class _PostsSectionState extends State<_PostsSection> {
                           ],
                         ),
                       );
-                      if (confirm == true) {
-                        try {
-                          await ApiClient().deletePost(p.pageId);
-                          _refresh();
-                        } catch (_) {}
+                      if (confirm == true && context.mounted) {
+                        // El catch estaba vacío: si fallaba, el usuario no se
+                        // enteraba de nada.
+                        final done = await runBusy<bool>(
+                          context,
+                          () async {
+                            await ApiClient().deletePost(p.pageId);
+                            return true;
+                          },
+                          errorMessage: 'No se pudo eliminar la publicación.',
+                        );
+                        if (done == true) _refresh();
                       }
                     },
                     child: Padding(
@@ -2245,12 +2262,20 @@ class _PostDetailSheetState extends State<_PostDetailSheet> {
         ],
       ),
     );
-    if (confirm == true) {
-      try {
-        await ApiClient().deletePost(widget.post.pageId);
-        if (mounted) Navigator.pop(context);
-        widget.onDeleted();
-      } catch (_) {}
+    if (confirm == true && mounted) {
+      // El pop va afuera del overlay: adentro cerraría el overlay en vez del
+      // sheet. El catch estaba vacío, así que un fallo era invisible.
+      final done = await runBusy<bool>(
+        context,
+        () async {
+          await ApiClient().deletePost(widget.post.pageId);
+          return true;
+        },
+        errorMessage: 'No se pudo eliminar la publicación.',
+      );
+      if (done != true) return;
+      if (mounted) Navigator.pop(context);
+      widget.onDeleted();
     }
   }
 

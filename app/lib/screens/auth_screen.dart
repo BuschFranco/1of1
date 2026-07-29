@@ -13,6 +13,7 @@ import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/beta_tag.dart';
 import '../widgets/pop_background.dart';
+import '../widgets/busy_overlay.dart';
 import '../widgets/pressable_widget.dart';
 import 'legal_screen.dart';
 
@@ -39,6 +40,9 @@ class _AuthScreenState extends State<AuthScreen> {
   final _phoneCtrl = TextEditingController();
 
   bool _loading = false;
+  // Estado propio: con un solo flag el spinner aparecía en el CTA de email
+  // aunque el usuario hubiera tocado el botón de Google.
+  bool _googleLoading = false;
   bool _obscurePass = true;
   bool _keepLoggedIn = true;
   // Age gate: fecha de nacimiento elegida en el registro.
@@ -234,18 +238,18 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _googleLogin() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() { _googleLoading = true; _error = null; });
     try {
       final account = await _google.signIn();
       if (account == null) {
-        if (mounted) setState(() { _loading = false; _error = 'Se canceló el login con Google.'; });
+        if (mounted) setState(() { _googleLoading = false; _error = 'Se canceló el login con Google.'; });
         return;
       }
       final auth = await account.authentication;
       final idToken = auth.idToken;
       if (idToken == null) {
         await _google.signOut();
-        if (mounted) setState(() { _loading = false; _error = 'No se pudo autenticar con Google.'; });
+        if (mounted) setState(() { _googleLoading = false; _error = 'No se pudo autenticar con Google.'; });
         return;
       }
 
@@ -255,9 +259,9 @@ class _AuthScreenState extends State<AuthScreen> {
       final err = await session.googleSignIn(idToken: idToken);
       if (err == null) unawaited(_rememberEmail(account.email));
       if (!mounted) return;
-      setState(() { _loading = false; _error = err; });
+      setState(() { _googleLoading = false; _error = err; });
     } catch (e) {
-      if (mounted) setState(() { _loading = false; _error = 'Error con Google: $e'; });
+      if (mounted) setState(() { _googleLoading = false; _error = 'Error con Google: $e'; });
     }
   }
 
@@ -698,7 +702,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Widget _submitBtn() {
     return PressableWidget(
-      onTap: _loading ? null : _submit,
+      onTap: (_loading || _googleLoading) ? null : _submit,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 90),
         height: 54,
@@ -750,8 +754,9 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _googleBtn() {
+    final busy = _loading || _googleLoading;
     return PressableWidget(
-      onTap: _loading ? null : _googleLogin,
+      onTap: busy ? null : _googleLogin,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -764,14 +769,17 @@ class _AuthScreenState extends State<AuthScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Logo "G" oficial de Google (asset de branding, no dibujado).
-            Image.asset(
-              'assets/images/google_g.png',
-              width: 20,
-              height: 20,
-            ),
+            if (_googleLoading)
+              const BusySpinner(size: 20)
+            else
+              Image.asset(
+                'assets/images/google_g.png',
+                width: 20,
+                height: 20,
+              ),
             const SizedBox(width: 12),
             Text(
-              'Continuar con Google',
+              _googleLoading ? 'Conectando…' : 'Continuar con Google',
               style: AppText.grotesk(
                 size: 14,
                 weight: FontWeight.w600,

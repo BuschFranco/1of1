@@ -34,6 +34,7 @@ import '../widgets/court_image.dart';
 import '../widgets/permissions_modal.dart';
 import '../widgets/pop_background.dart';
 import '../widgets/pop_panel.dart';
+import '../widgets/busy_overlay.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/rating_badge.dart';
 import '../widgets/season_banner.dart';
@@ -2652,7 +2653,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
     if (ok == true && context.mounted) {
-      await context.read<Session>().logout();
+      // logout() hace flush() → PATCH /me con todo lo que quedó staged, así que
+      // pega a la red y con el backend dormido puede tardar bastante.
+      final session = context.read<Session>();
+      await runBusy(context, () => session.logout());
     }
   }
 }
@@ -3206,8 +3210,10 @@ class _FriendsTabState extends State<_FriendsTab> {
   }
 
   Future<void> _remove(Friend f) async {
+    // Se dispara desde un menú contextual, así que no hay botón donde poner un
+    // spinner: va overlay.
     try {
-      await _service.removeFriend(f.pageId);
+      await runBusy(context, () => _service.removeFriend(f.pageId));
       _refresh();
     } catch (_) {
       _snack('No se pudo eliminar.');
@@ -3622,8 +3628,14 @@ class _FriendsTabState extends State<_FriendsTab> {
 
   /// Bloquea a un usuario (local): oculta su contenido y lo quita de amigos.
   Future<void> _blockFriend(Friend f) async {
-    await context.read<BlockedProvider>().block(f.friendEmail);
-    await _service.removeFriend(f.pageId).catchError((_) {});
+    // Bloquear es local, pero además rompe la amistad en el server: eso pega a
+    // la red y se dispara desde un menú contextual, sin botón donde poner un
+    // spinner.
+    final blocked = context.read<BlockedProvider>();
+    await runBusy(context, () async {
+      await blocked.block(f.friendEmail);
+      await _service.removeFriend(f.pageId).catchError((_) {});
+    });
     if (!mounted) return;
     _refresh();
     _snack('Bloqueaste a ${f.friendName.isEmpty ? f.friendHandle : f.friendName}');

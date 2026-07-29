@@ -411,12 +411,18 @@ class ChatMessage {
   final String createdAt; // ISO del server
   final int createdAtMillis;
 
+  /// Mensaje que todavía no confirmó el server: se pinta en gris con un spinner
+  /// y se reemplaza por el real cuando llega la respuesta. Su [id] está vacío
+  /// (el id lo genera el server), así que nunca entra al dedupe del polling.
+  final bool pending;
+
   const ChatMessage({
     required this.id,
     required this.email,
     required this.text,
     required this.createdAt,
     required this.createdAtMillis,
+    this.pending = false,
   });
 
   factory ChatMessage.fromApi(Map<String, dynamic> json) {

@@ -184,7 +184,11 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
       // translucent: sin esto el gesto no se capta sobre el contenido (solo
       // en zonas vacías), igual que en auth_screen.
       behavior: HitTestBehavior.translucent,
+      // Con la creación en vuelo no se sale: el pickup ya se está creando en el
+      // server y salir dejaba al usuario sin saber si quedó hecho (y sin el
+      // refresh de la lista ni la notificación).
       onHorizontalDragEnd: (d) {
+        if (_saving) return;
         if ((d.primaryVelocity ?? 0) > 0) Navigator.pop(context);
       },
       child: Scaffold(
@@ -194,7 +198,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
           elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
+            onPressed: _saving ? null : () => Navigator.pop(context),
           ),
           title: Text('Nuevo pickup',
               style: AppText.archivo(size: 20, weight: FontWeight.w900, color: Colors.white)),
