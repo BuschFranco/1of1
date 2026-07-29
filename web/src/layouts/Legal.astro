@@ -5,11 +5,12 @@ import type { Lang } from '../lib/urls';
 
 interface Props {
   lang: Lang;
-  doc: 'terms' | 'privacy';
+  doc: 'terms' | 'privacy' | 'delete-account';
 }
 const { lang, doc } = Astro.props;
 const t = useTranslations(lang);
-const d = doc === 'terms' ? t.terms : t.privacy;
+const d =
+  doc === 'terms' ? t.terms : doc === 'privacy' ? t.privacy : t.deleteAccount;
 ---
 
 <Base lang={lang} title={`${d.title} — 1OF1`} variant="legal" current={doc}>

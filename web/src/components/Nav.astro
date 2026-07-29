@@ -9,7 +9,7 @@ interface Props {
   /** `landing` = anclas de la home · `legal` = navegación de los documentos. */
   variant?: 'landing' | 'legal';
   /** Marca en naranja el documento legal en el que estamos. */
-  current?: 'terms' | 'privacy';
+  current?: 'terms' | 'privacy' | 'delete-account';
 }
 const { lang, variant = 'landing', current } = Astro.props;
 const t = useTranslations(lang);
@@ -26,6 +26,7 @@ const links =
         { href: home, label: t.nav.home, active: false },
         { href: url(lang, 'terminos'), label: t.footer.terms, active: current === 'terms' },
         { href: url(lang, 'privacidad'), label: t.footer.privacy, active: current === 'privacy' },
+        { href: url(lang, 'eliminar-cuenta'), label: t.footer.deleteAccount, active: current === 'delete-account' },
       ];
 
 const cta =

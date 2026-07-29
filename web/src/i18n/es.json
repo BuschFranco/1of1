@@ -70,7 +70,8 @@
     "stats": "Estadísticas",
     "download": "Descargar",
     "terms": "Términos",
-    "privacy": "Privacidad"
+    "privacy": "Privacidad",
+    "deleteAccount": "Eliminar cuenta"
   },
   "community": {
     "title": "SQUAD & COMMUNITY",
@@ -195,19 +196,37 @@
     "email": "francobusch130@gmail.com",
     "back": "VOLVER"
   },
+  "deleteAccount": {
+    "badge": "1OF1",
+    "title": "Eliminar tu cuenta",
+    "updated": "Última actualización: 22 de julio de 2026",
+    "intro": "Podés eliminar tu cuenta de 1of1 y los datos asociados en cualquier momento, tengas la app instalada o no.",
+    "sections": [
+      { "heading": "Desde la app (inmediato)", "body": "Abrí 1of1 → Perfil → Ajustes → Eliminar cuenta. Confirmá y tu cuenta se borra al instante, sin esperar respuesta." },
+      { "heading": "Sin acceso a la app", "body": "Escribinos a francobusch130@gmail.com desde el mismo email con el que te registraste, con el asunto \"Eliminar mi cuenta\". Procesamos el pedido en un plazo de hasta 30 días y te confirmamos por mail cuando esté hecho." },
+      { "heading": "Qué se elimina", "body": "Tu perfil (nombre, handle, foto, insignia de clan), tu historial de partidos y estadísticas, tus reseñas de canchas, tus amistades, los pickups que creaste y sus chats, y los mensajes que enviaste. Los datos de salud (Health Connect) nunca salieron de tu teléfono, así que no hay nada que borrar del servidor." },
+      { "heading": "Qué puede conservarse un tiempo", "body": "Las copias de seguridad de la base de datos pueden conservar la información por un período breve antes de eliminarse por completo, y algunos registros pueden retenerse si la ley lo exige (por ejemplo, para prevenir fraude)." },
+      { "heading": "Cuentas de Google", "body": "Si te registraste con Google, eliminar tu cuenta de 1of1 no afecta tu cuenta de Google. Podés revisar los permisos que le diste a 1of1 desde la configuración de tu cuenta de Google." }
+    ],
+    "contactLabel": "Contacto",
+    "email": "francobusch130@gmail.com",
+    "back": "VOLVER"
+  },
   "privacy": {
     "badge": "1OF1",
     "title": "Política de Privacidad",
     "updated": "Última actualización: 22 de julio de 2026",
-    "intro": "Tu privacidad es importante. Esta política describe cómo 1of1 recopila, usa y protege tu información.",
+    "intro": "1of1 (\"la app\") es una aplicación para encontrar canchas de básquet y registrar tus partidos. Esta política explica qué datos usamos y por qué.",
     "sections": [
-      { "heading": "Datos que recopilamos", "body": "Email y nombre que usás para crear tu cuenta. Handle público y nombre para mostrar en la app. Ubicación (GPS) para detectar partidos y canchas cercanas, incluso en segundo plano si lo autorizás. Datos de actividad: tiempo de juego, movimiento y métricas de rendimiento. Mensajes en chats de pickups (solo se almacenan en el servidor). Información del dispositivo (modelo, sistema operativo, token de notificaciones)." },
-      { "heading": "Cómo usamos tus datos", "body": "Para operar y mejorar la app: matchmaking, estadísticas, notificaciones push y detección automática de partidos. Para personalizar tu experiencia y mostrar contenido relevante." },
-      { "heading": "Compartición de datos", "body": "Tu handle y nombre son visibles para otros usuarios de la app. Tu ubicación exacta nunca se comparte públicamente; solo se usa para cálculos internos. No vendemos tus datos a terceros." },
-      { "heading": "Seguridad", "body": "Tus datos se transmiten y almacenan de forma segura. Sin embargo, ningún método de transmisión por Internet es 100% seguro." },
-      { "heading": "Tus derechos", "body": "Podés acceder, corregir o eliminar tus datos desde Ajustes → Cuenta. Podés desactivar el permiso de ubicación en cualquier momento desde los ajustes del sistema." },
-      { "heading": "Menores de edad", "body": "La app no está dirigida a menores de 13 años." },
-      { "heading": "Cambios en esta política", "body": "Si hacemos cambios significativos, te notificaremos dentro de la app." }
+      { "heading": "Qué datos recolectamos", "body": "Datos de cuenta: nombre, email y, opcionalmente, ciudad y teléfono que cargás al registrarte. Tu fecha de nacimiento se guarda para verificar y acreditar que cumplís la edad mínima. Handle y datos de perfil: apodo público, insignia de clan, foto (si iniciás sesión con Google) y tus estadísticas de juego. Ubicación: la usamos para mostrarte canchas cercanas y detectar cuándo estás jugando; con el permiso \"Siempre\" funciona con la app cerrada. No almacenamos tus coordenadas en nuestra base, solo en qué cancha jugaste (ver \"Servicios de terceros\"). Datos de salud (opcional): si conectás Salud (Health Connect / Apple Health), leemos calorías, pulso, pasos y distancia — quedan SOLO en tu dispositivo. Actividad de juego: historial de partidos (cancha, fecha, duración, puntos). Mensajes: el contenido de los chats de pickups se guarda en nuestro servidor para mostrárselo a los participantes de ese pickup." },
+      { "heading": "Para qué los usamos", "body": "Para hacer funcionar la app: ubicarte en el mapa, detectar y puntuar tus partidos, mostrar tu perfil y rankings, y conectar la comunidad (amigos, pickups y sus chats)." },
+      { "heading": "Dónde se guardan", "body": "Los datos de cuenta, juego y mensajes se almacenan en nuestro backend propio, alojado en Render (Render Services, Inc., servidores en Estados Unidos) sobre una base de datos Supabase Postgres (Supabase, Inc.). Ambos proveedores actúan como encargados del tratamiento por nuestra cuenta. Al usar la app aceptás esta transferencia internacional de datos a Estados Unidos. Los datos de salud no salen de tu teléfono." },
+      { "heading": "Servicios de terceros", "body": "Usamos servicios de Google para funciones del mapa: Google Maps (mostrar el mapa), Geocoding (convertir direcciones en coordenadas) y Directions (calcular rutas). Al usar esas funciones, tu ubicación y/o la dirección consultada se envían a Google. Si iniciás sesión con Google, tu autenticación y foto de perfil las provee Google Sign-In. El tratamiento que hace Google se rige por su propia política de privacidad (policies.google.com/privacy)." },
+      { "heading": "Cuánto tiempo los conservamos", "body": "Conservamos tus datos mientras tu cuenta esté activa. Si eliminás tu cuenta, los borramos de nuestra base; pueden persistir por un tiempo breve en copias de respaldo antes de eliminarse por completo." },
+      { "heading": "Qué ven otros usuarios", "body": "Otros usuarios pueden ver tu nombre, handle, insignia y estadísticas públicas. En los chats de pickups, los participantes ven los mensajes que enviás y tu handle. Tu presencia \"jugando\", la cancha y el tiempo solo se comparten si activás esos permisos en Ajustes → Privacidad (todos vienen desactivados por defecto)." },
+      { "heading": "Tus derechos", "body": "Podés acceder, rectificar o eliminar tus datos. Desde Ajustes → Eliminar cuenta borrás tu cuenta y tus datos de nuestra base (también podés hacerlo sin la app: ver \"Eliminar cuenta\"). Escribinos a francobusch130@gmail.com para ejercer cualquier derecho (Ley 25.326 de Argentina y, según tu jurisdicción, derechos equivalentes como los de CCPA/CPRA en EE.UU.)." },
+      { "heading": "Menores", "body": "La app no está dirigida a menores de 13 años y no recolectamos datos de ellos a sabiendas. Si sos menor de edad, usá la app con autorización de tu representante legal." },
+      { "heading": "Cambios", "body": "Podemos actualizar esta política; avisaremos dentro de la app. Ante dudas, escribinos a francobusch130@gmail.com." }
     ],
     "contactLabel": "Contacto",
     "email": "francobusch130@gmail.com",

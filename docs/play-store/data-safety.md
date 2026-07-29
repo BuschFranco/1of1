@@ -19,8 +19,14 @@ cuenta de desarrollador).
 
 ## ¿El usuario puede pedir que se borren sus datos?
 
-**Sí** — botón "Eliminar cuenta" dentro de la app (Perfil → Ajustes), borra
-perfil, historial de partidos, amistades, reseñas y mensajes.
+**Sí, por dos vías** (Play exige que exista una accesible sin instalar la app):
+- **In-app**: botón "Eliminar cuenta" (Perfil → Ajustes) — borra al instante.
+- **Web**: `https://buschfranco.github.io/1of1/eliminar-cuenta` (+ `/en/` en
+  inglés) — para quien no tenga la app instalada, con instrucciones de pedirlo
+  por email. Esta es la URL que va en Play Console → App content → Delete
+  account. Ambas describen lo mismo que borra el backend (`ProfilesService.
+  deleteAccount`): perfil, partidos, reseñas, amistades, pickups/chats y
+  mensajes.
 
 ## Tipos de datos a declarar
 

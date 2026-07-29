@@ -12,7 +12,7 @@ interface Props {
   description?: string;
   variant?: 'landing' | 'legal';
   /** Solo para `legal`: marca el documento activo en la navegación. */
-  current?: 'terms' | 'privacy';
+  current?: 'terms' | 'privacy' | 'delete-account';
 }
 const { lang, title, description, variant = 'landing', current } = Astro.props;
 ---

@@ -70,7 +70,8 @@
     "stats": "Stats",
     "download": "Download",
     "terms": "Terms",
-    "privacy": "Privacy"
+    "privacy": "Privacy",
+    "deleteAccount": "Delete account"
   },
   "community": {
     "title": "SQUAD & COMMUNITY",
@@ -189,7 +190,23 @@
       { "heading": "Health data", "body": "Health metrics are informational and do not constitute medical advice." },
       { "heading": "Liability", "body": "The app is provided \"as is\". We are not liable for injuries, losses, or damages arising from the use of the app or from attending courts." },
       { "heading": "Account deletion", "body": "You can delete your account anytime from Settings → Delete Account." },
-      { "heading": "Governing law", "body": "These terms are governed by the laws of the jurisdiction where the app operates. Any dispute shall be submitted to the competent courts of that jurisdiction, without prejudice to consumer protection rights in your country of residence." }
+      { "heading": "Governing law", "body": "These terms are governed by the laws of the Argentine Republic. Any dispute will be submitted to the ordinary courts of the City of Buenos Aires, without prejudice to any consumer-protection rights recognized by the law of your country of residence." }
+    ],
+    "contactLabel": "Contact",
+    "email": "francobusch130@gmail.com",
+    "back": "BACK"
+  },
+  "deleteAccount": {
+    "badge": "1OF1",
+    "title": "Delete your account",
+    "updated": "Last updated: July 22, 2026",
+    "intro": "You can delete your 1of1 account and its associated data at any time, whether or not you have the app installed.",
+    "sections": [
+      { "heading": "From the app (instant)", "body": "Open 1of1 → Profile → Settings → Delete account. Confirm and your account is deleted right away, no waiting." },
+      { "heading": "Without access to the app", "body": "Email us at francobusch130@gmail.com from the same address you signed up with, subject \"Delete my account\". We process the request within 30 days and confirm by email once it's done." },
+      { "heading": "What gets deleted", "body": "Your profile (name, handle, photo, clan badge), your match history and stats, your court reviews, your friendships, the pickups you created and their chats, and the messages you sent. Health data (Health Connect) never left your phone, so there's nothing to delete on the server." },
+      { "heading": "What may be kept briefly", "body": "Database backups may retain the information for a short period before being fully purged, and some records may be kept if required by law (e.g. fraud prevention)." },
+      { "heading": "Google accounts", "body": "If you signed up with Google, deleting your 1of1 account doesn't affect your Google account. You can review the permissions you granted to 1of1 from your Google Account settings." }
     ],
     "contactLabel": "Contact",
     "email": "francobusch130@gmail.com",
@@ -199,15 +216,17 @@
     "badge": "1OF1",
     "title": "Privacy Policy",
     "updated": "Last updated: July 22, 2026",
-    "intro": "Your privacy matters. This policy describes how 1of1 collects, uses, and protects your information.",
+    "intro": "1of1 (\"the app\") is an application to find basketball courts and log your games. This policy explains what data we use and why.",
     "sections": [
-      { "heading": "Data we collect", "body": "Email and name used to create your account. Public handle and display name in the app. Location (GPS) to detect games and nearby courts, including in the background if you authorize it. Activity data: game time, movement, and performance metrics. Messages in pickup chats (stored server-side only). Device information (model, OS, notification token)." },
-      { "heading": "How we use your data", "body": "To operate and improve the app: matchmaking, statistics, push notifications, and automatic game detection. To personalize your experience and show relevant content." },
-      { "heading": "Data sharing", "body": "Your handle and display name are visible to other users. Your exact location is never shared publicly; it is only used for internal calculations. We do not sell your data to third parties." },
-      { "heading": "Security", "body": "Your data is transmitted and stored securely. However, no method of Internet transmission is 100% secure." },
-      { "heading": "Your rights", "body": "You can access, correct, or delete your data from Settings → Account. You can disable location permissions anytime from system settings." },
-      { "heading": "Children", "body": "The app is not directed at children under 13." },
-      { "heading": "Changes to this policy", "body": "If we make significant changes, we will notify you within the app." }
+      { "heading": "What data we collect", "body": "Account data: name, email, and optionally city and phone number you provide when signing up. Your birth date is stored to verify and confirm you meet the minimum age. Handle and profile data: public handle, clan badge, photo (if you sign in with Google), and your game stats. Location: we use it to show nearby courts and detect when you're playing; with \"Always\" permission, detection works with the app closed. We don't store your coordinates in our database, only which court you played at (see \"Third-party services\"). Health data (optional): if you connect Health (Health Connect / Apple Health), we read calories, heart rate, steps and distance — this stays ONLY on your device. Game activity: match history (court, date, duration, points). Messages: the content of pickup chats is stored on our server so we can show it to that pickup's participants." },
+      { "heading": "What we use it for", "body": "To make the app work: locating you on the map, detecting and scoring your games, showing your profile and rankings, and connecting the community (friends, pickups, and their chats)." },
+      { "heading": "Where it's stored", "body": "Account, game, and message data is stored on our own backend, hosted on Render (Render Services, Inc., servers in the United States) on a Supabase Postgres database (Supabase, Inc.). Both providers act as data processors on our behalf. By using the app you accept this international data transfer to the United States. Health data never leaves your phone." },
+      { "heading": "Third-party services", "body": "We use Google services for map features: Google Maps (displaying the map), Geocoding (converting addresses to coordinates), and Directions (calculating routes). When you use those features, your location and/or the address queried is sent to Google. If you sign in with Google, your authentication and profile photo are provided by Google Sign-In. Google's handling of that data is governed by its own privacy policy (policies.google.com/privacy)." },
+      { "heading": "How long we keep it", "body": "We keep your data while your account is active. If you delete your account, we remove it from our database; it may persist briefly in backups before being fully purged." },
+      { "heading": "What other users see", "body": "Other users can see your name, handle, badge, and public stats. In pickup chats, participants see the messages you send and your handle. Your \"playing\" presence, court, and time are only shared if you enable those settings in Settings → Privacy (all off by default)." },
+      { "heading": "Your rights", "body": "You can access, correct, or delete your data. Settings → Delete Account removes your account and data from our database (you can also do this without the app: see \"Delete Account\"). Email francobusch130@gmail.com to exercise any right (Argentina's Law 25.326 and, depending on your jurisdiction, equivalent rights such as CCPA/CPRA in the US)." },
+      { "heading": "Minors", "body": "The app is not directed at children under 13 and we do not knowingly collect their data. If you are a minor, use the app with your legal guardian's authorization." },
+      { "heading": "Changes", "body": "We may update this policy; we'll notify you within the app. If you have questions, email francobusch130@gmail.com." }
     ],
     "contactLabel": "Contact",
     "email": "francobusch130@gmail.com",
