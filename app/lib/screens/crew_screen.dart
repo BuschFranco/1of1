@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../data/models.dart';
 import '../services/pickups_provider.dart';
 import '../services/session.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/basketball_graffiti.dart';
 import '../widgets/pressable_widget.dart';
@@ -76,13 +77,30 @@ class _CrewScreenState extends State<CrewScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 56, 20, 160),
               children: [
-                Text(
-                  'Crew',
-                  style: AppText.display(
-                    size: 34,
-                    weight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: -0.01,
+                // Titular de dos líneas, como Canchas: la segunda en acento.
+                Text.rich(
+                  TextSpan(
+                    text: 'Tu\n',
+                    style: AppText.display(
+                      size: 34,
+                      weight: FontWeight.w900,
+                      letterSpacing: -0.01,
+                      height: 1.05,
+                      shadows: AppFx.inkGlow(),
+                    ),
+                    children: [
+                      TextSpan(
+                        text: 'Crew.',
+                        style: AppText.display(
+                          size: 34,
+                          weight: FontWeight.w900,
+                          color: AppColors.accent,
+                          letterSpacing: -0.01,
+                          height: 1.05,
+                          shadows: AppFx.accentGlow(),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 6),

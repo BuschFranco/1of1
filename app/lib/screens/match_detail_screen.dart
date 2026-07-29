@@ -830,6 +830,10 @@ List<({String label, String value})> _userStatItems(PlaySession s) {
 }
 
 /// Widget optimizado para captura como imagen (9:16, Instagram Stories).
+///
+/// Sus títulos van SIN halo a propósito: esto se renderiza offscreen a un PNG
+/// de 1080x1920, así que el glow quedaría horneado en la imagen que el usuario
+/// comparte (y suma un saveLayer al render). El halo es para la pantalla.
 class _ShareCard extends StatelessWidget {
   final PlaySession session;
   final Court? court;

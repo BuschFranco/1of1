@@ -13,6 +13,7 @@ import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/pickup_schedule_picker.dart';
 import '../widgets/pressable_widget.dart';
+import '../widgets/under_construction.dart';
 import 'main_shell.dart';
 
 class PickupCreateScreen extends StatefulWidget {
@@ -37,9 +38,6 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
   String _teamAColor = '#FF6B1A';
   String _teamBColor = '#3B82F6';
   int _targetScore = 21;
-  // Visibilidad pública: SOLO visual por ahora (feature en construcción). No se
-  // envía al backend ni cambia el flujo de creación; es un adelanto de UI.
-  bool _isPublic = false;
   final List<String> _teamAMembers = [];
   final List<String> _teamBMembers = [];
   final _notesCtrl = TextEditingController();
@@ -399,9 +397,10 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     );
   }
 
-  // ── Visibilidad: toggle "público" adelantado. Es SOLO visual: al tocarlo
-  // cambia el switch pero no altera la creación (la unión abierta desde el mapa
-  // todavía está en construcción). El badge lo deja claro. ──
+  // ── Visibilidad: adelanto de los pickups públicos. El switch NO se puede
+  // activar mientras la feature no exista: dejarlo cambiar de estado haría
+  // creer que el pickup se creó abierto cuando en realidad sigue siendo por
+  // invitación. Se muestra apagado y atenuado, y al tocarlo se avisa. ──
   Widget _visibilityCard() {
     return _sectionCard(
       child: Column(
@@ -416,68 +415,63 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
           ),
           const SizedBox(height: 4),
           PressableWidget(
-            onTap: () => setState(() => _isPublic = !_isPublic),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: _isPublic
-                        ? AppColors.accent.withAlpha(30)
-                        : AppColors.white(0.05),
-                    borderRadius: BorderRadius.circular(12),
+            onTap: () => showUnderConstruction(context, 'Los pickups públicos'),
+            child: Opacity(
+              // Atenuado: comunica "todavía no" sin necesidad de leer el badge.
+              opacity: 0.5,
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.white(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.lock_outline,
+                        size: 20, color: AppColors.white(0.5)),
                   ),
-                  child: Icon(
-                    _isPublic ? Icons.public : Icons.lock_outline,
-                    size: 20,
-                    color: _isPublic ? AppColors.accent : AppColors.white(0.5),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Pickup público',
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Pickup público',
+                            style: AppText.grotesk(
+                                size: 14,
+                                weight: FontWeight.w700,
+                                color: Colors.white)),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Cualquiera podrá unirse desde el mapa, sin invitación.',
                           style: AppText.grotesk(
-                              size: 14,
-                              weight: FontWeight.w700,
-                              color: Colors.white)),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Cualquiera podrá unirse desde el mapa, sin invitación.',
-                        style: AppText.grotesk(
-                            size: 11, color: AppColors.white(0.45)),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                // Switch plano (mismo lenguaje que el resto: pill + acento).
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 46,
-                  height: 28,
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: _isPublic
-                        ? AppColors.accent
-                        : AppColors.white(0.12),
-                    borderRadius: BorderRadius.circular(AppShape.rBtn),
-                  ),
-                  alignment:
-                      _isPublic ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    width: 22,
-                    height: 22,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
+                              size: 11, color: AppColors.white(0.45)),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  // Switch plano, fijo en apagado (mismo lenguaje que el resto).
+                  Container(
+                    width: 46,
+                    height: 28,
+                    padding: const EdgeInsets.all(3),
+                    alignment: Alignment.centerLeft,
+                    decoration: BoxDecoration(
+                      color: AppColors.white(0.12),
+                      borderRadius: BorderRadius.circular(AppShape.rBtn),
+                    ),
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: AppColors.white(0.5),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],

@@ -7,16 +7,11 @@ class SectionTitle extends StatelessWidget {
   final String? right;
   final VoidCallback? onRight;
 
-  /// Sobre fondos saturados oscuros (lila/oliva/rojo del perfil): título en
-  /// blanco con la sombra dura clásica del brand, y link en blanco.
-  final bool onDark;
-
   const SectionTitle({
     super.key,
     required this.title,
     this.right,
     this.onRight,
-    this.onDark = false,
   });
 
   @override
@@ -30,19 +25,15 @@ class SectionTitle extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Etiqueta de sección: sin sombra ni glow. Son 13px, y cualquier
+              // blur a ese tamaño se lee como texto sucio en vez de aura.
               Text(
                 title.toUpperCase(),
                 style: AppText.archivo(
                   size: 13,
                   weight: FontWeight.w700,
-                  color: onDark ? Colors.white : AppColors.ink,
+                  color: AppColors.ink,
                   letterSpacing: 0.1,
-                ).copyWith(
-                  shadows: onDark
-                      ? const [
-                          Shadow(color: Colors.black, offset: Offset(2, 2)),
-                        ]
-                      : null,
                 ),
               ),
             ],
@@ -55,12 +46,12 @@ class SectionTitle extends StatelessWidget {
                 style: AppText.grotesk(
                   size: 11,
                   weight: FontWeight.w700,
-                  color: onDark ? Colors.white : AppColors.ink,
+                  color: AppColors.ink,
                   letterSpacing: 0.04,
                   height: 1,
                 ).copyWith(
                   decoration: TextDecoration.underline,
-                  decorationColor: onDark ? Colors.white : AppColors.ink,
+                  decorationColor: AppColors.ink,
                 ),
               ),
             ),

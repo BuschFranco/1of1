@@ -45,7 +45,7 @@ class _HandleSetupScreenState extends State<HandleSetupScreen> {
   Widget build(BuildContext context) {
     final name = context.read<Session>().profile?.name ?? '';
     return Scaffold(
-      backgroundColor: AppColors.sun,
+      backgroundColor: AppColors.bg,
       body: Stack(
         children: [
           SafeArea(
@@ -54,9 +54,33 @@ class _HandleSetupScreenState extends State<HandleSetupScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    name.isEmpty ? '¡Bienvenido! 🏀' : '¡Bienvenido, ${name.split(' ').first}! 🏀',
-                    style: AppText.display(size: 28, weight: FontWeight.w900, height: 1.05),
+                  // Con nombre, el nombre va en acento; sin nombre no hay nada
+                  // que resaltar y el saludo queda entero en tinta.
+                  Text.rich(
+                    TextSpan(
+                      text: name.isEmpty ? '¡Bienvenido! 🏀' : '¡Bienvenido, ',
+                      style: AppText.display(
+                        size: 28,
+                        weight: FontWeight.w900,
+                        height: 1.05,
+                        shadows: AppFx.inkGlow(),
+                      ),
+                      children: [
+                        if (name.isNotEmpty) ...[
+                          TextSpan(
+                            text: name.split(' ').first,
+                            style: AppText.display(
+                              size: 28,
+                              weight: FontWeight.w900,
+                              color: AppColors.accent,
+                              height: 1.05,
+                              shadows: AppFx.accentGlow(),
+                            ),
+                          ),
+                          const TextSpan(text: '! 🏀'),
+                        ],
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Text(

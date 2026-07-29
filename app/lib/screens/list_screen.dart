@@ -5,6 +5,7 @@ import '../services/court_rating_service.dart';
 import '../services/location_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/app_logo.dart';
@@ -95,17 +96,30 @@ class _ListScreenState extends State<ListScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    'Canchas\ncerca tuyo.',
-                    style: AppText.display(
-                      size: 38,
-                      weight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: -0.01,
-                      height: 1.05,
-                    ).copyWith(
-                      shadows: const [
-                        Shadow(color: Colors.black, offset: Offset(3, 3)),
+                  // Titular partido como el hero del sitio: la primera mitad en
+                  // tinta y la segunda en acento, cada una con su propio halo.
+                  Text.rich(
+                    TextSpan(
+                      text: 'Canchas\n',
+                      style: AppText.display(
+                        size: 38,
+                        weight: FontWeight.w900,
+                        letterSpacing: -0.01,
+                        height: 1.05,
+                        shadows: AppFx.inkGlow(),
+                      ),
+                      children: [
+                        TextSpan(
+                          text: 'cerca tuyo.',
+                          style: AppText.display(
+                            size: 38,
+                            weight: FontWeight.w900,
+                            color: AppColors.accent,
+                            letterSpacing: -0.01,
+                            height: 1.05,
+                            shadows: AppFx.accentGlow(),
+                          ),
+                        ),
                       ],
                     ),
                   ),

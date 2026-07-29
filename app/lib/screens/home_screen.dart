@@ -21,6 +21,7 @@ import '../services/court_owner_cache.dart';
 import '../services/session.dart';
 import 'ranking_screen.dart';
 import '../services/session_alarms.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/app_logo.dart';
@@ -1145,12 +1146,32 @@ class _HomeScreenState extends State<HomeScreen>
                           color: amber),
                     )
                   else
-                    Text(
-                      paused ? 'Pausado' : 'Jugando en ${ps.courtName ?? ''}',
+                    // El nombre de la cancha en acento: es el estado más
+                    // importante de la app y hasta ahora era texto plano.
+                    Text.rich(
+                      paused
+                          ? TextSpan(
+                              text: 'Pausado',
+                              style: AppText.grotesk(
+                                  size: 10, color: AppColors.white(0.6)),
+                            )
+                          : TextSpan(
+                              text: 'Jugando en ',
+                              style: AppText.grotesk(
+                                  size: 10, color: AppColors.white(0.6)),
+                              children: [
+                                TextSpan(
+                                  text: ps.courtName ?? '',
+                                  style: AppText.grotesk(
+                                    size: 10,
+                                    weight: FontWeight.w700,
+                                    color: AppColors.accent,
+                                  ),
+                                ),
+                              ],
+                            ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style:
-                          AppText.grotesk(size: 10, color: AppColors.white(0.6)),
                     ),
                   // Con Salud conectada dejamos claro que estamos midiendo el
                   // desempeño físico (calorías/pulso) durante el partido.
@@ -2394,6 +2415,9 @@ class _CourtSwipeCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.glass,
         borderRadius: BorderRadius.circular(AppShape.rCard),
+        // Sombra difusa: sin ella el corte contra el mapa queda a filo y la
+        // tarjeta parece pegada al fondo en vez de flotar sobre él.
+        boxShadow: AppFx.ambientShadow(),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,

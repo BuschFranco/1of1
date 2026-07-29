@@ -50,6 +50,25 @@ class AppFx {
         ),
       ];
 
+  /// Sombra AMBIENTAL para elementos que flotan sobre contenido con textura
+  /// (las tarjetas sobre el mapa). Dos capas: una cercana que define el borde y
+  /// una amplia y difusa que despega la caja del fondo.
+  ///
+  /// Es lo contrario de [hardShadow]: sin ella, el corte entre la tarjeta y el
+  /// mapa queda a filo y la tarjeta parece pegada, no flotando.
+  static List<BoxShadow> ambientShadow({double strength = 1}) => [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.35 * strength),
+          offset: const Offset(0, 3),
+          blurRadius: 10,
+        ),
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.22 * strength),
+          offset: const Offset(0, 10),
+          blurRadius: 28,
+        ),
+      ];
+
   /// Gradiente de acento (plano — ambos extremos iguales).
   static LinearGradient accentGradient({bool deep = false}) => LinearGradient(
         colors: deep
@@ -60,6 +79,49 @@ class AppFx {
   /// Borde plano del color dado.
   static LinearGradient hairline(Color color, {int topAlpha = 255}) =>
       LinearGradient(colors: [color, color]);
+
+  // ── Halos de TEXTO ──────────────────────────────────────────────────────
+  //
+  // El sitio usa `text-shadow: 0 0 20px rgba(255,107,26,.4)` en su titular de
+  // acento: sin offset, blur amplio, alpha bajo. Devuelven `Shadow` (no
+  // `BoxShadow`: son tipos distintos) pero viven acá porque es el mismo
+  // lenguaje visual que el resto de los efectos.
+  //
+  // La ausencia de offset es justamente lo que distingue el halo de la sombra
+  // dura del estilo viejo.
+
+  static List<Shadow> textGlow(
+    Color color, {
+    double blur = 16,
+    double alpha = 0.3,
+  }) =>
+      [
+        Shadow(
+          color: color.withValues(alpha: alpha),
+          blurRadius: blur,
+        ),
+      ];
+
+  /// Halo naranja para titulares que YA son de acento. Prácticamente los
+  /// valores del sitio (20px / .40), apenas bajados: los títulos de la app son
+  /// de 28-46px contra los 120px del hero web, y el blur no escala con la
+  /// fuente.
+  static List<Shadow> accentGlow({double blur = 18, double alpha = 0.38}) =>
+      textGlow(AppColors.accent, blur: blur, alpha: alpha);
+
+  /// Halo blanco para titulares en tinta. Alpha MUCHO más bajo a propósito: el
+  /// sitio no le pone halo a su línea blanca, y sobre un fondo casi negro el
+  /// blanco a .40 engorda el trazo de Anton (ya condensada y pesada) en vez de
+  /// verse como aura.
+  static List<Shadow> inkGlow({double blur = 14, double alpha = 0.15}) =>
+      textGlow(AppColors.ink, blur: blur, alpha: alpha);
+
+  /// Halo NEGRO de legibilidad para texto sobre foto (el del marquee del
+  /// sitio: 0 0 40px rgba(0,0,0,.7) + 0 0 80px rgba(0,0,0,.4)).
+  static List<Shadow> readableGlow({double scale = 1}) => [
+        Shadow(color: Colors.black.withValues(alpha: 0.7), blurRadius: 40 * scale),
+        Shadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 80 * scale),
+      ];
 
   /// Sombra glow neon.
   static List<BoxShadow> neonGlow(

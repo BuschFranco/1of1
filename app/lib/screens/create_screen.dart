@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/notifications_service.dart';
 import '../services/pickups_provider.dart';
 import '../services/session.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/basketball_graffiti.dart';
 import '../widgets/pressable_widget.dart';
@@ -185,12 +186,31 @@ class CreateScreen extends StatelessWidget {
           ListView(
             padding: const EdgeInsets.fromLTRB(20, 56, 20, 160),
             children: [
-              Text(
-                'Juego',
-                style: AppText.display(
-                  size: 34,
-                  weight: FontWeight.w900,
-                  letterSpacing: -0.01,
+              // Titular de dos líneas, como Canchas y Crew: el imperativo
+              // describe lo que se hace acá (armar un pickup, registrar).
+              Text.rich(
+                TextSpan(
+                  text: 'Armá tu\n',
+                  style: AppText.display(
+                    size: 34,
+                    weight: FontWeight.w900,
+                    letterSpacing: -0.01,
+                    height: 1.05,
+                    shadows: AppFx.inkGlow(),
+                  ),
+                  children: [
+                    TextSpan(
+                      text: 'juego.',
+                      style: AppText.display(
+                        size: 34,
+                        weight: FontWeight.w900,
+                        color: AppColors.accent,
+                        letterSpacing: -0.01,
+                        height: 1.05,
+                        shadows: AppFx.accentGlow(),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 20),

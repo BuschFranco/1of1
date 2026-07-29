@@ -261,6 +261,9 @@ class DetailScreen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
+                // No se parte en acento: el nombre es dinámico y cortar por la
+                // última palabra da resultados arbitrarios (o falla con nombres
+                // de una sola palabra).
                 Text(
                   court.name,
                   style: AppText.display(
@@ -268,6 +271,7 @@ class DetailScreen extends StatelessWidget {
                     weight: FontWeight.w900,
                     letterSpacing: -0.01,
                     height: 1.0,
+                    shadows: AppFx.inkGlow(),
                   ),
                 ),
                 const SizedBox(height: 6),

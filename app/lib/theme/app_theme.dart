@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 
-/// Paleta DARK MODE — estilo Nike: fondos negros, superficies grises oscuras,
-/// acento naranja balón, texto blanco. Bordes sutiles, sombras profundas.
+/// Paleta DARK MODE, alineada con el sitio web (`web/src/styles/tokens.css`):
+/// azules muy oscuros en vez de negro puro, acento naranja balón, texto blanco.
 /// Se conservan los NOMBRES de tokens para no tocar los cientos de call-sites.
+///
+/// La rampa de superficies va de más oscuro a más claro:
+/// `lilac` (#080e18) → `bg` (#0d141e) → `bgElev` (#141b26) → `card` (#1a202a).
 class AppColors {
-  // Fondos dark.
-  static const Color bg = Color(0xFF0A0A0A);
-  static const Color bgElev = Color(0xFF141414);
-  static const Color card = Color(0xFF1A1A1A);
-  static const Color panel = Color(0xFF1A1A1A);
+  // Fondos dark (--bg / --bg-card del sitio). bgElev es un paso INTERMEDIO
+  // entre bg y card: los modales se pintan con bgElev y sus secciones con card,
+  // así que igualarlos aplanaría los sheets y los diálogos.
+  static const Color bg = Color(0xFF0D141E);
+  static const Color bgElev = Color(0xFF141B26);
+  static const Color card = Color(0xFF1A202A);
+  static const Color panel = Color(0xFF1A202A);
 
-  // Acento interactivo: naranja balón.
+  // Acento interactivo: naranja balón (idéntico al --accent del sitio).
   static const Color accent = Color(0xFFFF6B1A);
   static const Color accentDark = Color(0xFFCC5515);
   static const Color accentAmber = Color(0xFFFF6B1A);
@@ -20,35 +25,56 @@ class AppColors {
   static const Color busy = Color(0xFFF59E0B);
   static const Color closed = Color(0xFF6B7280);
 
-  // Superficies dark (cada pantalla tenía su color saturado → tonos oscuros).
-  static const Color lilac = Color(0xFF1E1B4B);
-  static const Color sun = Color(0xFF1A1A1A);
-  static const Color red = Color(0xFF1A1A1A);
-  static const Color cream = Color(0xFF0A0A0A);
-  static const Color olive = Color(0xFF1A1A1A);
-  static const Color charcoal = Color(0xFF141414);
-  static const Color paper = Color(0xFF141414);
-  static const Color blush = Color(0xFF1A1A1A);
-  static const Color glass = Color(0xFF141414);
+  /// Fondo de Canchas y Crew: el `--bg-lowest` del sitio, MÁS oscuro que `bg`
+  /// a propósito (esas dos pantallas son listas a pantalla completa y el
+  /// contraste con las cards las hace respirar).
+  static const Color lilac = Color(0xFF080E18);
+
+  // Aliases históricos de fondo de PANTALLA (no de card): se conservan para no
+  // romper call-sites, pero no tienen color propio.
+  static const Color sun = bg;
+  static const Color red = bg;
+  static const Color cream = bg;
+  static const Color olive = bg;
+  static const Color blush = bg;
+  // Aliases de superficie elevada (paneles sobre el mapa, chips, fills).
+  static const Color charcoal = bgElev;
+  static const Color paper = bgElev;
+  static const Color glass = bgElev;
 
   /// Fondos de perfil elegibles por el usuario (clave persistida → color).
+  /// Las CLAVES no se tocan (están guardadas en prefs); los valores se
+  /// re-tintaron a la familia del sitio. Todos de luminancia baja y parecida,
+  /// así el texto blanco funciona en los seis sin condicionales.
   static const Map<String, Color> profileBgs = {
-    'charcoal': charcoal,
-    'olive': Color(0xFF2D3A1E),
-    'sun': Color(0xFF3D2E0A),
-    'lilac': Color(0xFF2E1B4B),
-    'red': Color(0xFF3A0A0A),
-    'cream': Color(0xFF1A1A1A),
+    'charcoal': bg,
+    'olive': Color(0xFF16241C),
+    'sun': Color(0xFF2A1E0D),
+    'lilac': Color(0xFF151B3A),
+    'red': Color(0xFF2A1014),
+    'cream': card,
   };
 
   /// Resuelve la clave guardada al color de fondo del perfil (default charcoal).
-  static Color profileBg(String key) => profileBgs[key] ?? charcoal;
+  static Color profileBg(String key) => profileBgs[key] ?? bg;
 
-  // Borde universal: gris sutil sobre dark.
-  static const Color line = Color(0xFF2A2A2A);
+  // Borde universal: gris azulado. Mantiene el mismo salto de luminancia que
+  // tenía sobre el negro, solo cambia la temperatura.
+  static const Color line = Color(0xFF2B3444);
 
-  // Texto / íconos: blanco.
+  /// Borde CÁLIDO del sitio (`--border`). Reservado para bordes editoriales
+  /// puntuales: `line` tiene decenas de usos estructurales (cards, inputs,
+  /// chips, avatares) y pintarlos todos de marrón delinearía la app entera.
+  static const Color lineWarm = Color(0xFF5A4137);
+
+  // Texto / íconos: blanco (el --ink-strong del sitio).
   static const Color ink = Color(0xFFFFFFFF);
+
+  /// Textos cálidos del sitio (`--ink-variant` / `--ink-muted`). Todavía sin
+  /// usar: la jerarquía secundaria de la app se expresa con `white(op)`, así
+  /// que migrar a estos exige una pasada propia para no invertirla.
+  static const Color inkVariant = Color(0xFFE2BFB2);
+  static const Color inkMuted = Color(0xFFA98A7E);
 
   /// Texto/secundario blanco con opacidad (para dark mode).
   static Color white(double op) => Color.fromRGBO(255, 255, 255, op);
@@ -94,6 +120,7 @@ class AppText {
     Color color = AppColors.ink,
     double letterSpacing = 0,
     double? height,
+    List<Shadow>? shadows,
   }) {
     return TextStyle(
       fontFamily: 'Anton',
@@ -102,6 +129,7 @@ class AppText {
       color: color,
       letterSpacing: letterSpacing * size,
       height: height,
+      shadows: shadows,
     );
   }
 
@@ -114,6 +142,7 @@ class AppText {
     Color color = AppColors.ink,
     double letterSpacing = 0,
     double? height,
+    List<Shadow>? shadows,
   }) {
     return TextStyle(
       fontFamily: 'Anybody',
@@ -123,6 +152,7 @@ class AppText {
       color: color,
       letterSpacing: letterSpacing * size,
       height: height,
+      shadows: shadows,
     );
   }
 
@@ -133,6 +163,7 @@ class AppText {
     Color color = AppColors.ink,
     double letterSpacing = 0,
     double? height,
+    List<Shadow>? shadows,
   }) {
     return TextStyle(
       fontFamily: 'ArchivoNarrow',
@@ -142,6 +173,7 @@ class AppText {
       color: color,
       letterSpacing: letterSpacing * size,
       height: height,
+      shadows: shadows,
     );
   }
 }

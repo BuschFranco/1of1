@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/beta_tag.dart';
@@ -107,14 +108,31 @@ class OnboardingScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          Text(
-            'Encontrá tu\npróxima\ncancha.',
-            style: AppText.display(
-              size: 46,
-              weight: FontWeight.w900,
-              color: AppColors.accent,
-              letterSpacing: -0.01,
-              height: 0.98,
+          // Antes era todo naranja; partido gana fuerza porque el acento tiene
+          // con qué contrastar (mismo criterio que el hero del sitio).
+          Text.rich(
+            TextSpan(
+              text: 'Encontrá tu\npróxima\n',
+              style: AppText.display(
+                size: 46,
+                weight: FontWeight.w900,
+                letterSpacing: -0.01,
+                height: 0.98,
+                shadows: AppFx.inkGlow(),
+              ),
+              children: [
+                TextSpan(
+                  text: 'cancha.',
+                  style: AppText.display(
+                    size: 46,
+                    weight: FontWeight.w900,
+                    color: AppColors.accent,
+                    letterSpacing: -0.01,
+                    height: 0.98,
+                    shadows: AppFx.accentGlow(),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 18),

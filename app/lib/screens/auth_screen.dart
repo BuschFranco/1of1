@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/geocoding_service.dart';
 import '../services/session.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/beta_tag.dart';
@@ -305,12 +306,28 @@ class _AuthScreenState extends State<AuthScreen> {
                     children: [
                       _brand(),
                       const SizedBox(height: 40),
-                      Text(
-                        _isSignup ? 'Creá tu cuenta' : 'Bienvenido de vuelta',
-                        style: AppText.display(
-                          size: 30,
-                          weight: FontWeight.w900,
-                          height: 1.05,
+                      // Última palabra en acento (patrón del sitio).
+                      Text.rich(
+                        TextSpan(
+                          text: _isSignup ? 'Creá tu ' : 'Bienvenido de ',
+                          style: AppText.display(
+                            size: 30,
+                            weight: FontWeight.w900,
+                            height: 1.05,
+                            shadows: AppFx.inkGlow(),
+                          ),
+                          children: [
+                            TextSpan(
+                              text: _isSignup ? 'cuenta' : 'vuelta',
+                              style: AppText.display(
+                                size: 30,
+                                weight: FontWeight.w900,
+                                color: AppColors.accent,
+                                height: 1.05,
+                                shadows: AppFx.accentGlow(),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 8),

@@ -66,14 +66,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   int get _tab => widget.activeTab ?? _localTab;
 
-  /// True si el fondo elegido del perfil es saturado oscuro (lila/oliva/rojo):
-  /// los textos que apoyan directo sobre el fondo van en blanco con la sombra
-  /// dura clásica del brand.
-  bool get _onDarkBg {
-    final key = context.watch<Session>().profileBg;
-    return key == 'lilac' || key == 'olive' || key == 'red';
-  }
-
   void _setTab(int idx) {
     if (widget.onTabChange != null) {
       widget.onTabChange!(idx);
@@ -85,6 +77,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // Ancla de la sección "Últimos partidos" para hacer scroll hacia ella al
   // tocar el mazo de puntos que va debajo del nivel.
   final GlobalKey _historyKey = GlobalKey();
+
+  // Historial paginado. El ListView del perfil NO es lazy (ListView(children:)),
+  // y el log llega a 100 partidos: expandirlo entero de una construiría las 100
+  // filas en un solo frame. De a tandas se mantiene fluido.
+  static const int _historyPreview = 5;
+  static const int _historyPage = 10;
+  int _historyShown = _historyPreview;
 
   // Amigos cargados una vez al entrar al perfil: alimentan la POSICIÓN del
   // botón Ranking y la hoja se abre sin recargar. `_rankBusy` evita abrir
@@ -188,16 +187,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             style: AppText.display(
                               size: 30,
                               weight: FontWeight.w900,
-                              color: _onDarkBg ? Colors.white : AppColors.ink,
                               letterSpacing: -0.01,
-                            ).copyWith(
-                              shadows: _onDarkBg
-                                  ? const [
-                                      Shadow(
-                                          color: Colors.black,
-                                          offset: Offset(3, 3)),
-                                    ]
-                                  : null,
+                              shadows: AppFx.inkGlow(),
                             ),
                           ),
                           Row(
@@ -375,16 +366,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 style: AppText.display(
                   size: 30,
                   weight: FontWeight.w900,
-                  color: _onDarkBg ? Colors.white : AppColors.ink,
                   letterSpacing: -0.01,
-                ).copyWith(
-                  shadows: _onDarkBg
-                      ? const [
-                          Shadow(
-                              color: Colors.black,
-                              offset: Offset(3, 3)),
-                        ]
-                      : null,
+                  shadows: AppFx.inkGlow(),
                 ),
               ),
               Row(
@@ -448,19 +431,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
+                        // Sin halo: es un nombre de largo variable, no un
+                        // titular de marca; el glow acá competiría con el
+                        // avatar y los chips de identidad de al lado.
                         profile.name.isEmpty ? 'Jugador' : profile.name,
                         style: AppText.archivo(
                           size: 24,
                           weight: FontWeight.w900,
-                          color: _onDarkBg ? Colors.white : AppColors.ink,
-                        ).copyWith(
-                          shadows: _onDarkBg
-                              ? const [
-                                  Shadow(
-                                      color: Colors.black,
-                                      offset: Offset(2, 2)),
-                                ]
-                              : null,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -574,7 +551,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SectionTitle(title: 'Canchas más jugadas', onDark: _onDarkBg),
+                    SectionTitle(title: 'Canchas más jugadas'),
                     _topCourtsSection(),
                   ],
                 ),
@@ -584,7 +561,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SectionTitle(title: 'Favoritos', onDark: _onDarkBg),
+                    SectionTitle(title: 'Favoritos'),
                     _favoritesSection(),
                   ],
                 ),
@@ -594,7 +571,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SectionTitle(title: 'Títulos', onDark: _onDarkBg),
+                    SectionTitle(title: 'Títulos'),
                     _titlesSection(profile),
                   ],
                 ),
@@ -604,7 +581,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SectionTitle(title: 'Logros', onDark: _onDarkBg),
+                    SectionTitle(title: 'Logros'),
                     _achievementsSection(),
                   ],
                 ),
@@ -616,8 +593,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     SectionTitle(
                         key: _historyKey,
-                        title: 'Últimos partidos',
-                        onDark: _onDarkBg),
+                        title: 'Últimos partidos'),
                     _historySection(),
                   ],
                 ),
@@ -724,9 +700,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            'Faltan ${next - pts} EXP para el nivel ${lvl + 1}',
-            style: AppText.grotesk(size: 11, color: AppColors.white(0.45)),
+          // Lo que le falta al usuario va en acento: es el dato accionable de
+          // toda la card. Sin halo: a 11px un blur se lee como texto sucio.
+          Text.rich(
+            TextSpan(
+              text: 'Faltan ',
+              style: AppText.grotesk(size: 11, color: AppColors.white(0.45)),
+              children: [
+                TextSpan(
+                  text: '${next - pts} EXP',
+                  style: AppText.grotesk(
+                    size: 11,
+                    weight: FontWeight.w700,
+                    color: AppColors.accent,
+                  ),
+                ),
+                TextSpan(text: ' para el nivel ${lvl + 1}'),
+              ],
+            ),
           ),
         ],
       ),
@@ -755,17 +746,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final n = recent.length;
     final stackH = cardH + peek * (n - 1);
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        // Mazo, anclado al fondo del Stack para que su parte superior quede
-        // tapada por el nivel (que se pinta después, encima).
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: PressableWidget(
-            onTap: _scrollToHistory,
+    // El gesto envuelve el Stack COMPLETO, no solo el mazo: en un Stack el
+    // último hijo gana el hit-test, y el Column del nivel se pinta después, así
+    // que envolviendo solo el mazo la única zona tocable era la franja que
+    // asoma por debajo del nivel.
+    return PressableWidget(
+      onTap: _scrollToHistory,
+      scale: 0.98, // el bloque es grande: el 0.95 por defecto se nota demasiado
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Mazo, anclado al fondo del Stack para que su parte superior quede
+          // tapada por el nivel (que se pinta después, encima).
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
             child: SizedBox(
               height: stackH,
               child: Stack(
@@ -791,16 +787,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ),
-        ),
-        // Nivel encima + espacio reservado para la parte visible del mazo.
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            levelCard,
-            SizedBox(height: stackH - overlap),
-          ],
-        ),
-      ],
+          // Nivel encima + espacio reservado para la parte visible del mazo.
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              levelCard,
+              SizedBox(height: stackH - overlap),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -1022,11 +1018,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 Expanded(
                     child: cell('Partidos', '${ps.totalPlays}',
-                        Icons.sports_basketball)),
+                        Icons.sports_basketball, accent: true)),
                 vDiv(),
                 Expanded(
                     child: cell('Canchas', '${ps.uniqueCourtsCount}',
-                        Icons.place_outlined)),
+                        Icons.place_outlined, accent: true)),
               ],
             ),
           ),
@@ -1889,9 +1885,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (log.isEmpty) {
       return _emptyCard('Todavía no jugaste partidos.');
     }
-    return _sectionCard([
-      for (var i = 0; i < log.length && i < 20; i++) _historyRow(log[i]),
-    ]);
+    // clamp: si el log se acorta entre builds (logout y login con otra cuenta),
+    // _historyShown puede quedar más alto que la lista.
+    final shown = _historyShown.clamp(0, log.length);
+    final rest = log.length - shown;
+    return Column(
+      children: [
+        _sectionCard([
+          for (var i = 0; i < shown; i++) _historyRow(log[i]),
+        ]),
+        if (rest > 0) ...[
+          const SizedBox(height: 6),
+          _seeMore(
+            rest <= _historyPage
+                ? 'Ver los $rest partidos restantes'
+                : 'Ver $_historyPage partidos más',
+            () => setState(() => _historyShown += _historyPage),
+          ),
+        ],
+      ],
+    );
   }
 
   Widget _historyRow(PlaySession s) {
@@ -2510,12 +2523,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: AppColors.ink,
-                        width: (currentBg.isEmpty ? 'cream' : currentBg) == e.key
+                        width: (currentBg.isEmpty ? 'charcoal' : currentBg) == e.key
                             ? 3
                             : 1.5,
                       ),
                     ),
-                    child: (currentBg.isEmpty ? 'cream' : currentBg) == e.key
+                    child: (currentBg.isEmpty ? 'charcoal' : currentBg) == e.key
                         ? Icon(Icons.check,
                             size: 18,
                             color: e.value.computeLuminance() > 0.6

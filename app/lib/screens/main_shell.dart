@@ -163,7 +163,9 @@ class _MainShellState extends State<MainShell> {
         AppTab.home => AppColors.cream,
         AppTab.list => AppColors.lilac,
         AppTab.plus => AppColors.cream,
-        AppTab.chat => AppColors.red,
+        // Tiene que coincidir con el color que pinta crew_screen: si no, el
+        // slide de entrada muestra un color y al asentarse salta al otro.
+        AppTab.chat => AppColors.lilac,
         AppTab.profile =>
           AppColors.profileBg(context.watch<Session>().profileBg),
       };
