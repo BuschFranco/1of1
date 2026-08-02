@@ -1,4 +1,4 @@
-# Backend — 1of1
+﻿# Backend — 1of1
 
 API NestJS de la app, respaldada por **Supabase Postgres vía Prisma** (migrada
 desde Notion; el gateway de Notion quedó solo como legado para el script de
@@ -35,8 +35,10 @@ npm run build              # compila a dist/
 ## Auth
 
 - JWT Bearer (30 días por default). Payload: `{ sub, email, profileId, isAdmin }`.
-- Hash de password: `sha256("<email_lowercase>:<password>")` hex — compatible
-  con las cuentas creadas por la app contra Notion directo.
+- Hash de password: **bcrypt** (`bcryptjs`, costo 10) para cuentas nuevas.
+  Los hashes legados de Notion (`sha256("<email_lowercase>:<password>")` hex,
+  sin salt) siguen verificándose en el login y se reemplazan por bcrypt en el
+  momento (migración lazy, sin interrumpir a nadie).
 - Cuentas de Google: `PasswordHash = 'google:'` (sin contraseña; solo entran
   por `/auth/google`).
 
@@ -181,7 +183,6 @@ en cuenta al pensar timeouts y feedback de carga en la app.
 
 ## Pendiente
 
-- Hardening producción: migrar hash a bcrypt (re-hash en login), rate limiting,
-  helmet.
+- Hardening producción: rate limiting y helmet.
 - **No hay push a los clientes** (ni FCM ni websockets): todo lo que un usuario
   tiene que saber de otro se resuelve con polling desde la app.

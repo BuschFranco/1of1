@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcryptjs';
 import { createHash } from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { Profile, profileWire } from '../domain/wire';
@@ -27,12 +28,60 @@ export class AuthService {
     private readonly jwt: JwtService,
   ) {}
 
-  /** Mismo esquema que siempre: sha256("<email_lowercase>:<password>") hex.
-   * Se mantiene para que los hashes migrados de Notion sigan funcionando. */
-  private hash(email: string, password: string): string {
+  // ── Hashes de contraseña ───────────────────────────────────────────────
+  //
+  // Esquema actual: bcrypt con salt (bcryptjs, puro JS: sin binarios nativos,
+  // corre igual en Windows y en Render). Formato `$2a$/$2b$/$2y$` estándar.
+  //
+  // Esquema legado (cuentas migradas de Notion): sha256("<email>:<password>")
+  // hex, SIN salt. NO se genera más, solo se VERIFICA para no romper el login
+  // de los usuarios existentes, y en el momento de loguear bien se hace el
+  // upgrade en caliente a bcrypt (migración lazy). Las cuentas de Google se
+  // guardan con 'google:' (no tienen contraseña) y no pasan por password.
+
+  /** Costo de bcrypt. 10 es el estándar; subir de acá duplica el tiempo por
+   * hash sin ganancia práctica a este volumen. */
+  private static readonly BCRYPT_ROUNDS = 10;
+
+  private static isBcryptHash(h: string): boolean {
+    return h.startsWith('$2a$') || h.startsWith('$2b$') || h.startsWith('$2y$');
+  }
+
+  private static isLegacySha256(h: string): boolean {
+    return /^[0-9a-f]{64}$/i.test(h);
+  }
+
+  /** Verifica la contraseña contra el hash almacenado, soportando ambos
+   * esquemas. Devuelve true si coincide; además avisa si el hash era del
+   * esquema viejo (para el upgrade en caliente). */
+  private async verifyPassword(
+    email: string,
+    password: string,
+    stored: string,
+  ): Promise<{ ok: boolean; legacy: boolean }> {
+    if (AuthService.isBcryptHash(stored)) {
+      return { ok: await bcrypt.compare(password, stored), legacy: false };
+    }
+    if (AuthService.isLegacySha256(stored)) {
+      return {
+        ok: stored === this.legacySha256(email, password),
+        legacy: true,
+      };
+    }
+    // 'google:' u otro valor no parseable: no hay contraseña que validar.
+    return { ok: false, legacy: false };
+  }
+
+  /** sha256("<email_lowercase>:<password>") hex — esquema legado de Notion.
+   * Solo para verificar hashes existentes (y derivar el upgrade a bcrypt). */
+  private legacySha256(email: string, password: string): string {
     return createHash('sha256')
-      .update(`${email.toLowerCase()}:${password}`)
+      .update(`${email.trim().toLowerCase()}:${password}`)
       .digest('hex');
+  }
+
+  private async hashPassword(password: string): Promise<string> {
+    return bcrypt.hash(password, AuthService.BCRYPT_ROUNDS);
   }
 
   private sign(
@@ -53,8 +102,23 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('No existe una cuenta con ese email.');
     }
-    if (user.passwordHash !== this.hash(email, dto.password)) {
+    const { ok, legacy } = await this.verifyPassword(
+      email,
+      dto.password,
+      user.passwordHash,
+    );
+    if (!ok) {
       throw new UnauthorizedException('Contraseña incorrecta.');
+    }
+    // Migración en caliente: el hash era del esquema viejo (sha256 sin salt) →
+    // se reemplaza por bcrypt con la contraseña recién verificada. De esta
+    // forma cada cuenta pasa a bcrypt en su próximo login sin interrumpir a
+    // nadie, y los hashes viejos dejan de circular.
+    if (legacy) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: await this.hashPassword(dto.password) },
+      });
     }
     const profile = await this.prisma.profile.findUnique({
       where: { id: user.profileId },
@@ -91,7 +155,7 @@ export class AuthService {
       const user = await tx.user.create({
         data: {
           email,
-          passwordHash: this.hash(email, dto.password),
+          passwordHash: await this.hashPassword(dto.password),
           profileId: profile.id,
         },
       });
