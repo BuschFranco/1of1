@@ -16,6 +16,11 @@ class PickupsProvider extends ChangeNotifier {
   List<Pickup> _pickups = [];
   List<Pickup> get pickups => List.unmodifiable(_pickups);
 
+  /// Pickups públicos de la ÚLTIMA cancha consultada (cache de la sección del
+  /// detalle de cancha). No persiste; es solo para no refetchear al reentrar.
+  final List<Pickup> _publicByCourt = [];
+  List<Pickup> get publicByCourt => List.unmodifiable(_publicByCourt);
+
   bool _loading = false;
   bool get loading => _loading;
 
@@ -59,6 +64,33 @@ class PickupsProvider extends ChangeNotifier {
       // Silencioso: no romper la pantalla.
     }
     _loading = false;
+    notifyListeners();
+  }
+
+  /// Carga los pickups PÚBLICOS de una cancha (para la sección del detalle).
+  /// Best-effort: ante error deja la lista anterior. Filtra los vencidos igual
+  /// que la lista propia (regla de retención de 24h).
+  Future<void> loadPublicForCourt(String courtId, {bool force = false}) async {
+    if (courtId.isEmpty || !_api.isConfigured || !_api.hasToken) {
+      _publicByCourt.clear();
+      notifyListeners();
+      return;
+    }
+    if (!force && _publicByCourt.isNotEmpty &&
+        _publicByCourt.first.courtId == courtId &&
+        ApiCache.isFresh('publicPickups:$courtId', ApiCache.ttlPickups)) {
+      return;
+    }
+    try {
+      final rows = await _api.publicPickups(courtId);
+      final list = rows.map(Pickup.fromApi).toList();
+      _publicByCourt
+        ..clear()
+        ..addAll(list.where((p) => !p.isExpired));
+      ApiCache.put('publicPickups:$courtId', true);
+    } catch (_) {
+      // Silencioso: no romper el detalle si el backend duerme/falla.
+    }
     notifyListeners();
   }
 
@@ -214,6 +246,39 @@ class PickupsProvider extends ChangeNotifier {
     }
   }
 
+  /// Unirse a un pickup público por id, sin código de invitación. El server
+  /// valida todo (público, expiración, capacidad, ya-miembro) y mete al
+  /// usuario en el equipo con espacio como miembro ya ACEPTADO. Tras unirse se
+  /// recarga la lista propia para que aparezca en Crew.
+  ///
+  /// Devuelve null en éxito o un mensaje de error legible (el del server cuando
+  /// lo manda).
+  Future<String?> joinPublic(Pickup p, String email) async {
+    final e = email.trim().toLowerCase();
+    if (e.isEmpty || !_api.isConfigured || !_api.hasToken) {
+      return 'No se pudo conectar. Probá de nuevo.';
+    }
+    try {
+      final json = await _api.joinPublicPickup(p.pageId);
+      final joined = Pickup.fromApi(json);
+      await loadForUser(e, force: true);
+      // Actualizar en la lista pública cacheada si está, así la UI local
+      // refleja el cupo nuevo sin refetch.
+      for (var i = 0; i < _publicByCourt.length; i++) {
+        if (_publicByCourt[i].pageId == joined.pageId) {
+          _publicByCourt[i] = joined;
+        }
+      }
+      notifyListeners();
+      return null;
+    } on ApiException catch (ex) {
+      if (ex.statusCode == 403 && ex.message.isNotEmpty) return ex.message;
+      return 'No se pudo conectar. Probá de nuevo.';
+    } catch (_) {
+      return 'No se pudo conectar. Probá de nuevo.';
+    }
+  }
+
   /// El usuario abandona el pickup: se quita de equipos y respuestas y se
   /// remueve de la lista local (ya no participa).
   Future<void> leave(Pickup p, String email) async {
@@ -251,6 +316,7 @@ class PickupsProvider extends ChangeNotifier {
 
   void clearForLogout() {
     _pickups = [];
+    _publicByCourt.clear();
     _email = '';
     notifyListeners();
   }

@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import {
   IsArray,
+  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
@@ -53,6 +54,7 @@ class CreatePickupDto {
   @IsOptional() @IsInt() @Min(1) targetScore?: number;
   @IsOptional() @IsArray() @IsString({ each: true }) acceptedMembers?: string[];
   @IsOptional() @IsArray() @IsString({ each: true }) declinedMembers?: string[];
+  @IsOptional() @IsBoolean() isPublic?: boolean;
 }
 
 // Update: todos opcionales (cubre aceptar/rechazar/mover/quitar/abandonar/reenviar).
@@ -72,10 +74,15 @@ class UpdatePickupDto {
   @IsOptional() @IsInt() @Min(1) targetScore?: number;
   @IsOptional() @IsArray() @IsString({ each: true }) acceptedMembers?: string[];
   @IsOptional() @IsArray() @IsString({ each: true }) declinedMembers?: string[];
+  @IsOptional() @IsBoolean() isPublic?: boolean;
 }
 
 class JoinPickupDto {
   @IsString() @Length(5, 5) code!: string;
+}
+
+class JoinPublicPickupDto {
+  @IsString() pickupId!: string;
 }
 
 class SendMessageDto {
@@ -152,6 +159,7 @@ class PickupsService {
         targetScore: dto.targetScore ?? 21,
         acceptedMembers: dto.acceptedMembers ?? [],
         declinedMembers: dto.declinedMembers ?? [],
+        isPublic: dto.isPublic ?? false,
         // El código lo genera el server (autoritativo), no el cliente.
         inviteCode: this.genInviteCode(),
       },
@@ -197,6 +205,7 @@ class PickupsService {
         ...(dto.declinedMembers !== undefined && {
           declinedMembers: dto.declinedMembers,
         }),
+        ...(dto.isPublic !== undefined && { isPublic: dto.isPublic }),
       },
     });
     return pickupWire(row);
@@ -213,6 +222,41 @@ class PickupsService {
       throw new NotFoundException('Código inválido. Revisá los 5 dígitos.');
     }
     const p = pickupWire(row);
+    return this.addMember(p, e);
+  }
+
+  /** Pickups públicos (abiertos, sin invitación) de una cancha, no vencidos.
+   * Devuelve los próximos primero (sin fecha al final). Los pickups del propio
+   * usuario se incluyen igual: el cliente los marca como suyos. */
+  async listPublicForCourt(courtId: string): Promise<Pickup[]> {
+    const rows = await this.prisma.pickup.findMany({
+      where: { courtId, archived: false, isPublic: true },
+      orderBy: { dateTime: 'asc' },
+    });
+    return rows
+      .filter((p) => {
+        const d = p.dateTime ? Date.parse(p.dateTime.toISOString()) : NaN;
+        return Number.isNaN(d) || Date.now() <= d + 24 * 60 * 60 * 1000;
+      })
+      .map(pickupWire);
+  }
+
+  /** Unirse a un pickup PÚBLICO por id (sin código): validaciones idénticas a
+   * join() salvo que el pickup tiene que ser público y no hace falta el código. */
+  async joinById(pageId: string, email: string): Promise<Pickup> {
+    const p = await this.getById(pageId);
+    if (!p.isPublic) {
+      throw new ForbiddenException(
+        'Este pickup no es público: unite con el código de invitación.',
+      );
+    }
+    return this.addMember(p, email);
+  }
+
+  /** Valida y agrega a [email] a un pickup: expiración, propio, ya-miembro,
+   * capacidad y alta en el equipo con espacio (como miembro aceptado). */
+  private async addMember(p: Pickup, email: string): Promise<Pickup> {
+    const e = email.trim().toLowerCase();
 
     // Expirado (24h después del horario)?
     const d = p.dateTime ? Date.parse(p.dateTime) : NaN;
@@ -380,6 +424,22 @@ class PickupsController {
   @Post('join')
   join(@CurrentUser() user: AuthUser, @Body() dto: JoinPickupDto) {
     return this.pickups.join(dto.code, user.email);
+  }
+
+  // Ojo con el orden: rutas estáticas ANTES de los parámetros dinámicos.
+  // "public" no colisiona con ":pageId" (segmentos distintos), pero se deja
+  // acá arriba por legibilidad del bloque público.
+
+  /** Pickups públicos de una cancha (para el detalle de cancha). */
+  @Get('public')
+  publicList(@Query('courtId') courtId: string) {
+    return this.pickups.listPublicForCourt(courtId ?? '');
+  }
+
+  /** Unirse a un pickup público por id (sin código de invitación). */
+  @Post('public/join')
+  publicJoin(@CurrentUser() user: AuthUser, @Body() dto: JoinPublicPickupDto) {
+    return this.pickups.joinById(dto.pickupId, user.email);
   }
 
   @Patch(':pageId')

@@ -295,6 +295,7 @@ export interface Pickup {
   acceptedMembers: string[];
   declinedMembers: string[];
   inviteCode: string;
+  isPublic: boolean;
 }
 
 export function pickupWire(p: DbPickup): Pickup {
@@ -318,6 +319,7 @@ export function pickupWire(p: DbPickup): Pickup {
     acceptedMembers: p.acceptedMembers,
     declinedMembers: p.declinedMembers,
     inviteCode: p.inviteCode,
+    isPublic: p.isPublic,
   };
 }
 

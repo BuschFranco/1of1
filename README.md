@@ -63,21 +63,19 @@ npm run build
 
 ## Pendientes / Roadmap
 
-### Pickups públicos (UI lista, sin funcionalidad)
+### Pickups públicos
 
-Marcado "EN CONSTRUCCIÓN" en la app y "Próximamente" en la web. Hoy es **solo
-visual**: el toggle *"Pickup público"*
-([`pickup_create_screen.dart`](app/lib/screens/pickup_create_screen.dart)) no
-persiste nada, y la sección *"Partidas públicas"* del detalle de cancha
-([`detail_screen.dart`](app/lib/screens/detail_screen.dart)) muestra una fila de
-ejemplo. Falta:
+**Listo en app + backend**: toggle "Pickup público" al crear
+([`pickup_create_screen.dart`](app/lib/screens/pickup_create_screen.dart)),
+columna `is_public` en `Pickup` (schema + migración), endpoint de listado
+`GET /pickups/public?courtId=` y unión sin código `POST /pickups/public/join`
+(ambos en [`pickups.module.ts`](backend/src/pickups/pickups.module.ts)). La
+sección "Partidas públicas" del detalle de cancha
+([`detail_screen.dart`](app/lib/screens/detail_screen.dart)) lista los pickups
+abiertos con cupo y un botón UNIRME que lleva al chat.
 
-- Campo `isPublic` en `Pickup` (app + entidad del backend + schema).
-- Endpoint para listar pickups públicos por cancha
-  (`GET /pickups/public?courtId=`).
-- Unión abierta sin invitación, respetando `maxPlayers`.
-- Reemplazar el mock por la lista real y quitar los badges de "EN CONSTRUCCIÓN"
-  (app) y la mención de "Próximamente" (web, `community.pickups.soonBody`).
+Pendiente (cosmético): quitar la mención de "Próximamente" en la web
+(`community.pickups.soonBody` en `web/src/i18n/*`).
 
 ### Publicación en las tiendas
 

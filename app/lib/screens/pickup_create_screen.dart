@@ -13,7 +13,6 @@ import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/pickup_schedule_picker.dart';
 import '../widgets/pressable_widget.dart';
-import '../widgets/under_construction.dart';
 import 'main_shell.dart';
 
 class PickupCreateScreen extends StatefulWidget {
@@ -43,6 +42,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
   final _notesCtrl = TextEditingController();
   final _titleCtrl = TextEditingController();
   bool _saving = false;
+  bool _isPublic = false;
 
   // Fondo alineado al brand de la app (oscuro neobrutalista), no el violeta.
   static const _bgColor = AppColors.bg;
@@ -123,6 +123,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
         teamAMembers: _teamAMembers,
         teamBMembers: _teamBMembers,
         targetScore: _targetScore,
+        isPublic: _isPublic,
       ));
 
       final chat = CrewChat(
@@ -401,108 +402,63 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     );
   }
 
-  // ── Visibilidad: adelanto de los pickups públicos. El switch NO se puede
-  // activar mientras la feature no exista: dejarlo cambiar de estado haría
-  // creer que el pickup se creó abierto cuando en realidad sigue siendo por
-  // invitación. Se muestra apagado y atenuado, y al tocarlo se avisa. ──
+  // ── Visibilidad: pickup público = se muestra en el detalle de la cancha y
+  // cualquiera puede unirse sin código de invitación. ──
   Widget _visibilityCard() {
     return _sectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _label('Visibilidad'),
+          const SizedBox(height: 4),
           Row(
             children: [
-              _label('Visibilidad'),
-              const SizedBox(width: 8),
-              _soonBadge(),
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: _isPublic
+                      ? AppColors.accent.withAlpha(30)
+                      : AppColors.white(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(_isPublic ? Icons.public : Icons.lock_outline,
+                    size: 20,
+                    color: _isPublic ? AppColors.accent : AppColors.white(0.5)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Pickup público',
+                        style: AppText.grotesk(
+                            size: 14,
+                            weight: FontWeight.w700,
+                            color: Colors.white)),
+                    const SizedBox(height: 2),
+                    Text(
+                      _isPublic
+                          ? 'Se va a mostrar en el detalle de la cancha. Cualquiera podrá unirse sin invitación.'
+                          : 'Solo se unen quienes reciban tu invitación.',
+                      style: AppText.grotesk(
+                          size: 11, color: AppColors.white(0.45)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Switch(
+                value: _isPublic,
+                onChanged: _saving
+                    ? null
+                    : (v) => setState(() => _isPublic = v),
+                activeTrackColor: AppColors.accent,
+                inactiveTrackColor: AppColors.white(0.12),
+                inactiveThumbColor: AppColors.white(0.5),
+              ),
             ],
           ),
-          const SizedBox(height: 4),
-          PressableWidget(
-            onTap: () => showUnderConstruction(context, 'Los pickups públicos'),
-            child: Opacity(
-              // Atenuado: comunica "todavía no" sin necesidad de leer el badge.
-              opacity: 0.5,
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.white(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(Icons.lock_outline,
-                        size: 20, color: AppColors.white(0.5)),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Pickup público',
-                            style: AppText.grotesk(
-                                size: 14,
-                                weight: FontWeight.w700,
-                                color: Colors.white)),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Cualquiera podrá unirse desde el mapa, sin invitación.',
-                          style: AppText.grotesk(
-                              size: 11, color: AppColors.white(0.45)),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  // Switch plano, fijo en apagado (mismo lenguaje que el resto).
-                  Container(
-                    width: 46,
-                    height: 28,
-                    padding: const EdgeInsets.all(3),
-                    alignment: Alignment.centerLeft,
-                    decoration: BoxDecoration(
-                      color: AppColors.white(0.12),
-                      borderRadius: BorderRadius.circular(AppShape.rBtn),
-                    ),
-                    child: Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        color: AppColors.white(0.5),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Badge chico "EN CONSTRUCCIÓN": marca features que todavía no funcionan.
-  static Widget _soonBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.busy.withAlpha(38),
-        borderRadius: BorderRadius.circular(AppShape.rChip),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.construction, size: 11, color: AppColors.busy),
-          const SizedBox(width: 4),
-          Text('EN CONSTRUCCIÓN',
-              style: AppText.grotesk(
-                size: 9,
-                weight: FontWeight.w800,
-                color: AppColors.busy,
-                letterSpacing: 0.06,
-              )),
         ],
       ),
     );

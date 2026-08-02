@@ -151,10 +151,12 @@ model Pickup {
   acceptedMembers String[]  @default([]) @map("accepted_members")
   declinedMembers String[]  @default([]) @map("declined_members")
   inviteCode      String    @default("") @map("invite_code")
+  isPublic        Boolean   @default(false) @map("is_public") // visible en el detalle de la cancha, unión sin código
   archived        Boolean   @default(false)
 
   @@index([inviteCode])
   @@index([createdBy])
+  @@index([courtId, isPublic])
   @@map("pickups")
 }
 

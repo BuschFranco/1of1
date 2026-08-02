@@ -306,6 +306,15 @@ class ApiClient {
   Future<Map<String, dynamic>> joinPickup(String code) =>
       _map(_send('POST', '/pickups/join', body: {'code': code}));
 
+  /// Pickups públicos de una cancha (detalle de cancha), próximos primero.
+  Future<List<Map<String, dynamic>>> publicPickups(String courtId) =>
+      _list(_send('GET', '/pickups/public', query: {'courtId': courtId}));
+
+  /// Unirse a un pickup público por id (sin código). 403 si no es público,
+  /// está lleno, expiró o ya se participa.
+  Future<Map<String, dynamic>> joinPublicPickup(String pickupId) =>
+      _map(_send('POST', '/pickups/public/join', body: {'pickupId': pickupId}));
+
   Future<Map<String, dynamic>> updatePickup(
     String pageId,
     Map<String, dynamic> fields,

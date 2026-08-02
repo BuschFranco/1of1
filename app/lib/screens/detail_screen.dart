@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../data/courts.dart';
@@ -12,6 +13,8 @@ import '../services/court_rating_service.dart';
 import '../services/courts_provider.dart';
 import '../services/favorites_provider.dart';
 import '../services/location_service.dart';
+import '../services/notifications_service.dart';
+import '../services/pickups_provider.dart';
 import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/report_service.dart';
@@ -26,6 +29,8 @@ import '../widgets/busy_overlay.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/section_title.dart';
 import '../widgets/status_dot.dart';
+import 'main_shell.dart';
+import 'pickup_chat_screen.dart';
 import 'pickup_create_screen.dart';
 
 // Rojo destructivo (eliminar cancha/reseña). Local: AppColors no tiene token
@@ -426,146 +431,10 @@ class DetailScreen extends StatelessWidget {
     });
   }
 
-  /// Partidas públicas disponibles para unirse en esta cancha. Feature EN
-  /// CONSTRUCCIÓN: por ahora es solo la UI (adelanto). Muestra un badge y una
-  /// fila de ejemplo deshabilitada; no consulta ni permite unirse todavía.
+  /// Partidas públicas de esta cancha, reales: se listan desde el backend y se
+  /// pueden unir con un toque (sin código de invitación).
   Widget _publicPickupsSection(Court court) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Encabezado con el badge de construcción (SectionTitle no soporta un
-          // trailing custom, así que armamos la fila a mano con su mismo estilo).
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              children: [
-                Text(
-                  'PARTIDAS PÚBLICAS',
-                  style: AppText.archivo(
-                    size: 13,
-                    weight: FontWeight.w700,
-                    color: AppColors.ink,
-                    letterSpacing: 0.1,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _soonBadge(),
-              ],
-            ),
-          ),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(AppShape.rCard),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Pronto vas a poder ver acá los pickups abiertos de esta cancha y unirte con un solo toque.',
-                  style: AppText.grotesk(
-                    size: 13,
-                    color: AppColors.white(0.6),
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                // Fila de ejemplo (mock) atenuada: da a entender cómo se va a ver.
-                Opacity(
-                  opacity: 0.45,
-                  child: IgnorePointer(
-                    child: _publicPickupExampleRow(court),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Fila mock de un pickup público (visual, no interactiva).
-  Widget _publicPickupExampleRow(Court court) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.white(0.04),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.accent.withAlpha(30),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.groups, size: 20, color: AppColors.accent),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Pickup 3v3 · 21 pts',
-                    style: AppText.grotesk(
-                        size: 13,
-                        weight: FontWeight.w700,
-                        color: Colors.white)),
-                const SizedBox(height: 2),
-                Text('4/6 jugadores · hoy 19:00',
-                    style: AppText.grotesk(
-                        size: 11, color: AppColors.white(0.5))),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.accent,
-              borderRadius: BorderRadius.circular(AppShape.rBtn),
-            ),
-            child: Text('UNIRME',
-                style: AppText.archivo(
-                    size: 11,
-                    weight: FontWeight.w800,
-                    letterSpacing: 0.04,
-                    color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Badge chico "EN CONSTRUCCIÓN" para features todavía no operativas.
-  static Widget _soonBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.busy.withAlpha(38),
-        borderRadius: BorderRadius.circular(AppShape.rChip),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.construction, size: 11, color: AppColors.busy),
-          const SizedBox(width: 4),
-          Text('EN CONSTRUCCIÓN',
-              style: AppText.grotesk(
-                size: 9,
-                weight: FontWeight.w800,
-                color: AppColors.busy,
-                letterSpacing: 0.06,
-              )),
-        ],
-      ),
-    );
+    return _PublicPickupsSection(courtId: court.id);
   }
 
   Widget _ratingStrip(Court court, {CourtRating? courtRating}) {
@@ -806,6 +675,264 @@ InputDecoration _dialogFieldDecoration(String hint) {
 
 /// Sección de reseñas: lista las reseñas de la cancha desde Notion y permite
 /// agregar una nueva (rating + comentario).
+/// Sección de partidas públicas de una cancha: carga los pickups abiertos
+/// (isPublic) y permite unirse directo, sin código de invitación. Quien ya
+/// participa (o creó el pickup) abre el chat del pickup.
+class _PublicPickupsSection extends StatefulWidget {
+  final String courtId;
+  const _PublicPickupsSection({required this.courtId});
+
+  @override
+  State<_PublicPickupsSection> createState() => _PublicPickupsSectionState();
+}
+
+class _PublicPickupsSectionState extends State<_PublicPickupsSection> {
+  bool _loaded = false;
+  String _joiningId = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load({bool force = false}) async {
+    final provider = context.read<PickupsProvider>();
+    await provider.loadPublicForCourt(widget.courtId, force: force);
+    if (mounted) setState(() => _loaded = true);
+  }
+
+  List<Pickup> _list() {
+    return context
+        .watch<PickupsProvider>()
+        .publicByCourt
+        .where((p) => p.courtId == widget.courtId)
+        .toList();
+  }
+
+  Future<void> _join(Pickup p) async {
+    if (_joiningId.isNotEmpty) return;
+    setState(() => _joiningId = p.pageId);
+    final ctx = context;
+    final email = ctx.read<Session>().email ?? '';
+    final error = await ctx.read<PickupsProvider>().joinPublic(p, email);
+    if (!ctx.mounted) return;
+    if (error != null) {
+      setState(() => _joiningId = '');
+      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+        content: Text(error, style: AppText.grotesk(size: 13)),
+        backgroundColor: AppColors.bg,
+      ));
+      return;
+    }
+    setState(() => _joiningId = '');
+    // Aviso (con botón "Ir al chat") y caer directo en el chat del pickup.
+    unawaited(NotificationsService.instance.showPickupChat(
+        '¡Estás dentro! 🏀',
+        'Tocá para ir al chat del pickup.',
+        p.pageId));
+    crewActivityNotifier.value = true;
+    Navigator.of(ctx).push(MaterialPageRoute(
+      builder: (_) => PickupChatScreen(pickupId: p.pageId),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pickups = _list();
+    final hasData = _loaded || pickups.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              children: [
+                Text(
+                  'PARTIDAS PÚBLICAS',
+                  style: AppText.archivo(
+                    size: 13,
+                    weight: FontWeight.w700,
+                    color: AppColors.ink,
+                    letterSpacing: 0.1,
+                  ),
+                ),
+                const Spacer(),
+                PressableWidget(
+                  onTap: () => _load(force: true),
+                  child:
+                      Icon(Icons.refresh, size: 16, color: AppColors.white(0.5)),
+                ),
+              ],
+            ),
+          ),
+          if (!hasData)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: AppColors.white(0.4)),
+              ),
+            )
+          else if (pickups.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(AppShape.rCard),
+              ),
+              child: Text(
+                'Todavía no hay partidas públicas en esta cancha.',
+                style: AppText.grotesk(size: 13, color: AppColors.white(0.5)),
+              ),
+            )
+          else
+            ...pickups.map((p) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _PublicPickupRow(
+                    pickup: p,
+                    joining: _joiningId == p.pageId,
+                    onJoin: () => _join(p),
+                  ),
+                )),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fila de un pickup público: nombre, cupo, fecha y acción (UNIRME / LLENO /
+/// ABRIR si ya participás o lo creaste).
+class _PublicPickupRow extends StatelessWidget {
+  final Pickup pickup;
+  final bool joining;
+  final VoidCallback onJoin;
+
+  const _PublicPickupRow({
+    required this.pickup,
+    required this.joining,
+    required this.onJoin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final myEmail = (context.read<Session>().email ?? '').trim().toLowerCase();
+    final isCreator = pickup.isCreator(myEmail);
+    final isMember = pickup.teamOf(myEmail) != null;
+    final capacity = pickup.teamSize * 2;
+    final count = pickup.teamAMembers.length + pickup.teamBMembers.length;
+    final full = count >= capacity;
+    final inIt = isCreator || isMember;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.accent.withAlpha(30),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.groups, size: 20, color: AppColors.accent),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                    pickup.title.isEmpty ? 'Pickup en la cancha' : pickup.title,
+                    style: AppText.grotesk(
+                        size: 13,
+                        weight: FontWeight.w700,
+                        color: Colors.white)),
+                const SizedBox(height: 2),
+                Text(
+                  '$count/$capacity jugadores · ${_pickupWhen(pickup)}',
+                  style:
+                      AppText.grotesk(size: 11, color: AppColors.white(0.5)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          if (inIt)
+            _actionButton(
+              label: 'ABRIR',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => PickupChatScreen(pickupId: pickup.pageId),
+              )),
+            )
+          else if (full)
+            _actionButton(label: 'LLENO', onTap: null)
+          else
+            _actionButton(
+              label: 'UNIRME',
+              loading: joining,
+              onTap: joining ? null : onJoin,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionButton({
+    required String label,
+    required VoidCallback? onTap,
+    bool loading = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: onTap == null ? AppColors.white(0.12) : AppColors.accent,
+          borderRadius: BorderRadius.circular(AppShape.rBtn),
+        ),
+        child: loading
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white),
+              )
+            : Text(label,
+                style: AppText.archivo(
+                    size: 11,
+                    weight: FontWeight.w800,
+                    letterSpacing: 0.04,
+                    color:
+                        onTap == null ? AppColors.white(0.5) : Colors.white)),
+      ),
+    );
+  }
+}
+
+/// Fecha legible de un pickup: "hoy 19:00", "mañana 19:00" o "02/08 19:00".
+String _pickupWhen(Pickup p) {
+  final d = DateTime.tryParse(p.dateTime ?? '');
+  if (d == null) return 'sin fecha';
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(d.year, d.month, d.day);
+  final hhmm =
+      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  if (day == today) return 'hoy $hhmm';
+  if (day == today.add(const Duration(days: 1))) return 'mañana $hhmm';
+  return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')} $hhmm';
+}
+
 class _ReviewsSection extends StatefulWidget {
   final String courtId;
   const _ReviewsSection({required this.courtId});

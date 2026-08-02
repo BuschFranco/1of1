@@ -259,6 +259,10 @@ class Pickup {
   /// chat del pickup) y se valida server-side al unirse.
   final String inviteCode;
 
+  /// Pickup público: visible en el detalle de la cancha, se une sin código de
+  /// invitación (respetando `maxPlayers`/`teamSize` server-side).
+  final bool isPublic;
+
   const Pickup({
     this.pageId = '',
     required this.title,
@@ -279,6 +283,7 @@ class Pickup {
     this.acceptedMembers = const [],
     this.declinedMembers = const [],
     this.inviteCode = '',
+    this.isPublic = false,
   });
 
   /// Todos los invitados (miembros asignados a cualquier equipo).
@@ -341,6 +346,7 @@ class Pickup {
       acceptedMembers: acceptedMembers ?? this.acceptedMembers,
       declinedMembers: declinedMembers ?? this.declinedMembers,
       inviteCode: inviteCode,
+      isPublic: isPublic,
     );
   }
 
@@ -373,6 +379,7 @@ class Pickup {
       acceptedMembers: strs(json['acceptedMembers']),
       declinedMembers: strs(json['declinedMembers']),
       inviteCode: json['inviteCode'] as String? ?? '',
+      isPublic: json['isPublic'] as bool? ?? false,
     );
   }
 
@@ -397,6 +404,7 @@ class Pickup {
       'targetScore': targetScore,
       'acceptedMembers': acceptedMembers,
       'declinedMembers': declinedMembers,
+      'isPublic': isPublic,
     };
   }
 
