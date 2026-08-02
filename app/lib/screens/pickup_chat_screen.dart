@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/achievements.dart';
 import '../data/cosmetics.dart';
 import '../data/courts.dart';
@@ -15,6 +16,7 @@ import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/pickup_schedule_picker.dart';
 import '../widgets/busy_overlay.dart';
+import '../widgets/pickup_rules_dialog.dart';
 import '../widgets/pressable_widget.dart';
 
 /// Chat de un pickup: solo lectura (no se puede escribir todavía), con un panel
@@ -33,6 +35,7 @@ class PickupChatScreen extends StatefulWidget {
 class _PickupChatScreenState extends State<PickupChatScreen> {
   bool _infoOpen = false; // el chat es el protagonista; la info arranca colapsada
   bool _busy = false;
+  bool _rulesShown = false; // guard del dialog de reglas (1 intento por build)
 
   // ── Chat ──────────────────────────────────────────────────────────────────
   final _api = ApiClient();
@@ -49,6 +52,24 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
       (context.read<Session>().email ?? '').trim().toLowerCase();
 
   String get _cacheKey => 'chat::${widget.pickupId}';
+
+  /// Muestra el dialog de reglas personalizadas (recompensas + requisitos)
+  /// solo si el pickup tiene configuraciones, no es del creador (él las armó)
+  /// y el usuario no lo vio nunca en este pickup (flag por usuario+pickup).
+  Future<void> _maybeShowRules(Pickup pickup) async {
+    if (!pickup.hasCustomConfig) return;
+    if (pickup.isCreator(_myEmail)) return;
+    final userKey = _myEmail;
+    final prefs = await SharedPreferences.getInstance();
+    final flagKey = 'rules_seen::$userKey::${pickup.pageId}';
+    if (prefs.getBool(flagKey) ?? false) return;
+    if (!mounted) return;
+    await showPickupRulesDialog(context, pickup);
+    // Se marca al cerrar: si el usuario no llega a leerlas (sale de la app con
+    // el dialog abierto), se le vuelven a mostrar en la próxima apertura.
+    if (!mounted) return;
+    await prefs.setBool(flagKey, true);
+  }
 
   @override
   void initState() {
@@ -285,6 +306,15 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
       );
     }
 
+    // Dialog de reglas personalizadas UNA vez por usuario y por pickup (la
+    // primera vez que entra al chat). Post-frame: build no dispara efectos.
+    if (!_rulesShown) {
+      _rulesShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _maybeShowRules(pickup);
+      });
+    }
+
     final isCreator = pickup.isCreator(_myEmail);
     final iAmInvited = pickup.teamOf(_myEmail) != null;
 
@@ -407,6 +437,18 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
             for (final r in pickup.rewards) ...[
               _infoRow(_rewardIcon(r.type), r.label),
               if (r != pickup.rewards.last) const SizedBox(height: 6),
+            ],
+          ],
+          // Reglas personalizadas (requisitos informativos).
+          if (pickup.settings.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _hairline(),
+            const SizedBox(height: 10),
+            _label('Reglas'),
+            const SizedBox(height: 8),
+            for (final s in pickup.settings) ...[
+              _infoRow(settingIcon(s.type), s.label),
+              if (s != pickup.settings.last) const SizedBox(height: 6),
             ],
           ],
           // Código de invitación: SOLO lo ve el creador. Tap = copiar.

@@ -276,6 +276,12 @@ class _CrewScreenState extends State<CrewScreen> {
                                   color: AppColors.accent,
                                   weight: FontWeight.w600)),
                         ],
+                        // Pickup con configuraciones personalizadas (recompensa
+                        // o requisitos): badge para diferenciarlo de uno común.
+                        if (p.hasCustomConfig) ...[
+                          const SizedBox(height: 4),
+                          _customBadge(),
+                        ],
                       ],
                     ),
                   ),
@@ -339,6 +345,30 @@ class _CrewScreenState extends State<CrewScreen> {
                 color: color,
                 letterSpacing: 0.06)),
       ],
+    );
+  }
+
+  /// Pill "Partido personalizado" para miniaturas de pickups con recompensas
+  /// o requisitos configurados.
+  Widget _customBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withAlpha(25),
+        borderRadius: BorderRadius.circular(AppShape.rChip),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.tune, size: 11, color: AppColors.accent),
+          const SizedBox(width: 4),
+          Text('Partido personalizado',
+              style: AppText.grotesk(
+                  size: 9,
+                  color: AppColors.accent,
+                  weight: FontWeight.w700)),
+        ],
+      ),
     );
   }
 }

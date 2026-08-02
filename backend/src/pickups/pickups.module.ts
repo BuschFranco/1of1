@@ -38,6 +38,7 @@ import {
   Pickup,
   pickupWire,
   rewardsFromDb,
+  settingsFromDb,
 } from '../domain/wire';
 import { PrismaService } from '../prisma/prisma.module';
 
@@ -52,6 +53,24 @@ class PickupRewardDto {
   @IsOptional() @IsInt() @Min(1) amount?: number;
 
   @IsOptional() @IsString() @MaxLength(40) detail?: string;
+}
+
+/** Configuración personalizada del pickup (informativa). La normalización
+ * fina (clamps, descarte de inválidos) la hace settingsFromDb. */
+class PickupSettingDto {
+  @IsIn(['edad', 'altura', 'peso', 'nivel', 'modalidad', 'marca'])
+  type!: string;
+
+  @IsOptional() @IsInt() @Min(1) min?: number;
+  @IsOptional() @IsInt() @Min(1) minCm?: number;
+  @IsOptional() @IsInt() @Min(1) maxKg?: number;
+
+  @IsOptional()
+  @IsIn(['profesional', 'amateur', 'competencia', 'casual'])
+  value?: string;
+
+  @IsOptional() @IsString() @MaxLength(40) brand?: string;
+  @IsOptional() @IsBoolean() useKit?: boolean;
 }
 
 class CreatePickupDto {
@@ -75,6 +94,9 @@ class CreatePickupDto {
   @IsOptional() @IsArray() @ValidateNested({ each: true })
   @Type(() => PickupRewardDto)
   rewards?: PickupRewardDto[];
+  @IsOptional() @IsArray() @ValidateNested({ each: true })
+  @Type(() => PickupSettingDto)
+  settings?: PickupSettingDto[];
 }
 
 // Update: todos opcionales (cubre aceptar/rechazar/mover/quitar/abandonar/reenviar).
@@ -98,6 +120,9 @@ class UpdatePickupDto {
   @IsOptional() @IsArray() @ValidateNested({ each: true })
   @Type(() => PickupRewardDto)
   rewards?: PickupRewardDto[];
+  @IsOptional() @IsArray() @ValidateNested({ each: true })
+  @Type(() => PickupSettingDto)
+  settings?: PickupSettingDto[];
 }
 
 class JoinPickupDto {
@@ -199,6 +224,8 @@ class PickupsService {
         // rewards: el DTO valida forma; acá se normaliza (reglas cruzadas:
         // monetaria exige amount, el resto detail; 1 solo reward por tipo).
         rewards: rewardsFromDb(dto.rewards ?? []) as unknown as Prisma.InputJsonValue,
+        // settings: requisitos/configs personalizadas (informativos), 1 por tipo.
+        settings: settingsFromDb(dto.settings ?? []) as unknown as Prisma.InputJsonValue,
         // El código lo genera el server (autoritativo), no el cliente.
         inviteCode: this.genInviteCode(),
       },
@@ -248,12 +275,17 @@ class PickupsService {
         ...(dto.rewards !== undefined && {
           rewards: rewardsFromDb(dto.rewards) as unknown as Prisma.InputJsonValue,
         }),
+        // Solo si dto.settings vino definido: los PATCH de aceptar/mover/etc.
+        // reenvían parte del pickup y no deben pisar las configs existentes.
+        ...(dto.settings !== undefined && {
+          settings: settingsFromDb(dto.settings) as unknown as Prisma.InputJsonValue,
+        }),
       },
     });
     return pickupWire(row);
   }
 
-  /** Unirse por código: entra al equipo con espacio (el de menos miembros
+  /** Unirse por código: entra al equipo con el espacio (el de menos miembros
    * primero), como miembro aceptado. */
   async join(code: string, email: string): Promise<Pickup> {
     const e = email.trim().toLowerCase();

@@ -316,6 +316,87 @@ export function rewardsFromDb(raw: unknown): PickupReward[] {
   return out;
 }
 
+/** Tipos de configuración personalizada soportados. Extensible: agregar un
+ * string acá (y en el DTO de pickups) alcanza para el resto del pipeline. */
+export const PICKUP_SETTING_TYPES = [
+  'edad',
+  'altura',
+  'peso',
+  'nivel',
+  'modalidad',
+  'marca',
+];
+
+export interface PickupSetting {
+  /** 'edad' (min años) | 'altura' (minCm) | 'peso' (maxKg) | 'nivel'
+   *  (value: profesional|amateur) | 'modalidad' (value: competencia|casual) |
+   *  'marca' (brand, useKit). */
+  type: string;
+  /** Edad mínima (años), altura mínima (cm) o peso máximo (kg). */
+  min?: number;
+  minCm?: number;
+  maxKg?: number;
+  /** Solo nivel/modalidad: la variante elegida. */
+  value?: string;
+  /** Solo marca: nombre de la marca que arma el partido. */
+  brand?: string;
+  /** Solo marca: el partido se juega con la indumentaria de la marca. */
+  useKit?: boolean;
+}
+
+/** Normaliza el JSON de la columna `settings` (mismo criterio que rewards):
+ * solo configs bien formadas, 1 por tipo (el primero gana). Los requisitos
+ * numéricos se clampen a rangos físicamente razonables. */
+export function settingsFromDb(raw: unknown): PickupSetting[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: PickupSetting[] = [];
+  for (const s of raw) {
+    if (!s || typeof s !== 'object') continue;
+    const rec = s as Record<string, unknown>;
+    const type = typeof rec.type === 'string' ? rec.type : '';
+    if (!PICKUP_SETTING_TYPES.includes(type) || seen.has(type)) continue;
+    const int = (k: string): number | undefined => {
+      const n = Number(rec[k]);
+      if (!Number.isInteger(n)) return undefined;
+      return n;
+    };
+    const setting: PickupSetting = { type };
+    if (type === 'edad') {
+      const min = int('min') ?? int('value');
+      if (min === undefined || min < 1 || min > 120) continue;
+      setting.min = min;
+    } else if (type === 'altura') {
+      const minCm = int('minCm') ?? int('min') ?? int('value');
+      if (minCm === undefined || minCm < 100 || minCm > 260) continue;
+      setting.minCm = minCm;
+    } else if (type === 'peso') {
+      const maxKg = int('maxKg') ?? int('max') ?? int('value');
+      if (maxKg === undefined || maxKg < 35 || maxKg > 250) continue;
+      setting.maxKg = maxKg;
+    } else if (type === 'nivel' || type === 'modalidad') {
+      const value =
+        typeof rec.value === 'string' ? rec.value : '';
+      const allowed =
+        type === 'nivel'
+          ? ['profesional', 'amateur']
+          : ['competencia', 'casual'];
+      if (!allowed.includes(value)) continue;
+      setting.value = value;
+    } else {
+      // marca
+      const brand =
+        typeof rec.brand === 'string' ? rec.brand.trim() : '';
+      if (!brand) continue;
+      setting.brand = brand.slice(0, 40);
+      setting.useKit = rec.useKit === true;
+    }
+    seen.add(type);
+    out.push(setting);
+  }
+  return out;
+}
+
 export interface Pickup {
   pageId: string;
   title: string;
@@ -338,6 +419,7 @@ export interface Pickup {
   inviteCode: string;
   isPublic: boolean;
   rewards: PickupReward[];
+  settings: PickupSetting[];
 }
 
 export function pickupWire(p: DbPickup): Pickup {
@@ -363,6 +445,7 @@ export function pickupWire(p: DbPickup): Pickup {
     inviteCode: p.inviteCode,
     isPublic: p.isPublic,
     rewards: rewardsFromDb(p.rewards),
+    settings: settingsFromDb(p.settings),
   };
 }
 

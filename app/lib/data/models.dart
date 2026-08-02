@@ -262,6 +262,97 @@ class PickupReward {
       };
 }
 
+/// Configuración personalizada de un pickup (informativa). Un pickup puede
+/// tener 1 sola por tipo:
+/// - `edad` (min años) / `altura` (minCm) / `peso` (maxKg): requisitos
+///   numéricos del jugador.
+/// - `nivel` (value: profesional|amateur) y `modalidad`
+///   (value: competencia|casual): variantes pick-one.
+/// - `marca` (brand + useKit): partido armado por una marca (y si se juega
+///   con la indumentaria de la marca).
+class PickupSetting {
+  final String type;
+  final int? min;
+  final int? minCm;
+  final int? maxKg;
+  final String? value;
+  final String? brand;
+  final bool useKit;
+
+  const PickupSetting({
+    required this.type,
+    this.min,
+    this.minCm,
+    this.maxKg,
+    this.value,
+    this.brand,
+    this.useKit = false,
+  });
+
+  /// Si está bien formado (vale la pena mandarlo al server): los requisitos
+  /// numéricos exigen su número y marca su nombre; nivel/modalidad su value.
+  bool get isWellFormed {
+    switch (type) {
+      case 'edad':
+        return (min ?? 0) > 0;
+      case 'altura':
+        return (minCm ?? 0) > 0;
+      case 'peso':
+        return (maxKg ?? 0) > 0;
+      case 'nivel':
+      case 'modalidad':
+        return (value ?? '').isNotEmpty;
+      case 'marca':
+        return (brand ?? '').trim().isNotEmpty;
+    }
+    return false;
+  }
+
+  /// Texto corto para mostrar ("+18 años", "Mín. 180 cm", "Solo
+  /// profesionales", "Partido de Nike", …).
+  String get label {
+    switch (type) {
+      case 'edad':
+        return '+${min ?? 0} años';
+      case 'altura':
+        return 'Mín. ${minCm ?? 0} cm';
+      case 'peso':
+        return 'Hasta ${maxKg ?? 0} kg';
+      case 'nivel':
+        return value == 'profesional' ? 'Solo profesionales' : 'Amateurs';
+      case 'modalidad':
+        return value == 'competencia' ? 'Competencia' : 'Casual';
+      case 'marca':
+        final b = (brand ?? '').trim();
+        final base = b.isEmpty ? 'De marca' : 'Partido de $b';
+        return useKit ? '$base · con indumentaria de la marca' : base;
+    }
+    return type;
+  }
+
+  factory PickupSetting.fromApi(Map<String, dynamic> json) {
+    return PickupSetting(
+      type: (json['type'] as String?) ?? '',
+      min: (json['min'] as num?)?.toInt(),
+      minCm: (json['minCm'] as num?)?.toInt(),
+      maxKg: (json['maxKg'] as num?)?.toInt(),
+      value: (json['value'] as String?)?.trim(),
+      brand: (json['brand'] as String?)?.trim(),
+      useKit: json['useKit'] as bool? ?? false,
+    );
+  }
+
+  Map<String, dynamic> toApiJson() => {
+        'type': type,
+        if (min != null) 'min': min,
+        if (minCm != null) 'minCm': minCm,
+        if (maxKg != null) 'maxKg': maxKg,
+        if (value != null && value!.isNotEmpty) 'value': value,
+        if (brand != null && brand!.trim().isNotEmpty) 'brand': brand,
+        if (useKit) 'useKit': true,
+      };
+}
+
 /// Partido / pickup (base Partidos).
 class Pickup {
   final String pageId;
@@ -298,6 +389,10 @@ class Pickup {
   /// Recompensas (opcional): monetaria/indumentaria/accesorios, 1 por tipo.
   final List<PickupReward> rewards;
 
+  /// Configuraciones personalizadas (opcional, informativas): requisitos de
+  /// edad/altura/peso, nivel, modalidad y marca; 1 por tipo.
+  final List<PickupSetting> settings;
+
   const Pickup({
     this.pageId = '',
     required this.title,
@@ -320,6 +415,7 @@ class Pickup {
     this.inviteCode = '',
     this.isPublic = false,
     this.rewards = const [],
+    this.settings = const [],
   });
 
   /// Todos los invitados (miembros asignados a cualquier equipo).
@@ -355,6 +451,10 @@ class Pickup {
     return DateTime.now().isAfter(d.add(const Duration(hours: 24)));
   }
 
+  /// Tiene alguna Configuración personalizada (recompensas o requisitos):
+  /// dispara el badge "Partido personalizado" y el dialog de reglas del chat.
+  bool get hasCustomConfig => rewards.isNotEmpty || settings.isNotEmpty;
+
   Pickup copyWith({
     String? dateTime,
     List<String>? teamAMembers,
@@ -362,6 +462,7 @@ class Pickup {
     List<String>? acceptedMembers,
     List<String>? declinedMembers,
     List<PickupReward>? rewards,
+    List<PickupSetting>? settings,
   }) {
     return Pickup(
       pageId: pageId,
@@ -385,6 +486,7 @@ class Pickup {
       inviteCode: inviteCode,
       isPublic: isPublic,
       rewards: rewards ?? this.rewards,
+      settings: settings ?? this.settings,
     );
   }
 
@@ -425,6 +527,13 @@ class Pickup {
           else if (r is Map)
             PickupReward.fromApi(r.cast<String, dynamic>()),
       ],
+      settings: [
+        for (final s in (json['settings'] as List?) ?? const [])
+          if (s is Map<String, dynamic>)
+            PickupSetting.fromApi(s)
+          else if (s is Map)
+            PickupSetting.fromApi(s.cast<String, dynamic>()),
+      ],
     );
   }
 
@@ -454,6 +563,9 @@ class Pickup {
       // json y un array vacío pisaría las recompensas del pickup.
       if (rewards.isNotEmpty)
         'rewards': [for (final r in rewards) r.toApiJson()],
+      // Ídem para settings: no viajan cuando no hay ninguna.
+      if (settings.isNotEmpty)
+        'settings': [for (final s in settings) s.toApiJson()],
     };
   }
 

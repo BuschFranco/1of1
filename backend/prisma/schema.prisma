@@ -156,6 +156,11 @@ model Pickup {
   // type: monetaria (amount) | indumentaria | accesorios (detail). El creador
   // elige 1 o varios tipos; 1 solo reward por tipo.
   rewards         Json      @default("[]")
+  // Configuraciones personalizadas (opcionales, informativas): array de
+  // {type, ...}. type: edad (min) | altura (minCm) | peso (maxKg) | nivel
+  // (value: profesional|amateur) | modalidad (value: competencia|casual) |
+  // marca (brand, useKit?). 1 sola configuración por tipo.
+  settings        Json      @default("[]")
   archived        Boolean   @default(false)
 
   @@index([inviteCode])

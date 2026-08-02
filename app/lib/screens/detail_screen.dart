@@ -874,6 +874,32 @@ class _PublicPickupRow extends StatelessWidget {
                         color: AppColors.accent),
                   ),
                 ],
+                // Pickup con configuraciones personalizadas (recompensa o
+                // requisitos): badge para diferenciarlo de uno común.
+                if (pickup.hasCustomConfig) ...[
+                  const SizedBox(height: 3),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withAlpha(25),
+                      borderRadius: BorderRadius.circular(AppShape.rChip),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.tune,
+                            size: 11, color: AppColors.accent),
+                        const SizedBox(width: 4),
+                        Text('Partido personalizado',
+                            style: AppText.grotesk(
+                                size: 9,
+                                color: AppColors.accent,
+                                weight: FontWeight.w700)),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

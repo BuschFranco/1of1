@@ -42,6 +42,9 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
   final List<String> _teamBMembers = [];
   // Recompensas elegidas (1 por tipo): monetaria guarda amount, el resto detail.
   final List<PickupReward> _rewards = [];
+  // Requisitos/configuraciones personalizadas (1 por tipo, informativas).
+  final List<PickupSetting> _settings = [];
+  bool _configOpen = false;
   final _notesCtrl = TextEditingController();
   final _titleCtrl = TextEditingController();
   bool _saving = false;
@@ -99,6 +102,9 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     for (final c in _rewardCtrls.values) {
       c.dispose();
     }
+    for (final c in _settingCtrls.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -141,6 +147,8 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                 ? (r.amount ?? 0) > 0
                 : (r.detail ?? '').trim().isNotEmpty)
             .toList(),
+        // Ídem para los requisitos: solo viajan los bien formados.
+        settings: _settings.where((s) => s.isWellFormed).toList(),
       ));
 
       final chat = CrewChat(
@@ -274,8 +282,8 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
               _visibilityCard(),
               const SizedBox(height: 12),
 
-              // ── Recompensa (opcional) ──
-              _rewardsCard(),
+              // ── Configuraciones personalizadas (recompensa + requisitos) ──
+              _customConfigCard(),
               const SizedBox(height: 12),
 
               // ── Formato + Puntuación ──
@@ -486,8 +494,8 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     );
   }
 
-  // ── Recompensa (opcional): el creador elige 1 o varios tipos a la vez.
-  // Monetaria → monto (ARS); indumentaria/accesorios → qué es. ──
+  // ── Configuraciones personalizadas (box desplegable): recompensas
+  // (1 o varios tipos a la vez) + requisitos/reglas (informativos). ──
   static const _rewardTypes = [
     ('monetaria', Icons.payments_outlined, 'Monetaria'),
     ('indumentaria', Icons.checkroom_outlined, 'Indumentaria'),
@@ -495,9 +503,13 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
   ];
 
   final Map<String, TextEditingController> _rewardCtrls = {};
+  final Map<String, TextEditingController> _settingCtrls = {};
 
   TextEditingController _rewardCtrl(String type) =>
       _rewardCtrls.putIfAbsent(type, () => TextEditingController());
+
+  TextEditingController _settingCtrl(String type) =>
+      _settingCtrls.putIfAbsent(type, () => TextEditingController());
 
   PickupReward? _rewardOf(String type) {
     for (final r in _rewards) {
@@ -517,65 +529,389 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     });
   }
 
-  Widget _rewardsCard() {
+  // ── Requisitos: 1 sola config por tipo. Los numéricos arrancan con su
+  // valor default al encender el toggle; el resto se completa al tipar. ──
+  bool _settingOn(String type) => _settingOf(type) != null;
+
+  PickupSetting? _settingOf(String type) {
+    for (final s in _settings) {
+      if (s.type == type) return s;
+    }
+    return null;
+  }
+
+  void _setSetting(PickupSetting s) {
+    final i = _settings.indexWhere((x) => x.type == s.type);
+    setState(() {
+      if (i >= 0) {
+        _settings[i] = s;
+      } else {
+        _settings.add(s);
+      }
+    });
+  }
+
+  void _toggleSetting(String type, PickupSetting seed) {
+    setState(() {
+      final i = _settings.indexWhere((x) => x.type == type);
+      if (i >= 0) {
+        _settings.removeAt(i);
+        _settingCtrl(type).clear();
+      } else {
+        _settingCtrl(type).text = seed.min != null ? '${seed.min}' : '';
+        _settings.add(seed);
+      }
+    });
+  }
+
+  /// Chips pick-one mutuamente excluyentes (nivel/modalidad): tocar el activo
+  /// lo apaga; tocar el otro cambia la variante.
+  void _pickSetting(String type, String value) {
+    setState(() {
+      final i = _settings.indexWhere((x) => x.type == type);
+      if (i >= 0 && _settings[i].value == value) {
+        _settings.removeAt(i);
+        return;
+      }
+      if (i >= 0) {
+        _settings[i] = PickupSetting(type: type, value: value);
+      } else {
+        _settings.add(PickupSetting(type: type, value: value));
+      }
+    });
+  }
+
+  /// Cuántas configs activas y bien formadas hay (badge del header).
+  int get _configCount =>
+      _rewards.length + _settings.where((s) => s.isWellFormed).length;
+
+  Widget _customConfigCard() {
     return _sectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _label('Recompensa (opcional)'),
-          const SizedBox(height: 2),
-          Text('Premiá al ganador del pickup. Podés elegir 1 o varios tipos.',
-              style: AppText.grotesk(size: 11, color: AppColors.white(0.45))),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final (type, icon, label) in _rewardTypes)
-                _rewardChip(
-                  type,
-                  icon,
-                  label,
-                  active: _rewardOf(type) != null,
-                  onTap: () {
-                    setState(() {
-                      final i = _rewards.indexWhere((r) => r.type == type);
-                      if (i >= 0) {
-                        _rewards.removeAt(i);
-                        _rewardCtrl(type).clear();
-                      } else {
-                        _rewards.add(PickupReward(type: type));
-                      }
-                    });
-                  },
+          PressableWidget(
+            onTap: _saving
+                ? null
+                : () => setState(() => _configOpen = !_configOpen),
+            child: Row(
+              children: [
+                Icon(Icons.tune,
+                    size: 18,
+                    color: _configCount > 0
+                        ? AppColors.accent
+                        : AppColors.white(0.55)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('Configuraciones personalizadas',
+                      style: AppText.grotesk(
+                          size: 13,
+                          weight: FontWeight.w700,
+                          color: Colors.white)),
                 ),
+                if (_configCount > 0) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent,
+                      borderRadius: BorderRadius.circular(AppShape.rChip),
+                    ),
+                    child: Text('$_configCount',
+                        style: AppText.grotesk(
+                            size: 11,
+                            weight: FontWeight.w700,
+                            color: Colors.white)),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Icon(_configOpen ? Icons.expand_less : Icons.expand_more,
+                    color: AppColors.white(0.6)),
+              ],
+            ),
+          ),
+          // Cuerpo desplegable: recompensas + requisitos.
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 180),
+            crossFadeState: _configOpen
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            firstChild: const SizedBox(width: double.infinity),
+            secondChild: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 14),
+                Container(height: 1, color: AppColors.white(0.06)),
+                const SizedBox(height: 14),
+                _label('Recompensa (opcional)'),
+                const SizedBox(height: 2),
+                Text(
+                    'Premiá al ganador del pickup. Podés elegir 1 o varios tipos.',
+                    style:
+                        AppText.grotesk(size: 11, color: AppColors.white(0.45))),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final (type, icon, label) in _rewardTypes)
+                      _rewardChip(
+                        type,
+                        icon,
+                        label,
+                        active: _rewardOf(type) != null,
+                        onTap: () {
+                          setState(() {
+                            final i =
+                                _rewards.indexWhere((r) => r.type == type);
+                            if (i >= 0) {
+                              _rewards.removeAt(i);
+                              _rewardCtrl(type).clear();
+                            } else {
+                              _rewards.add(PickupReward(type: type));
+                            }
+                          });
+                        },
+                      ),
+                  ],
+                ),
+                for (final r in _rewards) ...[
+                  const SizedBox(height: 12),
+                  if (r.isMonetary)
+                    _configField(
+                      _rewardCtrl(r.type),
+                      numeric: true,
+                      hint: 'Monto en pesos (ARS)',
+                      prefix: '\$ ',
+                      onChanged: (v) => _setReward(PickupReward(
+                        type: r.type,
+                        amount: int.tryParse(v) ?? 0,
+                      )),
+                    )
+                  else
+                    _configField(
+                      _rewardCtrl(r.type),
+                      numeric: false,
+                      hint: r.type == 'indumentaria'
+                          ? 'Ej. remera, short, zapatillas'
+                          : 'Ej. muñequeras, cinta, pelota',
+                      onChanged: (v) => _setReward(
+                          PickupReward(type: r.type, detail: v.trim())),
+                    ),
+                ],
+                const SizedBox(height: 18),
+                Container(height: 1, color: AppColors.white(0.06)),
+                const SizedBox(height: 14),
+                _requirementsSection(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _requirementsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label('Requisitos'),
+        const SizedBox(height: 2),
+        Text('Reglas para unirse a este pickup (informativas).',
+            style: AppText.grotesk(size: 11, color: AppColors.white(0.45))),
+        const SizedBox(height: 10),
+        _toggleRow(
+          'edad',
+          'Edad mínima',
+          Icons.cake_outlined,
+        ),
+        if (_settingOn('edad')) ...[
+          const SizedBox(height: 8),
+          _configField(
+            _settingCtrl('edad'),
+            numeric: true,
+            hint: 'Años (ej. 18)',
+            prefix: '+',
+            onChanged: (v) => _setSetting(PickupSetting(
+              type: 'edad',
+              min: int.tryParse(v) ?? 0,
+            )),
+          ),
+        ],
+        const SizedBox(height: 8),
+        _toggleRow(
+          'altura',
+          'Altura mínima',
+          Icons.height,
+        ),
+        if (_settingOn('altura')) ...[
+          const SizedBox(height: 8),
+          _configField(
+            _settingCtrl('altura'),
+            numeric: true,
+            hint: 'Altura en cm (ej. 180)',
+            onChanged: (v) => _setSetting(PickupSetting(
+              type: 'altura',
+              minCm: int.tryParse(v) ?? 0,
+            )),
+          ),
+        ],
+        const SizedBox(height: 8),
+        _toggleRow(
+          'peso',
+          'Peso máximo',
+          Icons.monitor_weight_outlined,
+        ),
+        if (_settingOn('peso')) ...[
+          const SizedBox(height: 8),
+          _configField(
+            _settingCtrl('peso'),
+            numeric: true,
+            hint: 'Peso en kg (ej. 90)',
+            onChanged: (v) => _setSetting(PickupSetting(
+              type: 'peso',
+              maxKg: int.tryParse(v) ?? 0,
+            )),
+          ),
+        ],
+        const SizedBox(height: 16),
+        _label('Nivel'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _requirementChip(
+              'Solo profesionales',
+              _settingOf('nivel')?.value == 'profesional',
+              () => _pickSetting('nivel', 'profesional'),
+            ),
+            _requirementChip(
+              'Amateurs',
+              _settingOf('nivel')?.value == 'amateur',
+              () => _pickSetting('nivel', 'amateur'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _label('Modalidad'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _requirementChip(
+              'Competencia',
+              _settingOf('modalidad')?.value == 'competencia',
+              () => _pickSetting('modalidad', 'competencia'),
+            ),
+            _requirementChip(
+              'Casual',
+              _settingOf('modalidad')?.value == 'casual',
+              () => _pickSetting('modalidad', 'casual'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _toggleRow(
+          'marca',
+          'Partido de una marca',
+          Icons.branding_watermark_outlined,
+          subtitle: 'Por ej. un evento organizado por una marca',
+        ),
+        if (_settingOn('marca')) ...[
+          const SizedBox(height: 8),
+          _configField(
+            _settingCtrl('marca'),
+            numeric: false,
+            hint: 'Nombre de la marca (ej. Nike)',
+            onChanged: (v) => _setSetting(PickupSetting(
+              type: 'marca',
+              brand: v.trim(),
+              useKit: _settingOf('marca')?.useKit ?? false,
+            )),
+          ),
+          const SizedBox(height: 8),
+          _toggleRow(
+            'marca-kit',
+            'Jugar con la indumentaria de la marca',
+            Icons.checkroom_outlined,
+            onChanged: (v) {
+              final cur = _settingOf('marca');
+              if (cur == null) return;
+              _setSetting(PickupSetting(
+                type: 'marca',
+                brand: cur.brand,
+                useKit: v,
+              ));
+            },
+            value: _settingOf('marca')?.useKit ?? false,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _toggleRow(
+    String type,
+    String label,
+    IconData icon, {
+    String? subtitle,
+    bool? value,
+    ValueChanged<bool>? onChanged,
+  }) {
+    final on = value ?? _settingOn(type);
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: AppColors.white(0.5)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: AppText.grotesk(
+                      size: 13, color: AppColors.white(0.85))),
+              if (subtitle != null) ...[
+                const SizedBox(height: 1),
+                Text(subtitle,
+                    style: AppText.grotesk(
+                        size: 11, color: AppColors.white(0.45))),
+              ],
             ],
           ),
-          for (final r in _rewards) ...[
-            const SizedBox(height: 12),
-            if (r.isMonetary)
-              _rewardField(
-                r,
-                numeric: true,
-                hint: 'Monto en pesos (ARS)',
-                prefix: '\$ ',
-                onChanged: (v) => _setReward(PickupReward(
-                  type: r.type,
-                  amount: int.tryParse(v) ?? 0,
-                )),
-              )
-            else
-              _rewardField(
-                r,
-                numeric: false,
-                hint: r.type == 'indumentaria'
-                    ? 'Ej. remera, short, zapatillas'
-                    : 'Ej. muñequeras, cinta, pelota',
-                onChanged: (v) =>
-                    _setReward(PickupReward(type: r.type, detail: v.trim())),
-              ),
-          ],
-        ],
+        ),
+        Switch(
+          value: on,
+          onChanged: _saving
+              ? null
+              : (v) => onChanged != null
+                  ? onChanged(v)
+                  : _toggleSetting(type, PickupSetting(type: type)),
+          activeTrackColor: AppColors.accent,
+          inactiveTrackColor: AppColors.white(0.12),
+          inactiveThumbColor: AppColors.white(0.5),
+        ),
+      ],
+    );
+  }
+
+  Widget _requirementChip(String label, bool active, VoidCallback onTap) {
+    return PressableWidget(
+      onTap: _saving ? null : onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? AppColors.accent : AppColors.white(0.05),
+          borderRadius: BorderRadius.circular(AppShape.rChip),
+        ),
+        child: Text(label,
+            style: AppText.grotesk(
+              size: 12,
+              weight: FontWeight.w700,
+              color: active ? Colors.white : AppColors.white(0.7),
+            )),
       ),
     );
   }
@@ -611,13 +947,13 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     );
   }
 
-  Widget _rewardField(PickupReward r,
+  Widget _configField(TextEditingController ctrl,
       {required bool numeric,
       required String hint,
       String? prefix,
       required ValueChanged<String> onChanged}) {
     return TextField(
-      controller: _rewardCtrl(r.type),
+      controller: ctrl,
       keyboardType: numeric ? TextInputType.number : TextInputType.text,
       inputFormatters:
           numeric ? [FilteringTextInputFormatter.digitsOnly] : null,
