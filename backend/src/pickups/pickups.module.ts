@@ -15,13 +15,18 @@ import {
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
   Length,
   Max,
+  MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { Prisma } from '@prisma/client';
 import { Query } from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -32,10 +37,22 @@ import {
   parseUtc,
   Pickup,
   pickupWire,
+  rewardsFromDb,
 } from '../domain/wire';
 import { PrismaService } from '../prisma/prisma.module';
 
 // ── DTOs ────────────────────────────────────────────────────────────────────
+
+/** Recompensa de un pickup (opcional, 1 por tipo): monetaria (monto en ARS),
+ * indumentaria o accesorios (qué es). Validación anidada con class-validator. */
+class PickupRewardDto {
+  @IsIn(['monetaria', 'indumentaria', 'accesorios'])
+  type!: string;
+
+  @IsOptional() @IsInt() @Min(1) amount?: number;
+
+  @IsOptional() @IsString() @MaxLength(40) detail?: string;
+}
 
 class CreatePickupDto {
   @IsString() title!: string;
@@ -55,6 +72,9 @@ class CreatePickupDto {
   @IsOptional() @IsArray() @IsString({ each: true }) acceptedMembers?: string[];
   @IsOptional() @IsArray() @IsString({ each: true }) declinedMembers?: string[];
   @IsOptional() @IsBoolean() isPublic?: boolean;
+  @IsOptional() @IsArray() @ValidateNested({ each: true })
+  @Type(() => PickupRewardDto)
+  rewards?: PickupRewardDto[];
 }
 
 // Update: todos opcionales (cubre aceptar/rechazar/mover/quitar/abandonar/reenviar).
@@ -75,6 +95,9 @@ class UpdatePickupDto {
   @IsOptional() @IsArray() @IsString({ each: true }) acceptedMembers?: string[];
   @IsOptional() @IsArray() @IsString({ each: true }) declinedMembers?: string[];
   @IsOptional() @IsBoolean() isPublic?: boolean;
+  @IsOptional() @IsArray() @ValidateNested({ each: true })
+  @Type(() => PickupRewardDto)
+  rewards?: PickupRewardDto[];
 }
 
 class JoinPickupDto {
@@ -173,6 +196,9 @@ class PickupsService {
         acceptedMembers: accepted,
         declinedMembers: (dto.declinedMembers ?? []).filter((m) => !this.eq(m, e)),
         isPublic: dto.isPublic ?? false,
+        // rewards: el DTO valida forma; acá se normaliza (reglas cruzadas:
+        // monetaria exige amount, el resto detail; 1 solo reward por tipo).
+        rewards: rewardsFromDb(dto.rewards ?? []) as unknown as Prisma.InputJsonValue,
         // El código lo genera el server (autoritativo), no el cliente.
         inviteCode: this.genInviteCode(),
       },
@@ -219,6 +245,9 @@ class PickupsService {
           declinedMembers: dto.declinedMembers,
         }),
         ...(dto.isPublic !== undefined && { isPublic: dto.isPublic }),
+        ...(dto.rewards !== undefined && {
+          rewards: rewardsFromDb(dto.rewards) as unknown as Prisma.InputJsonValue,
+        }),
       },
     });
     return pickupWire(row);

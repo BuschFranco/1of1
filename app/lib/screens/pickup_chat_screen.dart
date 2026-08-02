@@ -397,6 +397,18 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
           const SizedBox(height: 8),
           _infoRow(Icons.sports_basketball_outlined,
               '${pickup.teamSize}v${pickup.teamSize} · a ${pickup.targetScore} pts'),
+          // Recompensa(s): el creador elige qué se lleva el ganador.
+          if (pickup.rewards.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _hairline(),
+            const SizedBox(height: 10),
+            _label('Recompensa'),
+            const SizedBox(height: 8),
+            for (final r in pickup.rewards) ...[
+              _infoRow(_rewardIcon(r.type), r.label),
+              if (r != pickup.rewards.last) const SizedBox(height: 6),
+            ],
+          ],
           // Código de invitación: SOLO lo ve el creador. Tap = copiar.
           if (isCreator && pickup.inviteCode.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -556,6 +568,17 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
         ),
       ],
     );
+  }
+
+  static IconData _rewardIcon(String type) {
+    switch (type) {
+      case 'monetaria':
+        return Icons.payments_outlined;
+      case 'indumentaria':
+        return Icons.checkroom_outlined;
+      default:
+        return Icons.sports_baseball_outlined;
+    }
   }
 
   Widget _label(String t) => Text(t.toUpperCase(),

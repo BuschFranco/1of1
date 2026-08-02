@@ -863,6 +863,17 @@ class _PublicPickupRow extends StatelessWidget {
                   style:
                       AppText.grotesk(size: 11, color: AppColors.white(0.5)),
                 ),
+                // Resumen compacto de recompensas ("$5000 · remera").
+                if (pickup.rewards.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '🏆 ${pickup.rewards.map((r) => r.label).join(' · ')}',
+                    style: AppText.grotesk(
+                        size: 11,
+                        weight: FontWeight.w700,
+                        color: AppColors.accent),
+                  ),
+                ],
               ],
             ),
           ),

@@ -152,6 +152,10 @@ model Pickup {
   declinedMembers String[]  @default([]) @map("declined_members")
   inviteCode      String    @default("") @map("invite_code")
   isPublic        Boolean   @default(false) @map("is_public") // visible en el detalle de la cancha, unión sin código
+  // Recompensas del pickup (opcionales): array de {type, amount?, detail?}.
+  // type: monetaria (amount) | indumentaria | accesorios (detail). El creador
+  // elige 1 o varios tipos; 1 solo reward por tipo.
+  rewards         Json      @default("[]")
   archived        Boolean   @default(false)
 
   @@index([inviteCode])

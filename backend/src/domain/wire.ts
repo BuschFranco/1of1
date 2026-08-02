@@ -275,6 +275,47 @@ export function reviewWire(r: DbReview): Review {
 
 // ── Pickup / Chat ────────────────────────────────────────────────────────────
 
+/** Tipos de recompensa soportados. Extensible: agregar un string acá (y en el
+ *  DTO de pickups) alcanza para que el resto del pipeline lo trate igual. */
+export const PICKUP_REWARD_TYPES = ['monetaria', 'indumentaria', 'accesorios'];
+
+export interface PickupReward {
+  /** 'monetaria' (amount) | 'indumentaria' | 'accesorios' (detail). */
+  type: string;
+  /** Solo monetaria: monto en pesos (ARS), entero > 0. */
+  amount?: number;
+  /** Solo indumentaria/accesorios: qué es (remera, muñequeras, …). */
+  detail?: string;
+}
+
+/** Normaliza el JSON de la columna `rewards` (puede venir de clientes viejos
+ * como null o con formas inválidas): devuelve solo rewards bien formados,
+ * 1 por tipo (el primero gana). */
+export function rewardsFromDb(raw: unknown): PickupReward[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: PickupReward[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue;
+    const rec = r as Record<string, unknown>;
+    const type = typeof rec.type === 'string' ? rec.type : '';
+    if (!PICKUP_REWARD_TYPES.includes(type) || seen.has(type)) continue;
+    const reward: PickupReward = { type };
+    if (type === 'monetaria') {
+      const amount = Number(rec.amount);
+      if (!Number.isInteger(amount) || amount < 1) continue;
+      reward.amount = amount;
+    } else {
+      const detail = typeof rec.detail === 'string' ? rec.detail.trim() : '';
+      if (!detail) continue;
+      reward.detail = detail.slice(0, 40);
+    }
+    seen.add(type);
+    out.push(reward);
+  }
+  return out;
+}
+
 export interface Pickup {
   pageId: string;
   title: string;
@@ -296,6 +337,7 @@ export interface Pickup {
   declinedMembers: string[];
   inviteCode: string;
   isPublic: boolean;
+  rewards: PickupReward[];
 }
 
 export function pickupWire(p: DbPickup): Pickup {
@@ -320,6 +362,7 @@ export function pickupWire(p: DbPickup): Pickup {
     declinedMembers: p.declinedMembers,
     inviteCode: p.inviteCode,
     isPublic: p.isPublic,
+    rewards: rewardsFromDb(p.rewards),
   };
 }
 

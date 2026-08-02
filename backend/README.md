@@ -96,7 +96,7 @@ Todos protegidos con `Authorization: Bearer <jwt>` salvo los de `/auth`.
 | Endpoint | Body | Devuelve |
 | --- | --- | --- |
 | `GET /pickups` | — | `Pickup[]` míos (creador O miembro de un equipo) |
-| `POST /pickups` | `{title, courtId, dateTime?, maxPlayers?, vibe?, notes?, teamSize?, teamA/BName?, teamA/BColor?, teamA/BMembers?, targetScore?, accepted/declinedMembers?, isPublic?}` — el `inviteCode` de 5 dígitos lo genera el server; **el creador entra siempre al equipo con lugar (Equipo A primero)** y a `acceptedMembers` | `Pickup` |
+| `POST /pickups` | `{title, courtId, dateTime?, maxPlayers?, vibe?, notes?, teamSize?, teamA/BName?, teamA/BColor?, teamA/BMembers?, targetScore?, accepted/declinedMembers?, isPublic?, rewards?}` — el `inviteCode` de 5 dígitos lo genera el server; **el creador entra siempre al equipo con lugar (Equipo A primero)** y a `acceptedMembers`. `rewards` (opcional): `[{type, amount?, detail?}]` con `type` ∈ `monetaria` (exige `amount` ARS ≥ 1) / `indumentaria` / `accesorios` (exigen `detail` ≤ 40 chars); 1 solo reward por tipo, combinables | `Pickup` |
 | `POST /pickups/join` | `{code}` (5 dígitos) — entra al equipo con espacio (menos miembros primero) como aceptado | `Pickup` (404 código inválido / 403 propio, lleno, ya unido o expirado) |
 | `PATCH /pickups/:pageId` | mismos campos opcionales (update parcial; solo creador/miembro) — cubre aceptar/rechazar/mover/quitar/abandonar/reenviar | `Pickup` |
 | `DELETE /pickups/:pageId` | — (solo el creador) | `{ok}` — archiva pickup + chat + mensajes |

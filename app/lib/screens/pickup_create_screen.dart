@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/courts.dart';
@@ -39,6 +40,8 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
   int _targetScore = 21;
   final List<String> _teamAMembers = [];
   final List<String> _teamBMembers = [];
+  // Recompensas elegidas (1 por tipo): monetaria guarda amount, el resto detail.
+  final List<PickupReward> _rewards = [];
   final _notesCtrl = TextEditingController();
   final _titleCtrl = TextEditingController();
   bool _saving = false;
@@ -93,6 +96,9 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
   void dispose() {
     _notesCtrl.dispose();
     _titleCtrl.dispose();
+    for (final c in _rewardCtrls.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -128,6 +134,13 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
         teamBMembers: _teamBMembers,
         targetScore: _targetScore,
         isPublic: _isPublic,
+        // Solo mandan las recompensas completas; el server descarta las que
+        // no estén (monetaria sin monto, tipo sin detalle).
+        rewards: _rewards
+            .where((r) => r.isMonetary
+                ? (r.amount ?? 0) > 0
+                : (r.detail ?? '').trim().isNotEmpty)
+            .toList(),
       ));
 
       final chat = CrewChat(
@@ -257,8 +270,12 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
               ),
               const SizedBox(height: 12),
 
-              // ── Visibilidad (feature en construcción, solo visual) ──
+              // ── Visibilidad ──
               _visibilityCard(),
+              const SizedBox(height: 12),
+
+              // ── Recompensa (opcional) ──
+              _rewardsCard(),
               const SizedBox(height: 12),
 
               // ── Formato + Puntuación ──
@@ -466,6 +483,163 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // ── Recompensa (opcional): el creador elige 1 o varios tipos a la vez.
+  // Monetaria → monto (ARS); indumentaria/accesorios → qué es. ──
+  static const _rewardTypes = [
+    ('monetaria', Icons.payments_outlined, 'Monetaria'),
+    ('indumentaria', Icons.checkroom_outlined, 'Indumentaria'),
+    ('accesorios', Icons.sports_baseball_outlined, 'Accesorios'),
+  ];
+
+  final Map<String, TextEditingController> _rewardCtrls = {};
+
+  TextEditingController _rewardCtrl(String type) =>
+      _rewardCtrls.putIfAbsent(type, () => TextEditingController());
+
+  PickupReward? _rewardOf(String type) {
+    for (final r in _rewards) {
+      if (r.type == type) return r;
+    }
+    return null;
+  }
+
+  void _setReward(PickupReward r) {
+    final i = _rewards.indexWhere((x) => x.type == r.type);
+    setState(() {
+      if (i >= 0) {
+        _rewards[i] = r;
+      } else {
+        _rewards.add(r);
+      }
+    });
+  }
+
+  Widget _rewardsCard() {
+    return _sectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _label('Recompensa (opcional)'),
+          const SizedBox(height: 2),
+          Text('Premiá al ganador del pickup. Podés elegir 1 o varios tipos.',
+              style: AppText.grotesk(size: 11, color: AppColors.white(0.45))),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final (type, icon, label) in _rewardTypes)
+                _rewardChip(
+                  type,
+                  icon,
+                  label,
+                  active: _rewardOf(type) != null,
+                  onTap: () {
+                    setState(() {
+                      final i = _rewards.indexWhere((r) => r.type == type);
+                      if (i >= 0) {
+                        _rewards.removeAt(i);
+                        _rewardCtrl(type).clear();
+                      } else {
+                        _rewards.add(PickupReward(type: type));
+                      }
+                    });
+                  },
+                ),
+            ],
+          ),
+          for (final r in _rewards) ...[
+            const SizedBox(height: 12),
+            if (r.isMonetary)
+              _rewardField(
+                r,
+                numeric: true,
+                hint: 'Monto en pesos (ARS)',
+                prefix: '\$ ',
+                onChanged: (v) => _setReward(PickupReward(
+                  type: r.type,
+                  amount: int.tryParse(v) ?? 0,
+                )),
+              )
+            else
+              _rewardField(
+                r,
+                numeric: false,
+                hint: r.type == 'indumentaria'
+                    ? 'Ej. remera, short, zapatillas'
+                    : 'Ej. muñequeras, cinta, pelota',
+                onChanged: (v) =>
+                    _setReward(PickupReward(type: r.type, detail: v.trim())),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _rewardChip(String type, IconData icon, String label,
+      {required bool active, required VoidCallback onTap}) {
+    return PressableWidget(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? AppColors.accent : AppColors.white(0.05),
+          borderRadius: BorderRadius.circular(AppShape.rChip),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 14,
+                color:
+                    active ? Colors.white : AppColors.white(0.55)),
+            const SizedBox(width: 6),
+            Text(label,
+                style: AppText.grotesk(
+                  size: 12,
+                  weight: FontWeight.w700,
+                  color: active ? Colors.white : AppColors.white(0.7),
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _rewardField(PickupReward r,
+      {required bool numeric,
+      required String hint,
+      String? prefix,
+      required ValueChanged<String> onChanged}) {
+    return TextField(
+      controller: _rewardCtrl(r.type),
+      keyboardType: numeric ? TextInputType.number : TextInputType.text,
+      inputFormatters:
+          numeric ? [FilteringTextInputFormatter.digitsOnly] : null,
+      style: AppText.grotesk(size: 14, color: Colors.white),
+      cursorColor: AppColors.accent,
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixText: prefix,
+        hintStyle: AppText.grotesk(size: 13, color: AppColors.white(0.35)),
+        prefixStyle: AppText.grotesk(size: 13, color: AppColors.white(0.45)),
+        filled: true,
+        fillColor: AppColors.white(0.05),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+        ),
+      ),
+      onChanged: onChanged,
     );
   }
 

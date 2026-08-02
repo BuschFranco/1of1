@@ -230,6 +230,38 @@ class Friend {
 
 }
 
+/// Recompensa de un pickup (opcional). El creador elige 1 o varios tipos a la
+/// vez (1 solo reward por tipo):
+/// - `monetaria`: premio en pesos (ARS), `amount` entero > 0.
+/// - `indumentaria` / `accesorios`: qué es (remera, short, muñequeras…), `detail`.
+class PickupReward {
+  final String type;
+  final int? amount;
+  final String? detail;
+
+  const PickupReward({required this.type, this.amount, this.detail});
+
+  bool get isMonetary => type == 'monetaria';
+
+  /// Texto corto para mostrar ("$5000", "Remera", "Muñequeras").
+  String get label =>
+      isMonetary ? '\$${amount ?? 0}' : (detail ?? type);
+
+  factory PickupReward.fromApi(Map<String, dynamic> json) {
+    return PickupReward(
+      type: (json['type'] as String?) ?? '',
+      amount: (json['amount'] as num?)?.toInt(),
+      detail: (json['detail'] as String?)?.trim(),
+    );
+  }
+
+  Map<String, dynamic> toApiJson() => {
+        'type': type,
+        if (amount != null) 'amount': amount,
+        if (detail != null && detail!.isNotEmpty) 'detail': detail,
+      };
+}
+
 /// Partido / pickup (base Partidos).
 class Pickup {
   final String pageId;
@@ -263,6 +295,9 @@ class Pickup {
   /// invitación (respetando `maxPlayers`/`teamSize` server-side).
   final bool isPublic;
 
+  /// Recompensas (opcional): monetaria/indumentaria/accesorios, 1 por tipo.
+  final List<PickupReward> rewards;
+
   const Pickup({
     this.pageId = '',
     required this.title,
@@ -284,6 +319,7 @@ class Pickup {
     this.declinedMembers = const [],
     this.inviteCode = '',
     this.isPublic = false,
+    this.rewards = const [],
   });
 
   /// Todos los invitados (miembros asignados a cualquier equipo).
@@ -325,6 +361,7 @@ class Pickup {
     List<String>? teamBMembers,
     List<String>? acceptedMembers,
     List<String>? declinedMembers,
+    List<PickupReward>? rewards,
   }) {
     return Pickup(
       pageId: pageId,
@@ -347,6 +384,7 @@ class Pickup {
       declinedMembers: declinedMembers ?? this.declinedMembers,
       inviteCode: inviteCode,
       isPublic: isPublic,
+      rewards: rewards ?? this.rewards,
     );
   }
 
@@ -380,6 +418,13 @@ class Pickup {
       declinedMembers: strs(json['declinedMembers']),
       inviteCode: json['inviteCode'] as String? ?? '',
       isPublic: json['isPublic'] as bool? ?? false,
+      rewards: [
+        for (final r in (json['rewards'] as List?) ?? const [])
+          if (r is Map<String, dynamic>)
+            PickupReward.fromApi(r)
+          else if (r is Map)
+            PickupReward.fromApi(r.cast<String, dynamic>()),
+      ],
     );
   }
 
@@ -405,6 +450,10 @@ class Pickup {
       'acceptedMembers': acceptedMembers,
       'declinedMembers': declinedMembers,
       'isPublic': isPublic,
+      // Solo si hay rewards: los PATCH de aceptar/rechazar/mover reusan este
+      // json y un array vacío pisaría las recompensas del pickup.
+      if (rewards.isNotEmpty)
+        'rewards': [for (final r in rewards) r.toApiJson()],
     };
   }
 
