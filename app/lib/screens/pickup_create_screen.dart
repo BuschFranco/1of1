@@ -72,6 +72,10 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
       _selected = initial ?? (_courts.isNotEmpty ? _courts.first : null);
     }
     _userEmail = context.read<Session>().email ?? '';
+    // El creador SIEMPRE participa del pickup: ocupa su lugar en el Equipo A
+    // desde el formulario (el server lo re-asegura al crear por si un cliente
+    // viejo no lo manda).
+    if (_userEmail.isNotEmpty) _teamAMembers.add(_userEmail);
     _friends = [];
     _loadFriends();
   }
@@ -315,6 +319,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _label('Invitar amigos'),
+                      _youRow(),
                       for (var i = 0; i < _friends.length; i++) ...[
                         if (i > 0)
                           Container(height: 1, color: AppColors.white(0.06)),
@@ -588,6 +593,34 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     );
   }
 
+  /// Equipos completos: no deja asignar más amigos (el cupo lo marca
+  /// `teamSize * 2`, contando al creador que ya ocupa el Equipo A).
+  bool get _teamsFull =>
+      _teamAMembers.length + _teamBMembers.length >= _teamSize * 2;
+
+  /// Fila fija "Vos": el creador siempre participa (Equipo A), sin toggle.
+  Widget _youRow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 14,
+            backgroundColor: _hex(_teamAColor),
+            child: const Icon(Icons.person, size: 16, color: Colors.white),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text('Vos',
+                style: AppText.grotesk(
+                    size: 13, weight: FontWeight.w600, color: Colors.white)),
+          ),
+          _teamToggle('A', true, _hex(_teamAColor), () {}),
+        ],
+      ),
+    );
+  }
+
   Widget _friendRow(Friend f) {
     final name = f.friendName.isNotEmpty ? f.friendName : f.friendHandle;
     final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
@@ -627,7 +660,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
             setState(() {
               if (_teamAMembers.contains(f.friendEmail)) {
                 _teamAMembers.remove(f.friendEmail);
-              } else {
+              } else if (!_teamsFull) {
                 _teamAMembers.add(f.friendEmail);
                 _teamBMembers.remove(f.friendEmail);
               }
@@ -638,7 +671,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
             setState(() {
               if (_teamBMembers.contains(f.friendEmail)) {
                 _teamBMembers.remove(f.friendEmail);
-              } else {
+              } else if (!_teamsFull) {
                 _teamBMembers.add(f.friendEmail);
                 _teamAMembers.remove(f.friendEmail);
               }

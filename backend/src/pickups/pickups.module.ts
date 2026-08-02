@@ -140,6 +140,19 @@ class PickupsService {
   }
 
   async create(createdBy: string, dto: CreatePickupDto): Promise<Pickup> {
+    // El creador SIEMPRE participa: va al Equipo A (el de menos miembros si A
+    // está lleno). Los contadores de la app (jugadores, cupo, equipos del chat)
+    // se leen de estas listas, así que sin esto un pickup recién creado figura
+    // con 0 jugadores. Dedup case-insensitive por si el cliente ya lo mandó.
+    const e = createdBy.trim().toLowerCase();
+    const teamA = [...(dto.teamAMembers ?? [])].filter((m) => !this.eq(m, e));
+    const teamB = [...(dto.teamBMembers ?? [])].filter((m) => !this.eq(m, e));
+    const teamSize = dto.teamSize ?? 3;
+    const creatorToA = teamA.length < teamSize;
+    const accepted = [
+      e,
+      ...(dto.acceptedMembers ?? []).filter((m) => !this.eq(m, e)),
+    ];
     const row = await this.prisma.pickup.create({
       data: {
         title: dto.title,
@@ -149,16 +162,16 @@ class PickupsService {
         maxPlayers: dto.maxPlayers ?? 10,
         vibe: dto.vibe ?? 'Casual',
         notes: dto.notes ?? '',
-        teamSize: dto.teamSize ?? 3,
+        teamSize,
         teamAName: dto.teamAName ?? 'Equipo A',
         teamBName: dto.teamBName ?? 'Equipo B',
         teamAColor: dto.teamAColor ?? '#FF6B1A',
         teamBColor: dto.teamBColor ?? '#3B82F6',
-        teamAMembers: dto.teamAMembers ?? [],
-        teamBMembers: dto.teamBMembers ?? [],
+        teamAMembers: creatorToA ? [e, ...teamA] : teamA,
+        teamBMembers: creatorToA ? teamB : [e, ...teamB],
         targetScore: dto.targetScore ?? 21,
-        acceptedMembers: dto.acceptedMembers ?? [],
-        declinedMembers: dto.declinedMembers ?? [],
+        acceptedMembers: accepted,
+        declinedMembers: (dto.declinedMembers ?? []).filter((m) => !this.eq(m, e)),
         isPublic: dto.isPublic ?? false,
         // El código lo genera el server (autoritativo), no el cliente.
         inviteCode: this.genInviteCode(),
