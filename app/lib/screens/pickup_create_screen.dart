@@ -500,6 +500,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     ('monetaria', Icons.payments_outlined, 'Monetaria'),
     ('indumentaria', Icons.checkroom_outlined, 'Indumentaria'),
     ('accesorios', Icons.sports_baseball_outlined, 'Accesorios'),
+    ('otro', Icons.category_outlined, 'Otro'),
   ];
 
   final Map<String, TextEditingController> _rewardCtrls = {};
@@ -694,7 +695,9 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                       numeric: false,
                       hint: r.type == 'indumentaria'
                           ? 'Ej. remera, short, zapatillas'
-                          : 'Ej. muñequeras, cinta, pelota',
+                          : r.type == 'accesorios'
+                              ? 'Ej. muñequeras, cinta, pelota'
+                              : 'La coca',
                       onChanged: (v) => _setReward(
                           PickupReward(type: r.type, detail: v.trim())),
                     ),

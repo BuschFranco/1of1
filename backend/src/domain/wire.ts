@@ -277,7 +277,12 @@ export function reviewWire(r: DbReview): Review {
 
 /** Tipos de recompensa soportados. Extensible: agregar un string acá (y en el
  *  DTO de pickups) alcanza para que el resto del pipeline lo trate igual. */
-export const PICKUP_REWARD_TYPES = ['monetaria', 'indumentaria', 'accesorios'];
+export const PICKUP_REWARD_TYPES = [
+  'monetaria',
+  'indumentaria',
+  'accesorios',
+  'otro',
+];
 
 export interface PickupReward {
   /** 'monetaria' (amount) | 'indumentaria' | 'accesorios' (detail). */

@@ -47,7 +47,7 @@ import { PrismaService } from '../prisma/prisma.module';
 /** Recompensa de un pickup (opcional, 1 por tipo): monetaria (monto en ARS),
  * indumentaria o accesorios (qué es). Validación anidada con class-validator. */
 class PickupRewardDto {
-  @IsIn(['monetaria', 'indumentaria', 'accesorios'])
+  @IsIn(['monetaria', 'indumentaria', 'accesorios', 'otro'])
   type!: string;
 
   @IsOptional() @IsInt() @Min(1) amount?: number;

@@ -618,6 +618,8 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
         return Icons.payments_outlined;
       case 'indumentaria':
         return Icons.checkroom_outlined;
+      case 'otro':
+        return Icons.category_outlined;
       default:
         return Icons.sports_baseball_outlined;
     }
