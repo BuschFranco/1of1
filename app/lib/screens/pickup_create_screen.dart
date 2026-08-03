@@ -113,6 +113,18 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
 
   Future<void> _create() async {
     if (_selected == null || _saving) return;
+    // Fecha y horario son obligatorios: sin fecha no se crea (los partidos
+    // necesitan cuándo para el chat, los recordatorios y el detalle público).
+    if (_when == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Elegí fecha y horario para el pickup.',
+            style: AppText.grotesk(size: 13)),
+        backgroundColor: AppColors.bgElev,
+        behavior: SnackBarBehavior.floating,
+      ));
+      unawaited(_openDatePicker());
+      return;
+    }
     setState(() => _saving = true);
     try {
       final pickupsProvider = context.read<PickupsProvider>();
@@ -127,7 +139,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
         title: pickupTitle,
         courtId: _selected!.id,
         createdBy: _userEmail,
-        dateTime: _when?.toIso8601String(),
+        dateTime: _when!.toIso8601String(),
         maxPlayers: totalPlayers,
         vibe: _selected!.vibe,
         notes: _notesCtrl.text.trim(),
@@ -1035,12 +1047,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     return PressableWidget(
       // El picker vive en un helper compartido con la edición desde el chat del
       // pickup: una sola fuente para la lógica de horarios de cancha.
-      onTap: () async {
-        final picked =
-            await pickPickupDateTime(context, _selected, initial: _when);
-        if (picked == null || !mounted) return;
-        setState(() => _when = picked);
-      },
+      onTap: _openDatePicker,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
@@ -1068,6 +1075,16 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
         ),
       ),
     );
+  }
+
+  /// Abre el picker de fecha/horario (compartido con el chat). También lo
+  /// dispara el guard de creación cuando falta fecha.
+  Future<void> _openDatePicker() async {
+    if (_selected == null) return;
+    final picked =
+        await pickPickupDateTime(context, _selected, initial: _when);
+    if (picked == null || !mounted) return;
+    setState(() => _when = picked);
   }
 
   Widget _teamNameField(String value, Color cursorColor, ValueChanged<String> onChanged) {

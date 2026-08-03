@@ -76,7 +76,9 @@ class PickupSettingDto {
 class CreatePickupDto {
   @IsString() title!: string;
   @IsString() courtId!: string;
-  @IsOptional() @IsString() dateTime?: string;
+  // Fecha/hora obligatoria: el pickup necesita cuándo (chat, recordatorios y
+  // detalle público se apoyan en la fecha).
+  @IsString() dateTime!: string;
   @IsOptional() @IsInt() @Min(2) @Max(50) maxPlayers?: number;
   @IsOptional() @IsString() vibe?: string;
   @IsOptional() @IsString() notes?: string;
