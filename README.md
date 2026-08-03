@@ -77,6 +77,31 @@ abiertos con cupo y un botón UNIRME que lleva al chat.
 Pendiente (cosmético): quitar la mención de "Próximamente" en la web
 (`community.pickups.soonBody` en `web/src/i18n/*`).
 
+### Pickups: recompensas y configuraciones personalizadas
+
+**Listo en app + backend** (2026-08-02):
+
+- **Recompensas opcionales** al crear un pickup: `monetaria` (exige `amount`
+  ARS ≥ 1) / `indumentaria` / `accesorios` / `otro` (texto libre, placeholder
+  "La coca"); una sola por tipo, combinables. Se muestran en el panel de info
+  del chat y en el detalle público de la cancha (línea `🏆`).
+- **Configuraciones personalizadas** en un box desplegable al crear (recompensa
+  + requisitos): edad mínima, altura mínima, peso máximo, nivel
+  (profesional/amateur), modalidad (competencia/casual) y marca (con uso de kit).
+  Son **informativas**: no bloquean la unión, solo se comunican.
+- **Dialog de reglas** al entrar a un pickup con configs (solo quienes no lo
+  crearon; queda marcado como visto por pickup en prefs).
+- **Badge "Partido personalizado"** en la lista de crew y en el detalle cuando el
+  pickup tiene recompensa o configs (`Pickup.hasCustomConfig`).
+- **El creador elige su equipo** (A o B) al crear; clientes viejos que no lo
+  mandan entran al equipo con lugar (A primero).
+- **Fecha y horario obligatorios** al crear: guard en la app (auto-abre el
+  selector) + `dateTime` requerido en el DTO.
+
+El contrato está en [`backend/README.md`](backend/README.md); la normalización
+de `rewards`/`settings` vive en `backend/src/domain/wire.ts` (`rewardsFromDb` /
+`settingsFromDb`, con clampes y descarte de mal formadas).
+
 ### Publicación en las tiendas
 
 - **URLs legales públicas**: `kPrivacyPolicyUrl` / `kTermsUrl` en
