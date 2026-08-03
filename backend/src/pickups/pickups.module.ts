@@ -196,7 +196,11 @@ class PickupsService {
     const teamA = [...(dto.teamAMembers ?? [])].filter((m) => !this.eq(m, e));
     const teamB = [...(dto.teamBMembers ?? [])].filter((m) => !this.eq(m, e));
     const teamSize = dto.teamSize ?? 3;
-    const creatorToA = teamA.length < teamSize;
+    // El creador elige su equipo: se respeta dónde lo mandó el cliente (A o
+    // B). Si no lo mandó (clientes viejos), cae al equipo con lugar (A primero).
+    const askedA = (dto.teamAMembers ?? []).some((m) => this.eq(m, e));
+    const askedB = (dto.teamBMembers ?? []).some((m) => this.eq(m, e));
+    const creatorToA = askedB ? false : askedA ? true : teamA.length < teamSize;
     const accepted = [
       e,
       ...(dto.acceptedMembers ?? []).filter((m) => !this.eq(m, e)),

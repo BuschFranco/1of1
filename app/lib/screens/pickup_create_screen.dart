@@ -78,9 +78,9 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
       _selected = initial ?? (_courts.isNotEmpty ? _courts.first : null);
     }
     _userEmail = context.read<Session>().email ?? '';
-    // El creador SIEMPRE participa del pickup: ocupa su lugar en el Equipo A
-    // desde el formulario (el server lo re-asegura al crear por si un cliente
-    // viejo no lo manda).
+    // El creador SIEMPRE participa del pickup: arranca en el Equipo A, pero
+    // puede pasarse al B con los toggles de su fila "Vos" (el server respeta
+    // el equipo elegido al crear).
     if (_userEmail.isNotEmpty) _teamAMembers.add(_userEmail);
     _friends = [];
     _loadFriends();
@@ -1107,19 +1107,39 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
   }
 
   /// Equipos completos: no deja asignar más amigos (el cupo lo marca
-  /// `teamSize * 2`, contando al creador que ya ocupa el Equipo A).
+  /// `teamSize * 2`, contando al creador, esté en A o en B).
   bool get _teamsFull =>
       _teamAMembers.length + _teamBMembers.length >= _teamSize * 2;
 
-  /// Fila fija "Vos": el creador siempre participa (Equipo A), sin toggle.
+  /// Mueve al creador de equipo (los toggles de su fila). Nunca lo saca del
+  /// pickup: cambiar de equipo solo re-asigna su email entre las dos listas.
+  void _moveSelfTo(bool toB) {
+    if (_userEmail.isEmpty) return;
+    setState(() {
+      if (toB) {
+        if (_teamBMembers.contains(_userEmail)) return;
+        _teamAMembers.remove(_userEmail);
+        _teamBMembers.add(_userEmail);
+      } else {
+        if (_teamAMembers.contains(_userEmail)) return;
+        _teamBMembers.remove(_userEmail);
+        _teamAMembers.add(_userEmail);
+      }
+    });
+  }
+
+  /// Fila "Vos": el creador siempre participa y elige en qué equipo juega
+  /// (Equipo A por default). Sin toggle de remoción: solo A/B.
   Widget _youRow() {
+    final inA = _teamAMembers.contains(_userEmail);
+    final inB = _teamBMembers.contains(_userEmail);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
           CircleAvatar(
             radius: 14,
-            backgroundColor: _hex(_teamAColor),
+            backgroundColor: inB ? _hex(_teamBColor) : _hex(_teamAColor),
             child: const Icon(Icons.person, size: 16, color: Colors.white),
           ),
           const SizedBox(width: 10),
@@ -1128,7 +1148,11 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                 style: AppText.grotesk(
                     size: 13, weight: FontWeight.w600, color: Colors.white)),
           ),
-          _teamToggle('A', true, _hex(_teamAColor), () {}),
+          _teamToggle('A', inA, _hex(_teamAColor),
+              _saving ? () {} : () => _moveSelfTo(false)),
+          const SizedBox(width: 6),
+          _teamToggle('B', inB, _hex(_teamBColor),
+              _saving ? () {} : () => _moveSelfTo(true)),
         ],
       ),
     );
