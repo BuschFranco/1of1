@@ -5,7 +5,6 @@ import '../services/pickups_provider.dart';
 import '../services/session.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
-import '../widgets/basketball_graffiti.dart';
 import '../widgets/pressable_widget.dart';
 import 'pickup_chat_screen.dart';
 
@@ -63,86 +62,78 @@ class _CrewScreenState extends State<CrewScreen> {
 
     return Container(
       color: AppColors.lilac,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: Center(
-              child: BasketballGraffiti(size: 300, color: AppColors.white(0.08)),
-            ),
-          ),
-          RefreshIndicator(
-            onRefresh: () => _load(force: true),
-            color: AppColors.accent,
-            backgroundColor: AppColors.bgElev,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 56, 20, 160),
-              children: [
-                // Titular de dos líneas, como Canchas: la segunda en acento.
-                Text.rich(
+      child: RefreshIndicator(
+        onRefresh: () => _load(force: true),
+        color: AppColors.accent,
+        backgroundColor: AppColors.bgElev,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 56, 20, 160),
+          children: [
+            // Titular de dos líneas, como Canchas: la segunda en acento.
+            Text.rich(
+              TextSpan(
+                text: 'Tu\n',
+                style: AppText.display(
+                  size: 34,
+                  weight: FontWeight.w900,
+                  letterSpacing: -0.01,
+                  height: 1.05,
+                  shadows: AppFx.inkGlow(),
+                ),
+                children: [
                   TextSpan(
-                    text: 'Tu\n',
+                    text: 'Crew.',
                     style: AppText.display(
                       size: 34,
                       weight: FontWeight.w900,
+                      color: AppColors.accent,
                       letterSpacing: -0.01,
                       height: 1.05,
-                      shadows: AppFx.inkGlow(),
-                    ),
-                    children: [
-                      TextSpan(
-                        text: 'Crew.',
-                        style: AppText.display(
-                          size: 34,
-                          weight: FontWeight.w900,
-                          color: AppColors.accent,
-                          letterSpacing: -0.01,
-                          height: 1.05,
-                          shadows: AppFx.accentGlow(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Tus conversaciones activas',
-                  style: AppText.grotesk(size: 13, color: AppColors.white(0.6)),
-                ),
-                const SizedBox(height: 20),
-                if (provider.loading)
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.white(0.4)),
-                    ),
-                  )
-                else if (pickups.isEmpty)
-                  _emptyState()
-                else
-                  // Una sola card con los pickups como filas planas separadas
-                  // por hairlines (mismo lenguaje editorial que el perfil).
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(AppShape.rCard),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Column(
-                      children: [
-                        for (var i = 0; i < pickups.length; i++) ...[
-                          if (i > 0)
-                            Container(
-                                height: 1, color: AppColors.white(0.06)),
-                          _pickupCard(pickups[i], myEmail),
-                        ],
-                      ],
+                      shadows: AppFx.accentGlow(),
                     ),
                   ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              'Tus conversaciones activas',
+              style: AppText.grotesk(size: 13, color: AppColors.white(0.6)),
+            ),
+            const SizedBox(height: 20),
+            if (provider.loading)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(40),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.white(0.4),
+                  ),
+                ),
+              )
+            else if (pickups.isEmpty)
+              _emptyState()
+            else
+              // Una sola card con los pickups como filas planas separadas
+              // por hairlines (mismo lenguaje editorial que el perfil).
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(AppShape.rCard),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    for (var i = 0; i < pickups.length; i++) ...[
+                      if (i > 0)
+                        Container(height: 1, color: AppColors.white(0.06)),
+                      _pickupCard(pickups[i], myEmail),
+                    ],
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -154,9 +145,14 @@ class _CrewScreenState extends State<CrewScreen> {
         children: [
           Icon(Icons.forum_outlined, size: 44, color: AppColors.white(0.25)),
           const SizedBox(height: 12),
-          Text('No tenés conversaciones activas',
-              style: AppText.grotesk(
-                  size: 15, weight: FontWeight.w700, color: Colors.white)),
+          Text(
+            'No tenés conversaciones activas',
+            style: AppText.grotesk(
+              size: 15,
+              weight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
           const SizedBox(height: 6),
           Text(
             'Se arman cuando creás un pickup en una cancha o cuando tu crew te suma a uno.',
@@ -187,122 +183,151 @@ class _CrewScreenState extends State<CrewScreen> {
     // Fila plana (va dentro de la card única con hairlines).
     return PressableWidget(
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => PickupChatScreen(pickupId: p.pageId),
-        ),
+        MaterialPageRoute(builder: (_) => PickupChatScreen(pickupId: p.pageId)),
       ),
       child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  // Avatar: dos círculos con los colores de equipo.
-                  SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Positioned(
-                          left: 0,
-                          top: 4,
-                          child: _teamDot(colorA, p.teamAName, 'A'),
-                        ),
-                        Positioned(
-                          right: 0,
-                          bottom: 4,
-                          child: _teamDot(colorB, p.teamBName, 'B'),
-                        ),
-                      ],
-                    ),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                // Avatar: dos círculos con los colores de equipo.
+                SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned(
+                        left: 0,
+                        top: 4,
+                        child: _teamDot(colorA, p.teamAName, 'A'),
+                      ),
+                      Positioned(
+                        right: 0,
+                        bottom: 4,
+                        child: _teamDot(colorB, p.teamBName, 'B'),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          p.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppText.archivo(
-                              size: 15, weight: FontWeight.w700),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        p.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.archivo(
+                          size: 15,
+                          weight: FontWeight.w700,
                         ),
-                        const SizedBox(height: 3),
-                        Row(
-                          children: [
-                            Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                    color: colorA, shape: BoxShape.circle)),
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(p.teamAName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppText.grotesk(
-                                      size: 11,
-                                      color: AppColors.white(0.6),
-                                      weight: FontWeight.w600)),
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: colorA,
+                              shape: BoxShape.circle,
                             ),
-                            Text(' vs ',
-                                style: AppText.grotesk(
-                                    size: 11, color: AppColors.white(0.35))),
-                            Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                    color: colorB, shape: BoxShape.circle)),
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(p.teamBName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppText.grotesk(
-                                      size: 11,
-                                      color: AppColors.white(0.6),
-                                      weight: FontWeight.w600)),
-                            ),
-                          ],
-                        ),
-                        if (date.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(date,
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              p.teamAName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: AppText.grotesk(
-                                  size: 11,
-                                  color: AppColors.accent,
-                                  weight: FontWeight.w600)),
+                                size: 11,
+                                color: AppColors.white(0.6),
+                                weight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            ' vs ',
+                            style: AppText.grotesk(
+                              size: 11,
+                              color: AppColors.white(0.35),
+                            ),
+                          ),
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: colorB,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              p.teamBName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.grotesk(
+                                size: 11,
+                                color: AppColors.white(0.6),
+                                weight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
                         ],
-                        // Pickup con configuraciones personalizadas (recompensa
-                        // o requisitos): badge para diferenciarlo de uno común.
-                        if (p.hasCustomConfig) ...[
-                          const SizedBox(height: 4),
-                          _customBadge(),
-                        ],
+                      ),
+                      if (date.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          date,
+                          style: AppText.grotesk(
+                            size: 11,
+                            color: AppColors.accent,
+                            weight: FontWeight.w600,
+                          ),
+                        ),
                       ],
-                    ),
+                      // Precio de entrada o "Entrada libre".
+                      const SizedBox(height: 2),
+                      _entryPriceRow(p),
+                      // Pickup con configuraciones personalizadas (recompensa
+                      // o requisitos): badge para diferenciarlo de uno común.
+                      if (p.hasCustomConfig) ...[
+                        const SizedBox(height: 4),
+                        _customBadge(),
+                      ],
+                    ],
                   ),
-                  Icon(Icons.chevron_right, color: AppColors.white(0.3)),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  _badge(statusText, statusColor),
-                  const Spacer(),
-                  Icon(Icons.people_outline,
-                      size: 13, color: AppColors.white(0.4)),
-                  const SizedBox(width: 4),
-                  Text('$accepted/$total confirmados',
-                      style: AppText.grotesk(
-                          size: 10, color: AppColors.white(0.45))),
-                ],
-              ),
-            ],
-          ),
+                ),
+                Icon(Icons.chevron_right, color: AppColors.white(0.3)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _badge(statusText, statusColor),
+                const Spacer(),
+                Icon(
+                  Icons.people_outline,
+                  size: 13,
+                  color: AppColors.white(0.4),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '$accepted/$total confirmados',
+                  style: AppText.grotesk(
+                    size: 10,
+                    color: AppColors.white(0.45),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -320,7 +345,10 @@ class _CrewScreenState extends State<CrewScreen> {
         child: Text(
           name.isNotEmpty ? name[0].toUpperCase() : fallback,
           style: AppText.grotesk(
-              size: 14, weight: FontWeight.w800, color: Colors.white),
+            size: 14,
+            weight: FontWeight.w800,
+            color: Colors.white,
+          ),
         ),
       ),
     );
@@ -338,13 +366,41 @@ class _CrewScreenState extends State<CrewScreen> {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 6),
-        Text(text,
-            style: AppText.grotesk(
-                size: 9,
-                weight: FontWeight.w800,
-                color: color,
-                letterSpacing: 0.06)),
+        Text(
+          text,
+          style: AppText.grotesk(
+            size: 9,
+            weight: FontWeight.w800,
+            color: color,
+            letterSpacing: 0.06,
+          ),
+        ),
       ],
+    );
+  }
+
+  /// Fila con precio de entrada o "Entrada libre".
+  Widget _entryPriceRow(Pickup p) {
+    final entry = p.settings.where((s) => s.isEntryPrice && s.isWellFormed);
+    if (entry.isNotEmpty) {
+      return Row(
+        children: [
+          const Icon(Icons.attach_money, size: 11, color: AppColors.accent),
+          const SizedBox(width: 4),
+          Text(
+            entry.first.label,
+            style: AppText.grotesk(
+              size: 11,
+              color: AppColors.accent,
+              weight: FontWeight.w700,
+            ),
+          ),
+        ],
+      );
+    }
+    return Text(
+      'Entrada libre',
+      style: AppText.grotesk(size: 11, color: AppColors.white(0.45)),
     );
   }
 
@@ -362,11 +418,14 @@ class _CrewScreenState extends State<CrewScreen> {
         children: [
           const Icon(Icons.tune, size: 11, color: AppColors.accent),
           const SizedBox(width: 4),
-          Text('Partido personalizado',
-              style: AppText.grotesk(
-                  size: 9,
-                  color: AppColors.accent,
-                  weight: FontWeight.w700)),
+          Text(
+            'Partido personalizado',
+            style: AppText.grotesk(
+              size: 9,
+              color: AppColors.accent,
+              weight: FontWeight.w700,
+            ),
+          ),
         ],
       ),
     );

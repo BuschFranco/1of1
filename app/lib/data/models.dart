@@ -266,10 +266,11 @@ class PickupReward {
 /// tener 1 sola por tipo:
 /// - `edad` (min años) / `altura` (minCm) / `peso` (maxKg): requisitos
 ///   numéricos del jugador.
-/// - `nivel` (value: profesional|amateur) y `modalidad`
+/// - `nivel` (value: profesional|amateur) / `modalidad`
 ///   (value: competencia|casual): variantes pick-one.
 /// - `marca` (brand + useKit): partido armado por una marca (y si se juega
 ///   con la indumentaria de la marca).
+/// - `precio_entrada` (min = monto en ARS): costo de la entrada al pickup.
 class PickupSetting {
   final String type;
   final int? min;
@@ -289,6 +290,8 @@ class PickupSetting {
     this.useKit = false,
   });
 
+  bool get isEntryPrice => type == 'precio_entrada';
+
   /// Si está bien formado (vale la pena mandarlo al server): los requisitos
   /// numéricos exigen su número y marca su nombre; nivel/modalidad su value.
   bool get isWellFormed {
@@ -304,12 +307,14 @@ class PickupSetting {
         return (value ?? '').isNotEmpty;
       case 'marca':
         return (brand ?? '').trim().isNotEmpty;
+      case 'precio_entrada':
+        return (min ?? 0) > 0;
     }
     return false;
   }
 
   /// Texto corto para mostrar ("+18 años", "Mín. 180 cm", "Solo
-  /// profesionales", "Partido de Nike", …).
+  /// profesionales", "Partido de Nike", "$ 2.500", …).
   String get label {
     switch (type) {
       case 'edad':
@@ -326,8 +331,20 @@ class PickupSetting {
         final b = (brand ?? '').trim();
         final base = b.isEmpty ? 'De marca' : 'Partido de $b';
         return useKit ? '$base · con indumentaria de la marca' : base;
+      case 'precio_entrada':
+        return '\$ ${_formatPrice(min ?? 0)}';
     }
     return type;
+  }
+
+  static String _formatPrice(int amount) {
+    final s = amount.toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write('.');
+      buf.write(s[i]);
+    }
+    return buf.toString();
   }
 
   factory PickupSetting.fromApi(Map<String, dynamic> json) {

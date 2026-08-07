@@ -427,6 +427,9 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
           const SizedBox(height: 8),
           _infoRow(Icons.sports_basketball_outlined,
               '${pickup.teamSize}v${pickup.teamSize} · a ${pickup.targetScore} pts'),
+          // Entrada: precio o "Entrada libre" (siempre visible).
+          const SizedBox(height: 8),
+          _entryPriceRow(pickup),
           // Recompensa(s): el creador elige qué se lleva el ganador.
           if (pickup.rewards.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -623,6 +626,15 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
       default:
         return Icons.sports_baseball_outlined;
     }
+  }
+
+  Widget _entryPriceRow(Pickup pickup) {
+    final entry =
+        pickup.settings.where((s) => s.isEntryPrice && s.isWellFormed);
+    if (entry.isNotEmpty) {
+      return _infoRow(Icons.attach_money, entry.first.label);
+    }
+    return _infoRow(Icons.attach_money, 'Entrada libre');
   }
 
   Widget _label(String t) => Text(t.toUpperCase(),

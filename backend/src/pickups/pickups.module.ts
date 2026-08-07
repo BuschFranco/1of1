@@ -58,7 +58,7 @@ class PickupRewardDto {
 /** Configuración personalizada del pickup (informativa). La normalización
  * fina (clamps, descarte de inválidos) la hace settingsFromDb. */
 class PickupSettingDto {
-  @IsIn(['edad', 'altura', 'peso', 'nivel', 'modalidad', 'marca'])
+  @IsIn(['edad', 'altura', 'peso', 'nivel', 'modalidad', 'marca', 'precio_entrada'])
   type!: string;
 
   @IsOptional() @IsInt() @Min(1) min?: number;

@@ -867,7 +867,7 @@ class _PublicPickupRow extends StatelessWidget {
                 if (pickup.rewards.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(
-                    '🏆 ${pickup.rewards.map((r) => r.label).join(' · ')}',
+                    pickup.rewards.map((r) => r.label).join(' · '),
                     style: AppText.grotesk(
                         size: 11,
                         weight: FontWeight.w700,

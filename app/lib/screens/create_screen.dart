@@ -6,7 +6,6 @@ import '../services/pickups_provider.dart';
 import '../services/session.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
-import '../widgets/basketball_graffiti.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/under_construction.dart';
 import 'add_court_screen.dart';
@@ -18,9 +17,21 @@ class CreateScreen extends StatelessWidget {
   const CreateScreen({super.key});
 
   static const _options = [
-    ('Crear pickup game', 'Organizá un partido en cualquier cancha', Icons.sports_basketball),
-    ('Unirse a pickup game', 'Entrá con el código que te pasaron', Icons.key_outlined),
-    ('Agregar cancha', '¿Conocés una cancha que no está?', Icons.add_location_alt_outlined),
+    (
+      'Crear pickup game',
+      'Organizá un partido en cualquier cancha',
+      Icons.sports_basketball,
+    ),
+    (
+      'Unirse a pickup game',
+      'Entrá con el código que te pasaron',
+      Icons.key_outlined,
+    ),
+    (
+      'Agregar cancha',
+      '¿Conocés una cancha que no está?',
+      Icons.add_location_alt_outlined,
+    ),
     ('Reservar cancha', 'Reservá un horario', Icons.event_available_outlined),
   ];
 
@@ -29,15 +40,15 @@ class CreateScreen extends StatelessWidget {
 
   void _onTap(BuildContext context, int i) {
     if (i == 0) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const PickupCreateScreen()),
-      );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const PickupCreateScreen()));
     } else if (i == 1) {
       _showJoinDialog(context);
     } else if (i == 2) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const AddCourtScreen()),
-      );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const AddCourtScreen()));
     } else {
       showUnderConstruction(context, _options[i].$1);
     }
@@ -61,9 +72,10 @@ class CreateScreen extends StatelessWidget {
               error = null;
             });
             final email = ctx.read<Session>().email ?? '';
-            final res = await ctx
-                .read<PickupsProvider>()
-                .joinByCode(codeCtrl.text, email);
+            final res = await ctx.read<PickupsProvider>().joinByCode(
+              codeCtrl.text,
+              email,
+            );
             if (!ctx.mounted) return;
             if (res.error != null) {
               setState(() {
@@ -73,10 +85,13 @@ class CreateScreen extends StatelessWidget {
               return;
             }
             // Dentro: avisar (con botón "Ir al chat") y caer directo en el chat.
-            unawaited(NotificationsService.instance.showPickupChat(
+            unawaited(
+              NotificationsService.instance.showPickupChat(
                 '¡Estás dentro! 🏀',
                 'Tocá para ir al chat del pickup.',
-                res.pickupId!));
+                res.pickupId!,
+              ),
+            );
             crewActivityNotifier.value = true;
             Navigator.of(dialogCtx).pop();
             Navigator.of(context).push(
@@ -89,16 +104,21 @@ class CreateScreen extends StatelessWidget {
           return AlertDialog(
             backgroundColor: AppColors.bgElev,
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppShape.rCard)),
-            title: Text('Unirse a pickup game',
-                style: AppText.archivo(size: 18, weight: FontWeight.w900)),
+              borderRadius: BorderRadius.circular(AppShape.rCard),
+            ),
+            title: Text(
+              'Unirse a pickup game',
+              style: AppText.archivo(size: 18, weight: FontWeight.w900),
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   'Ingresá el código de 5 dígitos que te pasó quien creó el pickup.',
-                  style:
-                      AppText.grotesk(size: 13, color: AppColors.white(0.65)),
+                  style: AppText.grotesk(
+                    size: 13,
+                    color: AppColors.white(0.65),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -109,18 +129,20 @@ class CreateScreen extends StatelessWidget {
                   maxLength: 5,
                   textAlign: TextAlign.center,
                   style: AppText.archivo(
-                      size: 24,
-                      weight: FontWeight.w900,
-                      color: AppColors.accent,
-                      letterSpacing: 0.35),
+                    size: 24,
+                    weight: FontWeight.w900,
+                    color: AppColors.accent,
+                    letterSpacing: 0.35,
+                  ),
                   decoration: InputDecoration(
                     counterText: '',
                     hintText: '·····',
                     hintStyle: AppText.archivo(
-                        size: 24,
-                        weight: FontWeight.w900,
-                        color: AppColors.white(0.2),
-                        letterSpacing: 0.35),
+                      size: 24,
+                      weight: FontWeight.w900,
+                      color: AppColors.white(0.2),
+                      letterSpacing: 0.35,
+                    ),
                     filled: true,
                     fillColor: AppColors.white(0.05),
                     border: OutlineInputBorder(
@@ -132,21 +154,25 @@ class CreateScreen extends StatelessWidget {
                 ),
                 if (error != null) ...[
                   const SizedBox(height: 10),
-                  Text(error!,
-                      textAlign: TextAlign.center,
-                      style: AppText.grotesk(
-                          size: 12,
-                          weight: FontWeight.w600,
-                          color: AppColors.busy)),
+                  Text(
+                    error!,
+                    textAlign: TextAlign.center,
+                    style: AppText.grotesk(
+                      size: 12,
+                      weight: FontWeight.w600,
+                      color: AppColors.busy,
+                    ),
+                  ),
                 ],
               ],
             ),
             actions: [
               TextButton(
                 onPressed: busy ? null : () => Navigator.of(dialogCtx).pop(),
-                child: Text('Cancelar',
-                    style: AppText.grotesk(
-                        size: 13, color: AppColors.white(0.6))),
+                child: Text(
+                  'Cancelar',
+                  style: AppText.grotesk(size: 13, color: AppColors.white(0.6)),
+                ),
               ),
               TextButton(
                 onPressed: busy ? null : join,
@@ -155,14 +181,19 @@ class CreateScreen extends StatelessWidget {
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: AppColors.accent),
+                          strokeWidth: 2,
+                          color: AppColors.accent,
+                        ),
                       )
-                    : Text('UNIRME',
+                    : Text(
+                        'UNIRME',
                         style: AppText.archivo(
-                            size: 13,
-                            weight: FontWeight.w900,
-                            color: AppColors.accent,
-                            letterSpacing: 0.08)),
+                          size: 13,
+                          weight: FontWeight.w900,
+                          color: AppColors.accent,
+                          letterSpacing: 0.08,
+                        ),
+                      ),
               ),
             ],
           );
@@ -175,109 +206,108 @@ class CreateScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: AppColors.bg,
-      child: Stack(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 56, 20, 160),
         children: [
-          // Capa de graffiti decorativa centrada en el fondo.
-          const Positioned.fill(
-            child: Center(
-              child: BasketballGraffiti(size: 300, color: AppColors.ink),
-            ),
-          ),
-          ListView(
-            padding: const EdgeInsets.fromLTRB(20, 56, 20, 160),
-            children: [
-              // Titular de dos líneas, como Canchas y Crew: el imperativo
-              // describe lo que se hace acá (armar un pickup, registrar).
-              Text.rich(
+          // Titular de dos líneas, como Canchas y Crew: el imperativo
+          // describe lo que se hace acá (armar un pickup, registrar).
+          Text.rich(
+            TextSpan(
+              text: 'Armá tu\n',
+              style: AppText.display(
+                size: 34,
+                weight: FontWeight.w900,
+                letterSpacing: -0.01,
+                height: 1.05,
+                shadows: AppFx.inkGlow(),
+              ),
+              children: [
                 TextSpan(
-                  text: 'Armá tu\n',
+                  text: 'juego.',
                   style: AppText.display(
                     size: 34,
                     weight: FontWeight.w900,
+                    color: AppColors.accent,
                     letterSpacing: -0.01,
                     height: 1.05,
-                    shadows: AppFx.inkGlow(),
+                    shadows: AppFx.accentGlow(),
                   ),
-                  children: [
-                    TextSpan(
-                      text: 'juego.',
-                      style: AppText.display(
-                        size: 34,
-                        weight: FontWeight.w900,
-                        color: AppColors.accent,
-                        letterSpacing: -0.01,
-                        height: 1.05,
-                        shadows: AppFx.accentGlow(),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Una sola card con las opciones como filas planas separadas por
+          // hairlines (mismo lenguaje editorial que el perfil).
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(AppShape.rCard),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                for (var i = 0; i < _options.length; i++) ...[
+                  if (i > 0) Container(height: 1, color: AppColors.white(0.06)),
+                  PressableWidget(
+                    onTap: () => _onTap(context, i),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 16,
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              // Una sola card con las opciones como filas planas separadas por
-              // hairlines (mismo lenguaje editorial que el perfil).
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(AppShape.rCard),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  children: [
-                    for (var i = 0; i < _options.length; i++) ...[
-                      if (i > 0)
-                        Container(height: 1, color: AppColors.white(0.06)),
-                      PressableWidget(
-                        onTap: () => _onTap(context, i),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 18, vertical: 16),
-                          child: Row(
-                            children: [
-                              Icon(_options[i].$3,
-                                  size: 24, color: AppColors.accent),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
+                        children: [
+                          Icon(
+                            _options[i].$3,
+                            size: 24,
+                            color: AppColors.accent,
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
                                   children: [
-                                    Row(
-                                      children: [
-                                        Flexible(
-                                          child: Text(
-                                            _options[i].$1,
-                                            style: AppText.archivo(
-                                                size: 16,
-                                                weight: FontWeight.w800),
-                                          ),
+                                    Flexible(
+                                      child: Text(
+                                        _options[i].$1,
+                                        style: AppText.archivo(
+                                          size: 16,
+                                          weight: FontWeight.w800,
                                         ),
-                                        if (_wip.contains(i)) ...[
-                                          const SizedBox(width: 8),
-                                          const UnderConstructionBadge(),
-                                        ],
-                                      ],
+                                      ),
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      _options[i].$2,
-                                      style: AppText.grotesk(
-                                          size: 12,
-                                          color: AppColors.white(0.55)),
-                                    ),
+                                    if (_wip.contains(i)) ...[
+                                      const SizedBox(width: 8),
+                                      const UnderConstructionBadge(),
+                                    ],
                                   ],
                                 ),
-                              ),
-                              Icon(Icons.chevron_right,
-                                  color: AppColors.white(0.35), size: 20),
-                            ],
+                                const SizedBox(height: 2),
+                                Text(
+                                  _options[i].$2,
+                                  style: AppText.grotesk(
+                                    size: 12,
+                                    color: AppColors.white(0.55),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
+                          Icon(
+                            Icons.chevron_right,
+                            color: AppColors.white(0.35),
+                            size: 20,
+                          ),
+                        ],
                       ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),

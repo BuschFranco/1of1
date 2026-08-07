@@ -330,14 +330,16 @@ export const PICKUP_SETTING_TYPES = [
   'nivel',
   'modalidad',
   'marca',
+  'precio_entrada',
 ];
 
 export interface PickupSetting {
   /** 'edad' (min años) | 'altura' (minCm) | 'peso' (maxKg) | 'nivel'
    *  (value: profesional|amateur) | 'modalidad' (value: competencia|casual) |
-   *  'marca' (brand, useKit). */
+   *  'marca' (brand, useKit) | 'precio_entrada' (min = monto en ARS). */
   type: string;
-  /** Edad mínima (años), altura mínima (cm) o peso máximo (kg). */
+  /** Edad mínima (años), altura mínima (cm), peso máximo (kg) o monto de
+   *  entrada (ARS) para precio_entrada. */
   min?: number;
   minCm?: number;
   maxKg?: number;
@@ -388,6 +390,10 @@ export function settingsFromDb(raw: unknown): PickupSetting[] {
           : ['competencia', 'casual'];
       if (!allowed.includes(value)) continue;
       setting.value = value;
+    } else if (type === 'precio_entrada') {
+      const min = int('min') ?? int('value');
+      if (min === undefined || min < 1 || min > 100000) continue;
+      setting.min = min;
     } else {
       // marca
       const brand =

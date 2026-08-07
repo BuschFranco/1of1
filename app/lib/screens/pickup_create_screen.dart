@@ -736,6 +736,47 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
             style: AppText.grotesk(size: 11, color: AppColors.white(0.45))),
         const SizedBox(height: 10),
         _toggleRow(
+          'precio_entrada',
+          'Precio de entrada',
+          Icons.attach_money,
+          helpOnTap: () => showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              backgroundColor: AppColors.card,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              content: Text(
+                'Se abona al llegar al pickup y se abona al administrador del pickup.',
+                style: AppText.grotesk(size: 14, color: AppColors.white(0.85)),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('ENTENDIDO',
+                      style: AppText.grotesk(
+                          size: 12,
+                          weight: FontWeight.w700,
+                          color: AppColors.accent)),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_settingOn('precio_entrada')) ...[
+          const SizedBox(height: 8),
+          _configField(
+            _settingCtrl('precio_entrada'),
+            numeric: true,
+            hint: 'Monto en ARS (ej. 2500)',
+            prefix: '\$ ',
+            onChanged: (v) => _setSetting(PickupSetting(
+              type: 'precio_entrada',
+              min: int.tryParse(v) ?? 0,
+            )),
+          ),
+        ],
+        const SizedBox(height: 8),
+        _toggleRow(
           'edad',
           'Edad mínima',
           Icons.cake_outlined,
@@ -874,6 +915,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     String? subtitle,
     bool? value,
     ValueChanged<bool>? onChanged,
+    VoidCallback? helpOnTap,
   }) {
     final on = value ?? _settingOn(type);
     return Row(
@@ -884,9 +926,34 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label,
-                  style: AppText.grotesk(
-                      size: 13, color: AppColors.white(0.85))),
+              Row(
+                children: [
+                  Text(label,
+                      style: AppText.grotesk(
+                          size: 13, color: AppColors.white(0.85))),
+                  if (helpOnTap != null) ...[
+                    const SizedBox(width: 4),
+                    GestureDetector(
+                      onTap: helpOnTap,
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.white(0.4)),
+                        ),
+                        child: Center(
+                          child: Text('?',
+                              style: AppText.grotesk(
+                                  size: 10,
+                                  weight: FontWeight.w700,
+                                  color: AppColors.white(0.5))),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
               if (subtitle != null) ...[
                 const SizedBox(height: 1),
                 Text(subtitle,

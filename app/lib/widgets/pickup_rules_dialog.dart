@@ -29,6 +29,8 @@ IconData settingIcon(String type) {
       return Icons.emoji_events_outlined;
     case 'marca':
       return Icons.branding_watermark_outlined;
+    case 'precio_entrada':
+      return Icons.attach_money;
   }
   return Icons.tune;
 }
@@ -76,10 +78,18 @@ class _PickupRulesDialog extends StatelessWidget {
                       _sectionLabel('Recompensa'),
                       for (final r in pickup.rewards) _row(r.label),
                     ],
+                    // Precio de entrada: nota especial.
+                    if (pickup.settings
+                        .any((s) => s.isEntryPrice && s.isWellFormed)) ...[
+                      if (pickup.rewards.isNotEmpty) const SizedBox(height: 8),
+                      _sectionLabel('Entrada'),
+                      _entryPriceNote(pickup),
+                    ],
                     if (pickup.settings.isNotEmpty) ...[
                       if (pickup.rewards.isNotEmpty) const SizedBox(height: 8),
                       _sectionLabel('Reglas'),
-                      for (final s in pickup.settings) _row(s.label),
+                      for (final s in pickup.settings)
+                        if (!s.isEntryPrice) _row(s.label),
                     ],
                   ],
                 ),
@@ -134,4 +144,38 @@ class _PickupRulesDialog extends StatelessWidget {
           ],
         ),
       );
+
+  Widget _entryPriceNote(Pickup pickup) {
+    final entry =
+        pickup.settings.where((s) => s.isEntryPrice && s.isWellFormed);
+    if (entry.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.attach_money,
+              size: 18, color: AppColors.accent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(entry.first.label,
+                    style: AppText.grotesk(
+                        size: 13,
+                        color: Colors.white,
+                        weight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(
+                    'Se abona al llegar al pickup y se abona al administrador del pickup.',
+                    style: AppText.grotesk(
+                        size: 11, color: AppColors.white(0.55))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
