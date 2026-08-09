@@ -30,7 +30,36 @@ El `10` es **DEVELOPER_ERROR** = SHA-1 no registrada (no es un bug de código).
 | --- | --- | --- | --- |
 | **Debug** | `flutter run` / builds de debug | `4C:4F:F6:84:BE:0C:55:DE:F4:10:3A:DB:1F:D5:C9:4C:FE:8C:13:AD` | ✅ sí |
 | **Upload (release)** | APK/AAB release firmado con `android/app/upload-keystore.jks` (alias `upload`) | `6B:BB:50:20:3B:60:B6:66:22:FD:EA:FA:04:3E:E1:0D:D2:79:BF:86` | ⬅️ cargar |
-| **Play App Signing** | app instalada desde Play Store (Google re-firma con SU clave) | la da **Play Console → Configuración → Firma de la app** al publicar | pendiente |
+| **Play App Signing** | app instalada desde Play Store (Google re-firma con SU clave) | `78:09:3D:DE:2C:D2:5A:79:C4:C1:D8:12:26:98:2A:C9:E4:D4:C5:ED` | ⬅️ cargar |
+
+> **Ojo con las dos huellas de Play Console.** La página de firma muestra el
+> *certificado de la clave de subida* (= la fila "Upload" de acá) y el
+> *certificado de la clave de firma de la app* (= la fila "Play App Signing").
+> Son distintas y hay que registrar **las dos**: la de subida cubre los APK que
+> compilás e instalás por adb, la de firma cubre todo lo que baje de Play.
+> Si falta la segunda, la app instalada desde la tienda muestra el **mapa en
+> blanco** y el login con Google falla con `DEVELOPER_ERROR`.
+>
+> En Play Console la huella de firma vive en **Protegida con Play → Protección
+> de Play Store → Gestionar la firma de apps de Play** (Google sacó las
+> herramientas de firma de los menús viejos de "Release"; la propia ayuda del
+> cliente OAuth de Android cita esa ruta).
+>
+> **Un cliente OAuth de Android admite UNA sola huella.** Para cubrir varias
+> firmas hay que crear **un cliente por huella**, todos con el mismo package
+> `com.buschfranco.oneofone`. La restricción de la Maps API key, en cambio, sí
+> acepta varios pares package + huella en la misma key.
+>
+> La huella de Play App Signing de arriba se obtuvo del device (agosto 2026),
+> leyendo el error que imprime el propio SDK de Maps:
+>
+> ```bash
+> "C:\Android\platform-tools\adb.exe" logcat -d | grep -A3 "Authorization failure"
+> ```
+>
+> Imprime `Android Application (<cert_fingerprint>;<package_name>): <SHA-1>;com.buschfranco.oneofone`.
+> Sirve para verificar con qué firma quedó instalada la app, sin depender de
+> navegar Play Console.
 
 SHA-256 (por si algún servicio la pide, ej. Firebase / App Links):
 
