@@ -42,6 +42,27 @@ import {
 } from '../domain/wire';
 import { PrismaService } from '../prisma/prisma.module';
 
+/** Un pickup se considera TERMINADO 24 h después de su fecha/hora. Es la regla
+ * de retención (el pickup y su chat se borran un día después del partido) y la
+ * usan: unirse (`addMember`), el listado público, y el límite de un pickup
+ * activo por creador (`create`). Su gemela en la app es `Pickup.isExpired`. */
+const PICKUP_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Cuánto ocupa la cancha un pickup, contado desde su horario de inicio.
+ * `Pickup` no tiene campo de duración a propósito: es un bloque fijo. Se manda
+ * al cliente en `availability()` para que el picker no duplique el número. */
+const PICKUP_SLOT_MS = 90 * 60 * 1000;
+
+/** Aros que consume un pickup según su formato: un **5v5 es cancha completa**
+ * (usa los dos aros) y un **4v4 o menos es media cancha** (uno solo). Por eso
+ * una cancha de 4 aros aguanta 2 partidos de 5v5 o 4 de 4v4.
+ *
+ * Se clampea a [capacity] para que un 5v5 siga siendo creable en una cancha de
+ * un aro (ocupándola entera) en vez de quedar prohibido para siempre. */
+function hoopCost(teamSize: number, capacity: number): number {
+  return Math.min(teamSize >= 5 ? 2 : 1, capacity);
+}
+
 // ── DTOs ────────────────────────────────────────────────────────────────────
 
 /** Recompensa de un pickup (opcional, 1 por tipo): monetaria (monto en ARS),
@@ -189,15 +210,142 @@ class PickupsService {
     return pickupWire(row);
   }
 
+  /** Capacidad de la cancha en aros. Mínimo 1: hay filas viejas en 0 y con 0
+   * no se podría crear nada. */
+  private async courtCapacity(courtId: string): Promise<number> {
+    const court = await this.prisma.court.findUnique({
+      where: { id: courtId },
+      select: { hoops: true },
+    });
+    return Math.max(1, court?.hoops ?? 1);
+  }
+
+  /** Valida que el horario tenga lugar en la cancha: la suma de aros de los
+   * pickups que se solapan no puede superar la capacidad.
+   *
+   * Como todos los pickups ocupan el mismo bloque (`PICKUP_SLOT_MS`), dos se
+   * solapan exactamente cuando sus inicios distan menos de un bloque — así que
+   * el rango de la query YA es el test de solapamiento, sin filtrado extra.
+   *
+   * [excludeId] es el propio pickup al reprogramar: no debe chocar consigo mismo.
+   */
+  private async assertSlotLibre(
+    courtId: string,
+    startsAt: Date,
+    teamSize: number,
+    excludeId?: string,
+  ): Promise<void> {
+    const capacity = await this.courtCapacity(courtId);
+    const start = startsAt.getTime();
+    const rows = await this.prisma.pickup.findMany({
+      where: {
+        courtId,
+        archived: false,
+        ...(excludeId && { id: { not: excludeId } }),
+        dateTime: {
+          gt: new Date(start - PICKUP_SLOT_MS),
+          lt: new Date(start + PICKUP_SLOT_MS),
+        },
+      },
+      select: { teamSize: true },
+    });
+    const usados = rows.reduce(
+      (acc, r) => acc + hoopCost(r.teamSize, capacity),
+      0,
+    );
+    if (usados + hoopCost(teamSize, capacity) > capacity) {
+      throw new ForbiddenException(
+        'Ese horario ya está ocupado en esta cancha. Elegí otro.',
+      );
+    }
+  }
+
+  /** Horarios ocupados de una cancha en un día, para pintar el picker.
+   *
+   * Devuelve SOLO tiempos y aros: nada de títulos, creadores ni ids. Un pickup
+   * privado no debe filtrar más que "la cancha está ocupada a tal hora".
+   *
+   * [dateIso] es el día en `YYYY-MM-DD`. Los límites se calculan en UTC porque
+   * las fechas se guardan como reloj de pared en UTC (ver `parseUtc`).
+   */
+  async availability(
+    courtId: string,
+    dateIso: string,
+    excludePickupId?: string,
+  ): Promise<{
+    hoops: number;
+    slotMinutes: number;
+    busy: { startsAt: string; hoops: number }[];
+  }> {
+    const capacity = await this.courtCapacity(courtId);
+    const from = parseUtc(`${dateIso.trim().slice(0, 10)}T00:00:00`);
+    if (!from) {
+      return { hoops: capacity, slotMinutes: PICKUP_SLOT_MS / 60000, busy: [] };
+    }
+    const to = new Date(from.getTime() + 24 * 60 * 60 * 1000);
+    const rows = await this.prisma.pickup.findMany({
+      where: {
+        courtId,
+        archived: false,
+        ...(excludePickupId && { id: { not: excludePickupId } }),
+        // ±1 bloque para captar los que se derraman del día anterior/siguiente.
+        dateTime: {
+          gt: new Date(from.getTime() - PICKUP_SLOT_MS),
+          lt: new Date(to.getTime() + PICKUP_SLOT_MS),
+        },
+      },
+      select: { dateTime: true, teamSize: true },
+      orderBy: { dateTime: 'asc' },
+    });
+    return {
+      hoops: capacity,
+      slotMinutes: PICKUP_SLOT_MS / 60000,
+      busy: rows
+        .filter((r) => r.dateTime !== null)
+        .map((r) => ({
+          startsAt: r.dateTime!.toISOString(),
+          hoops: hoopCost(r.teamSize, capacity),
+        })),
+    };
+  }
+
   async create(createdBy: string, dto: CreatePickupDto): Promise<Pickup> {
+    const e = createdBy.trim().toLowerCase();
+    const teamSize = dto.teamSize ?? 3;
+    const startsAt = parseUtc(dto.dateTime);
+
+    // Un pickup activo por creador: hasta que el suyo no termine (o lo elimine)
+    // no puede abrir otro. Se valida acá porque el cliente puede quedar con la
+    // lista desactualizada; el guard de la app es solo para avisar antes.
+    const activo = await this.prisma.pickup.findFirst({
+      where: {
+        archived: false,
+        createdBy: { equals: e, mode: 'insensitive' },
+        // Activo = sin fecha (legacy, nunca expira) o dentro de la ventana de
+        // 24 h posteriores al partido.
+        OR: [
+          { dateTime: null },
+          { dateTime: { gte: new Date(Date.now() - PICKUP_TTL_MS) } },
+        ],
+      },
+    });
+    if (activo) {
+      throw new ForbiddenException(
+        'Ya tenés un pickup activo. Vas a poder crear otro cuando termine, o si lo eliminás.',
+      );
+    }
+
+    // No pisar el horario de otro pickup en la misma cancha.
+    if (startsAt) {
+      await this.assertSlotLibre(dto.courtId, startsAt, teamSize);
+    }
+
     // El creador SIEMPRE participa: va al Equipo A (el de menos miembros si A
     // está lleno). Los contadores de la app (jugadores, cupo, equipos del chat)
     // se leen de estas listas, así que sin esto un pickup recién creado figura
     // con 0 jugadores. Dedup case-insensitive por si el cliente ya lo mandó.
-    const e = createdBy.trim().toLowerCase();
     const teamA = [...(dto.teamAMembers ?? [])].filter((m) => !this.eq(m, e));
     const teamB = [...(dto.teamBMembers ?? [])].filter((m) => !this.eq(m, e));
-    const teamSize = dto.teamSize ?? 3;
     // El creador elige su equipo: se respeta dónde lo mandó el cliente (A o
     // B). Si no lo mandó (clientes viejos), cae al equipo con lugar (A primero).
     const askedA = (dto.teamAMembers ?? []).some((m) => this.eq(m, e));
@@ -212,7 +360,7 @@ class PickupsService {
         title: dto.title,
         courtId: dto.courtId,
         createdBy,
-        dateTime: parseUtc(dto.dateTime),
+        dateTime: startsAt,
         maxPlayers: dto.maxPlayers ?? 10,
         vibe: dto.vibe ?? 'Casual',
         notes: dto.notes ?? '',
@@ -253,6 +401,27 @@ class PickupsService {
       cur.teamBMembers.some((m) => this.eq(m, email));
     if (!isMember) {
       throw new ForbiddenException('No participás de este pickup.');
+    }
+    // Reprogramar tampoco puede pisar a otro: sin esto, el chat del pickup sería
+    // una puerta de atrás para saltear la validación de create(). Se excluye a sí
+    // mismo, si no chocaría con su propio horario actual.
+    //
+    // OJO: solo se valida si la fecha REALMENTE cambia. La app manda el pickup
+    // entero en cada PATCH (aceptar, rechazar, mover jugadores...), así que
+    // validar por `!== undefined` haría fallar esas acciones en pickups que hoy
+    // ya están solapados — nada lo impedía antes de esta regla.
+    if (dto.dateTime !== undefined) {
+      const startsAt = parseUtc(dto.dateTime);
+      const actual = parseUtc(cur.dateTime);
+      const cambia = startsAt?.getTime() !== actual?.getTime();
+      if (startsAt && cambia) {
+        await this.assertSlotLibre(
+          cur.courtId,
+          startsAt,
+          dto.teamSize ?? cur.teamSize,
+          pageId,
+        );
+      }
     }
     const row = await this.prisma.pickup.update({
       where: { id: pageId },
@@ -316,7 +485,7 @@ class PickupsService {
     return rows
       .filter((p) => {
         const d = p.dateTime ? Date.parse(p.dateTime.toISOString()) : NaN;
-        return Number.isNaN(d) || Date.now() <= d + 24 * 60 * 60 * 1000;
+        return Number.isNaN(d) || Date.now() <= d + PICKUP_TTL_MS;
       })
       .map(pickupWire);
   }
@@ -340,7 +509,7 @@ class PickupsService {
 
     // Expirado (24h después del horario)?
     const d = p.dateTime ? Date.parse(p.dateTime) : NaN;
-    if (!Number.isNaN(d) && Date.now() > d + 24 * 60 * 60 * 1000) {
+    if (!Number.isNaN(d) && Date.now() > d + PICKUP_TTL_MS) {
       throw new ForbiddenException('Ese pickup ya terminó.');
     }
     if (this.eq(p.createdBy, e)) {
@@ -520,6 +689,18 @@ class PickupsController {
   @Post('public/join')
   publicJoin(@CurrentUser() user: AuthUser, @Body() dto: JoinPublicPickupDto) {
     return this.pickups.joinById(dto.pickupId, user.email);
+  }
+
+  /** Horarios ocupados de una cancha en un día (para el picker de horarios).
+   * `date` va en `YYYY-MM-DD`; `excludePickupId` es el pickup que se está
+   * reprogramando, para que no figure ocupándose a sí mismo. */
+  @Get('availability')
+  availability(
+    @Query('courtId') courtId: string,
+    @Query('date') date: string,
+    @Query('excludePickupId') excludePickupId?: string,
+  ) {
+    return this.pickups.availability(courtId ?? '', date ?? '', excludePickupId);
   }
 
   @Patch(':pageId')

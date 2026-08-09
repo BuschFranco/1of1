@@ -271,14 +271,20 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
     var ok = true;
     try {
       await runBusy(context, action);
-    } catch (_) {
+    } catch (err) {
       ok = false;
       if (mounted) {
+        // Ante un 403 el backend explica el motivo concreto (horario ocupado,
+        // no sos el creador, ya no participás): mostrarlo tal cual, porque
+        // "revisá la conexión" manda a buscar el problema donde no está.
+        final msg = err is ApiException && err.statusCode == 403
+            ? err.message
+            : 'No se pudo actualizar. Revisá la conexión.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('No se pudo actualizar. Revisá la conexión.',
-                style: AppText.grotesk(size: 13)),
+            content: Text(msg, style: AppText.grotesk(size: 13)),
             backgroundColor: AppColors.bgElev,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -534,8 +540,15 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
         initial = DateTime.parse(previous);
       } catch (_) {/* fecha corrupta: el picker arranca en hoy */}
     }
-    final picked =
-        await pickPickupDateTime(context, _court(pickup), initial: initial);
+    final picked = await pickPickupDateTime(
+      context,
+      _court(pickup),
+      initial: initial,
+      teamSize: pickup.teamSize,
+      // Se excluye a sí mismo: si no, su propio horario actual figuraría
+      // ocupado y no se podría ni reconfirmar la fecha que ya tenía.
+      excludePickupId: pickup.pageId,
+    );
     if (picked == null || !mounted) return;
 
     final iso = picked.toIso8601String();

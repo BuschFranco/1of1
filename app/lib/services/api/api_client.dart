@@ -310,6 +310,20 @@ class ApiClient {
   Future<List<Map<String, dynamic>>> publicPickups(String courtId) =>
       _list(_send('GET', '/pickups/public', query: {'courtId': courtId}));
 
+  /// Horarios ocupados de una cancha en un día ([date] en `YYYY-MM-DD`), para
+  /// el picker. [excludePickupId] excluye el pickup que se está reprogramando.
+  Future<Map<String, dynamic>> courtAvailability(
+    String courtId,
+    String date, {
+    String? excludePickupId,
+  }) =>
+      _map(_send('GET', '/pickups/availability', query: {
+        'courtId': courtId,
+        'date': date,
+        if (excludePickupId != null && excludePickupId.isNotEmpty)
+          'excludePickupId': excludePickupId,
+      }));
+
   /// Unirse a un pickup público por id (sin código). 403 si no es público,
   /// está lleno, expiró o ya se participa.
   Future<Map<String, dynamic>> joinPublicPickup(String pickupId) =>

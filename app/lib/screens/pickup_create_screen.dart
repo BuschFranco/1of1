@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/courts.dart';
 import '../data/models.dart';
+import '../services/api/api_client.dart';
 import '../services/courts_provider.dart';
 import '../services/friends_service.dart';
 import '../services/notifications_service.dart';
@@ -201,14 +202,20 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
         unawaited(pickupsProvider.loadForUser(_userEmail, force: true));
         Navigator.pop(context);
       }
-    } catch (_) {
+    } catch (err) {
       if (mounted) {
         setState(() => _saving = false);
+        // El backend rechaza con 403 y un motivo concreto (p. ej. ya tenés un
+        // pickup activo). Mostrarlo tal cual es más útil que el genérico: si no,
+        // el usuario no entiende por qué no lo dejó crear.
+        final msg = err is ApiException && err.statusCode == 403
+            ? err.message
+            : 'No se pudo crear el pickup.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('No se pudo crear el pickup.',
-                style: AppText.grotesk(size: 13)),
+            content: Text(msg, style: AppText.grotesk(size: 13)),
             backgroundColor: AppColors.bg,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -310,7 +317,16 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                         (
                           label: '${n}v$n',
                           active: _teamSize == n,
-                          onTap: () => setState(() => _teamSize = n),
+                          onTap: () => setState(() {
+                            // Cruzar hacia/desde 5v5 cambia cuánto ocupa el
+                            // pickup (cancha completa vs media), así que el
+                            // horario elegido puede haber dejado de tener lugar:
+                            // se limpia para forzar re-selección, igual que al
+                            // cambiar de cancha.
+                            final cambiaOcupacion = (_teamSize >= 5) != (n >= 5);
+                            _teamSize = n;
+                            if (cambiaOcupacion) _when = null;
+                          }),
                         ),
                     ]),
                     const SizedBox(height: 18),
@@ -1148,8 +1164,14 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
   /// dispara el guard de creación cuando falta fecha.
   Future<void> _openDatePicker() async {
     if (_selected == null) return;
-    final picked =
-        await pickPickupDateTime(context, _selected, initial: _when);
+    final picked = await pickPickupDateTime(
+      context,
+      _selected,
+      initial: _when,
+      // El formato define cuánto ocupa la cancha: un 5v5 usa los dos aros, un
+      // 4v4 o menos uno solo. Sin esto el picker mostraría lugar de más.
+      teamSize: _teamSize,
+    );
     if (picked == null || !mounted) return;
     setState(() => _when = picked);
   }

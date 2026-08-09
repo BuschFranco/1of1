@@ -6,6 +6,82 @@ import '../data/models.dart';
 import 'api/api_client.dart';
 import 'cache/api_cache.dart';
 
+/// Ocupación de una cancha en un día, para pintar el picker de horarios.
+///
+/// La calcula el backend (`GET /pickups/availability`), que devuelve solo
+/// tiempos y aros: un pickup privado no filtra más que "la cancha está ocupada
+/// a tal hora".
+class CourtAvailability {
+  /// Aros de la cancha: cuántos partidos de media cancha entran a la vez.
+  final int hoops;
+
+  /// Cuánto ocupa un pickup desde su horario de inicio. Lo manda el server para
+  /// no duplicar acá su constante (`PICKUP_SLOT_MS`).
+  final Duration slot;
+
+  /// Inicio de cada pickup ya agendado y cuántos aros se lleva. Los `startsAt`
+  /// son DateTime **locales** con el reloj de pared original (ver [fromApi]).
+  final List<({DateTime startsAt, int hoops})> busy;
+
+  const CourtAvailability({
+    required this.hoops,
+    required this.slot,
+    required this.busy,
+  });
+
+  /// Todo libre. Es el fallback cuando la consulta falla: nunca dejamos al
+  /// usuario sin poder elegir horario por un problema de red — el backend
+  /// revalida igual al crear.
+  static const CourtAvailability unknown = CourtAvailability(
+    hoops: 1,
+    slot: Duration(minutes: 90),
+    busy: [],
+  );
+
+  /// Ojo con las fechas: la app manda ISO local SIN offset y el backend lo trata
+  /// como UTC (regla heredada, ver `parseUtc` en `backend/src/domain/wire.ts`).
+  /// O sea que lo que vuelve en UTC es el **reloj de pared** original, no un
+  /// instante real. Por eso se reconstruye componente a componente como
+  /// DateTime local, en vez de usar `DateTime.parse().toLocal()`, que correría
+  /// todo por el offset de la zona.
+  factory CourtAvailability.fromApi(Map<String, dynamic> json) {
+    final raw = (json['busy'] as List?) ?? const [];
+    final busy = <({DateTime startsAt, int hoops})>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final parsed = DateTime.tryParse('${item['startsAt']}');
+      if (parsed == null) continue;
+      final u = parsed.toUtc();
+      busy.add((
+        startsAt: DateTime(u.year, u.month, u.day, u.hour, u.minute),
+        hoops: (item['hoops'] as num?)?.toInt() ?? 1,
+      ));
+    }
+    final minutes = (json['slotMinutes'] as num?)?.toInt() ?? 90;
+    return CourtAvailability(
+      hoops: (json['hoops'] as num?)?.toInt() ?? 1,
+      slot: Duration(minutes: minutes),
+      busy: busy,
+    );
+  }
+
+  /// Aros que consume un pickup según su formato: un 5v5 es cancha completa
+  /// (2 aros), un 4v4 o menos es media cancha (1). Gemela de `hoopCost` en el
+  /// backend: si cambia una, cambiá la otra.
+  int costOf(int teamSize) => (teamSize >= 5 ? 2 : 1).clamp(1, hoops);
+
+  /// True si a las [start] todavía entra un pickup de [teamSize] por equipo.
+  /// Todos los pickups ocupan el mismo bloque, así que dos se solapan cuando sus
+  /// inicios distan menos de [slot].
+  bool fits(DateTime start, int teamSize) {
+    var used = 0;
+    for (final b in busy) {
+      if (b.startsAt.difference(start).abs() < slot) used += b.hoops;
+    }
+    return used + costOf(teamSize) <= hoops;
+  }
+}
+
 /// Provee los pickups en los que el usuario está involucrado (como creador o
 /// invitado) y las operaciones de invitación/gestión: aceptar, rechazar, mover
 /// miembros de equipo, quitar miembros y eliminar el pickup. Todo vía backend.
@@ -111,6 +187,46 @@ class PickupsProvider extends ChangeNotifier {
             !p.hasAccepted(email) &&
             !p.hasDeclined(email))
         .toList();
+  }
+
+  /// Ocupación de [courtId] en el día [day] (se usa solo la fecha, no la hora).
+  ///
+  /// Ante cualquier error devuelve [CourtAvailability.unknown] (todo libre): es
+  /// preferible mostrar de más y que el backend rechace al crear, antes que
+  /// dejar al usuario sin poder elegir horario porque se cayó la red.
+  Future<CourtAvailability> availability(
+    String courtId,
+    DateTime day, {
+    String? excludePickupId,
+  }) async {
+    if (courtId.trim().isEmpty) return CourtAvailability.unknown;
+    final date = '${day.year.toString().padLeft(4, '0')}-'
+        '${day.month.toString().padLeft(2, '0')}-'
+        '${day.day.toString().padLeft(2, '0')}';
+    try {
+      final json = await _api.courtAvailability(
+        courtId,
+        date,
+        excludePickupId: excludePickupId,
+      );
+      return CourtAvailability.fromApi(json);
+    } catch (_) {
+      return CourtAvailability.unknown;
+    }
+  }
+
+  /// Pickup activo que creó [email], o null si no tiene ninguno.
+  ///
+  /// Regla de producto: **un solo pickup activo por creador**. Hasta que el suyo
+  /// no termine (24 h después del partido, ver [Pickup.isExpired]) o lo elimine,
+  /// no puede crear otro. Sirve para avisar antes de abrir el formulario; quien
+  /// decide de verdad es el backend, que revalida al crear.
+  Pickup? activeCreatedBy(String email) {
+    if (email.trim().isEmpty) return null;
+    for (final p in _pickups) {
+      if (p.isCreator(email) && !p.isExpired) return p;
+    }
+    return null;
   }
 
   /// Crea el pickup en el backend (el server genera el inviteCode de 5 dígitos

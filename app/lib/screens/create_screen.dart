@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../data/models.dart';
 import '../services/notifications_service.dart';
 import '../services/pickups_provider.dart';
 import '../services/session.dart';
@@ -40,6 +41,15 @@ class CreateScreen extends StatelessWidget {
 
   void _onTap(BuildContext context, int i) {
     if (i == 0) {
+      // Un solo pickup activo por creador: si ya tiene uno, ni abrimos el
+      // formulario. El backend revalida al crear (puede que la lista local
+      // esté desactualizada), pero avisar acá evita que llene todo al pedo.
+      final email = context.read<Session>().email ?? '';
+      final activo = context.read<PickupsProvider>().activeCreatedBy(email);
+      if (activo != null) {
+        _warnActivePickup(context, activo);
+        return;
+      }
       Navigator.of(
         context,
       ).push(MaterialPageRoute(builder: (_) => const PickupCreateScreen()));
@@ -52,6 +62,31 @@ class CreateScreen extends StatelessWidget {
     } else {
       showUnderConstruction(context, _options[i].$1);
     }
+  }
+
+  /// Aviso de que ya tiene un pickup activo, con atajo al chat de ese pickup
+  /// (desde ahí puede reprogramarlo o eliminarlo para liberar el lugar).
+  void _warnActivePickup(BuildContext context, Pickup activo) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Ya tenés un pickup activo. Vas a poder crear otro cuando termine, o si lo eliminás.',
+          style: AppText.grotesk(size: 13),
+        ),
+        backgroundColor: AppColors.bgElev,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'VER',
+          textColor: AppColors.accent,
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => PickupChatScreen(pickupId: activo.pageId),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   /// Modal para unirse a un pickup con el código de 5 dígitos que pasa el
