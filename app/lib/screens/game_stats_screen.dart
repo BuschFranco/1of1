@@ -250,10 +250,19 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
 
   Widget _summaryCard(List<PlaySession> matches) {
     final total = matches.fold(0, (s, m) => s + (m.userPoints ?? 0));
-    final count = matches.length;
+    // Una entrada puede valer por varios partidos: el conteo y el promedio van
+    // sobre los partidos REALES, no sobre las entradas del historial.
+    final count = matches.fold(0, (s, m) => s + (m.gamesPlayed + m.trainingsDone));
     final avg = count > 0 ? total / count : 0.0;
-    final best = matches.fold(0, (m, s) =>
-        (s.userPoints ?? 0) > m ? (s.userPoints ?? 0) : m);
+    // "Mejor partido": con los puntos cargados uno por uno sale del mejor
+    // partido individual; si solo se cargó el total de la sesión, es lo único
+    // que se sabe.
+    final best = matches.fold(0, (m, s) {
+      final v = s.hasGamePoints
+          ? s.gamePoints!.fold(0, (a, b) => b > a ? b : a)
+          : (s.userPoints ?? 0);
+      return v > m ? v : m;
+    });
     final withTime = matches.where((m) => m.seconds > 0);
     final ppm = withTime.isEmpty
         ? 0.0
@@ -347,10 +356,19 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
 
   // ── Evolución de puntos ──────────────────────────────────────────────────
 
+  /// Puntos partido por partido para el gráfico. Una sesión con los puntos
+  /// cargados uno por uno se expande en varios puntos; si solo se cargó el total
+  /// aporta uno solo, que es lo único que se sabe de ella.
+  static List<int> _pointSeries(List<PlaySession> matches) => [
+        for (final m in matches)
+          if (m.hasGamePoints) ...m.gamePoints! else (m.userPoints ?? 0),
+      ];
+
   Widget _evolutionCard(List<PlaySession> matches) {
+    final series = _pointSeries(matches);
     final spots = <FlSpot>[];
-    for (var i = 0; i < matches.length; i++) {
-      spots.add(FlSpot(i.toDouble(), (matches[i].userPoints ?? 0).toDouble()));
+    for (var i = 0; i < series.length; i++) {
+      spots.add(FlSpot(i.toDouble(), series[i].toDouble()));
     }
     final maxY = spots.fold<double>(
         0, (m, s) => s.y > m ? s.y : m);
@@ -368,7 +386,7 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
               minY: 0,
               maxY: topY,
               minX: 0,
-              maxX: (matches.length - 1).clamp(0, double.infinity).toDouble(),
+              maxX: (series.length - 1).clamp(0, double.infinity).toDouble(),
               gridData: FlGridData(
                 show: true,
                 drawVerticalLine: false,
@@ -406,7 +424,7 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
                   color: AppColors.accent,
                   barWidth: 3,
                   dotData: FlDotData(
-                    show: matches.length <= 20,
+                    show: series.length <= 20,
                     getDotPainter: (spot, percent, bar, index) =>
                         FlDotCirclePainter(
                             radius: 3,
@@ -555,11 +573,14 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
           ],
         );
 
+    // Cada barra es una SESIÓN, no un partido: el desglose 3PT/2PT/TL se carga
+    // una vez por sesión, así que no hay forma de repartirlo entre los partidos
+    // de una sesión múltiple.
     return _card(
       header: 'TRIPLES, DOBLES Y TIROS LIBRES',
       subtitle: matches.length > 10
-          ? 'Tus últimos 10 partidos'
-          : 'Por partido en el período',
+          ? 'Tus últimas 10 sesiones'
+          : 'Por sesión en el período',
       child: Padding(
         padding: const EdgeInsets.fromLTRB(6, 16, 14, 12),
         child: Column(

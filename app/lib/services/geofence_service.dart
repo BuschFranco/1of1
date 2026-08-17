@@ -42,6 +42,9 @@ Future<void> geofenceTriggered(GeofenceCallbackParams params) async {
       'Estás en una cancha',
       'Abrí 1of1 para registrar tu partido.',
     );
+    // Llegaste a una cancha: si el ahorro de energía está activo, la detección
+    // puede no llegar a arrancar. Avisar ahora, que todavía se está a tiempo.
+    await maybeNotifyPowerSave(prefs, playing: false);
   }
 }
 

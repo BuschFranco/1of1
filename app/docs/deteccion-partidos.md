@@ -257,10 +257,10 @@ hay latidos que exigir) y debe **resumirlo**, no cerrarlo por "gap".
 ### 5.5 Radar de respaldo (app muerta — red de seguridad, cada 15 min)
 
 Los fabricantes (Samsung especialmente) matan procesos, estrangulan geofences
-y foreground services. El radar es el plan Z: una alarma **periódica**
-(`kAlarmRadarId`, cada 15 min, sobrevive reinicios con `rescheduleOnReboot`)
-despierta un isolate que toma **UN solo fix** (timeout 12 s) y espeja lo que
-haría `_evaluate`:
+y foreground services. El radar es el plan Z: una **cadena de alarmas exactas**
+(`kAlarmRadarId`, cada 15 min, sobrevive reinicios con `rescheduleOnReboot`;
+cada ejecución programa la siguiente — ver §8.4) despierta un isolate que toma
+**UN solo fix** (timeout 12 s) y espeja lo que haría `_evaluate`:
 
 - **Sin partido ni dwell sembrado** → si estás dentro del radio de alguna
   cancha (usa el cache `courts_geo_cache` que escribe SyncCoordinator, porque
@@ -418,7 +418,8 @@ Samsung mata el proceso Y el foreground service con la app en background
 razonablemente — y aún así, sin la exención de batería ("Detección estable")
 pueden demorarse. Si un usuario reporta que "no detectó el partido", el
 checklist es: ¿permiso Siempre? ¿Detección automática activa? ¿exención de
-batería? ¿alarmas exactas permitidas?
+batería? ¿alarmas exactas permitidas? **¿ahorro de energía apagado?** (ver §8.5)
+y, en Samsung, **¿la app fuera de "suspensión profunda"?**
 
 ### 8.3 Modo prueba (mock)
 
@@ -428,11 +429,42 @@ geofences no interfieren (`enterCourtArea`/`leaveCourtArea` retornan) y los
 isolates leen `play_mock_pos` antes de pedir un fix. Sin esto, una cancha
 real cerca de tu casa arruinaría cualquier prueba simulada.
 
-### 8.4 El radar es inexacto por naturaleza
+### 8.4 El radar es una CADENA: si se corta, no vuelve
 
-`AndroidAlarmManager.periodic` usa alarmas inexactas: en Doze profundo los
-15 min pueden estirarse. Es aceptable porque el radar es la ÚLTIMA red, no la
-vía principal — pero no bajes la cadencia esperando precisión.
+El radar **ya no** usa `AndroidAlarmManager.periodic` (alarmas inexactas, que en
+Doze y con ahorro de energía se estiraban a lo que el SO quisiera, justo cuando
+más falta hace). Ahora es una **cadena de one-shots exactas**: cada ejecución de
+`alarmRadarCallback` programa la siguiente con `_oneShotAt`
+(`exact + allowWhileIdle`, que sí atraviesa Doze).
+
+El precio es que **un solo eslabón perdido mata el radar para siempre**. Por eso:
+
+- El trabajo real vive en `_radarTick()`, que devuelve si la cadena sigue viva, y
+  `alarmRadarCallback` **reprograma en un `finally`** — incluso si el tick lanzó.
+- La ÚNICA salida que corta la cadena es el logout real. Un **JWT vencido no la
+  mata**: se usa `requireFreshToken: false` para decidir si sigue viva, y el gate
+  estricto solo para decidir si se siembra detección nueva. Matarla por un token
+  vencido la dejaría muerta hasta reiniciar el proceso, porque el flag `_radarOn`
+  que la re-arma vive en el isolate principal y no se entera.
+- Si agregás un `return` en `_radarTick`, devolvé **`true`** salvo que quieras
+  apagar el radar de verdad.
+
+### 8.5 Ahorro de energía
+
+Con el ahorro activo el SO estrangula ubicación, geofences y foreground service.
+La app lo detecta con `battery_plus` (`isInBatterySaveMode` →
+`PowerManager.isPowerSaveMode`) y avisa: cartel en el panel de permisos, aviso en
+el indicador del mapa durante un partido, y **notificación** desde background
+(`maybeNotifyPowerSave`, con anti-spam de 6 h por episodio; la marca se borra
+cuando el ahorro se apaga).
+
+Se usa `battery_plus` y **no** el canal propio `oneofone/alarm_perm` porque ese se
+registra en la Activity y **no existe en los isolates de background**.
+
+Límite duro: si el SO manda la app a **suspensión profunda** (lista aparte de la
+optimización de batería, en Samsung), no corre nada — ni siquiera el código que
+dispara el aviso. Por eso el panel de permisos explica ese paso a mano: no hay
+intent que abra esa pantalla.
 
 ## 9. Cómo verificar que el background funciona (en la calle)
 

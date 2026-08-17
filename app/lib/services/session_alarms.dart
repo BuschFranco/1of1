@@ -328,25 +328,96 @@ Future<void> cancelBatteryWatch() async {
   await AndroidAlarmManager.cancel(kAlarmBatteryId);
 }
 
-/// Arranca el radar periódico de respaldo (con `rescheduleOnReboot` para que
-/// sobreviva reinicios del equipo). Lo programa SyncCoordinator cuando hay
-/// sesión + background habilitado + permiso "Siempre".
+/// Arranca el radar de respaldo. Lo programa SyncCoordinator cuando hay sesión +
+/// background habilitado + permiso "Siempre".
+///
+/// **Es una CADENA de alarmas exactas, no una periódica.** `AndroidAlarmManager
+/// .periodic` usa alarmas inexactas y en Doze / ahorro de energía los 15 min se
+/// estiran a lo que el SO quiera, justo cuando el radar más falta hace (es la
+/// red de seguridad de todo el sistema de detección). Con `_oneShotAt` cada
+/// disparo es `exact + allowWhileIdle`, que sí atraviesa Doze — el límite de
+/// ~1 disparo cada 9 min de `allowWhileIdle` entra cómodo en la cadencia de 15.
+///
+/// El precio: cada ejecución tiene que reprogramar la siguiente. Si un solo
+/// eslabón se corta, el radar no vuelve nunca. Por eso `alarmRadarCallback`
+/// reprograma en un `finally` (ver allá).
 Future<void> scheduleRadarWatch() async {
   if (!_isAndroid) return;
   await AndroidAlarmManager.cancel(kAlarmRadarId);
-  await AndroidAlarmManager.periodic(
-    _kRadarEvery,
+  await _scheduleNextRadar();
+}
+
+/// Programa el siguiente eslabón de la cadena del radar.
+Future<void> _scheduleNextRadar() async {
+  await _oneShotAt(
+    DateTime.now().add(_kRadarEvery),
     kAlarmRadarId,
     alarmRadarCallback,
-    wakeup: true,
-    allowWhileIdle: true,
-    rescheduleOnReboot: true,
   );
 }
 
 Future<void> cancelRadarWatch() async {
   if (!_isAndroid) return;
   await AndroidAlarmManager.cancel(kAlarmRadarId);
+}
+
+// ── Ahorro de energía ──────────────────────────────────────────────────────
+// Con el ahorro activo el SO estrangula ubicación, geofences y foreground
+// service, así que la detección se degrada EN SILENCIO: el usuario cree que su
+// partido se está midiendo y no pasa nada. Esto avisa.
+//
+// Se lee con `battery_plus` (→ PowerManager.isPowerSaveMode) y NO con el canal
+// propio de la app: `oneofone/alarm_perm` se registra en la Activity, así que no
+// existe en los isolates de background. battery_plus es plugin de pub y sí está.
+
+/// Cada cuánto, como mucho, se repite el aviso mientras el ahorro siga activo.
+/// Sin esto el radar avisaría cada 15 minutos.
+const Duration kPowerSaveNotifyCooldown = Duration(hours: 6);
+
+/// Cuándo se avisó por última vez. Clave GLOBAL: el isolate de background no
+/// conoce el userKey (mismo criterio que `session_jwt` y `last_bg_fix_millis`).
+const String kPowerSaveNotifiedKey = 'power_save_notified_at';
+
+/// True si el ahorro de energía está activo. False ante cualquier error: nunca
+/// alarmar por una lectura que falló.
+Future<bool> isPowerSaveOn() async {
+  try {
+    return await Battery().isInBatterySaveMode;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Avisa que el ahorro de energía puede estar frenando la detección, como mucho
+/// una vez cada [kPowerSaveNotifyCooldown].
+///
+/// Si el ahorro está apagado **borra la marca**, para que un episodio nuevo
+/// vuelva a avisar en vez de quedar silenciado por el aviso de hace 6 h.
+///
+/// [playing] cambia el texto: con un partido en curso hay algo concreto que
+/// perder, y conviene decirlo.
+Future<void> maybeNotifyPowerSave(
+  SharedPreferences prefs, {
+  required bool playing,
+}) async {
+  try {
+    if (!await isPowerSaveOn()) {
+      await prefs.remove(kPowerSaveNotifiedKey);
+      return;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final last = prefs.getInt(kPowerSaveNotifiedKey) ?? 0;
+    if (now - last < kPowerSaveNotifyCooldown.inMilliseconds) return;
+    await prefs.setInt(kPowerSaveNotifiedKey, now);
+    // El texto dice qué hacer, no solo qué pasa: apagarlo y que funcione solo,
+    // o registrar el partido a mano desde el mapa.
+    await NotificationsService.instance.showPowerSave(
+      playing ? 'Tu partido puede no contarse' : 'Ahorro de energía activo',
+      playing
+          ? 'Puede frenar el cronómetro. Apagalo y sigue solo; si no, cortá el partido a mano con DETENER.'
+          : 'Puede impedir que detectemos tu partido. Apagalo y arranca solo; si no, tocá EMPEZAR YA en la cancha.',
+    );
+  } catch (_) {/* el aviso es best-effort: nunca romper la detección */}
 }
 
 /// Programa la pregunta de partido largo para [at] (2h de juego NETO). La
@@ -609,6 +680,10 @@ Future<void> alarmBatteryCallback() async {
     await cancelBatteryWatch();
     return;
   }
+  // Con partido en curso: aprovechamos el único despertar periódico que tenemos
+  // para avisar si el ahorro de energía está frenando la detección. Va ANTES del
+  // corte por batería baja, que hace return en la mayoría de los casos.
+  await maybeNotifyPowerSave(prefs, playing: true);
   try {
     final battery = Battery();
     final state = await battery.batteryState;
@@ -772,18 +847,36 @@ Future<void> _discardActive(
   await NotificationsService.instance.cancelSession();
 }
 
-/// RADAR de respaldo (alarma periódica): re-muestrea el GPS y avanza la
-/// detección aunque el proceso y el foreground service estén muertos. Espejo
-/// en background de lo que hace _evaluate con la app viva:
+/// RADAR de respaldo: re-muestrea el GPS y avanza la detección aunque el proceso
+/// y el foreground service estén muertos. Espejo en background de lo que hace
+/// _evaluate con la app viva:
 ///  - sin partido ni permanencia → si estás dentro del radio de una cancha,
 ///    siembra la permanencia (alarma de arranque a +6 min + notificación);
 ///  - con partido en curso → si estás fuera del radio y no hay gracia en
 ///    curso, arranca la gracia de salida (alarma de cierre + aviso).
 /// Las geofences siguen siendo la vía rápida; esto cubre cuando el OEM las
 /// estrangula o mata el servicio (peor caso: [_kRadarEvery] de demora).
+///
+/// **Reprograma el siguiente eslabón en un `finally`.** El cuerpo tiene muchos
+/// return tempranos y cualquiera que saliera sin reprogramar mataría el radar
+/// para siempre (ver [scheduleRadarWatch]). Por eso el trabajo real vive en
+/// [_radarTick], que solo devuelve `false` cuando la cadena debe terminar de
+/// verdad — hoy, únicamente al no haber sesión.
 @pragma('vm:entry-point')
 Future<void> alarmRadarCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  var keepChain = true;
+  try {
+    keepChain = await _radarTick();
+  } catch (_) {
+    // Un fallo puntual (GPS, prefs, JSON corrupto) no puede cortar la cadena.
+  } finally {
+    if (keepChain) await _scheduleNextRadar();
+  }
+}
+
+/// Un tick del radar. Devuelve si la cadena debe seguir viva.
+Future<bool> _radarTick() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.reload();
   // Es el ÚNICO camino que siembra detección nueva con la app cerrada: sin
@@ -791,14 +884,22 @@ Future<void> alarmRadarCallback() async {
   // cada 15 min al vacío (se reprograma al volver a loguearse, vía
   // SyncCoordinator._syncGeofences). El gate va antes de leer el mock: si te
   // deslogueás con el modo prueba activo, el radar también se apaga.
-  if (!await hasBgSession(prefs)) {
+  //
+  // Token LAXO para decidir si la cadena sigue viva: un JWT vencido no es un
+  // logout. Matar la cadena por eso la dejaría muerta hasta reiniciar el
+  // proceso, porque el flag `_radarOn` que la re-arma vive en el isolate
+  // principal y no se entera de lo que hizo el de background.
+  if (!await hasBgSession(prefs, requireFreshToken: false)) {
     await cancelRadarWatch();
-    return;
+    return false; // única salida que MATA la cadena
   }
+  // Con el token vencido no sembramos detección nueva (mismo criterio que
+  // antes), pero la cadena sigue latiendo hasta que el JWT se renueve.
+  if (!await hasBgSession(prefs)) return true;
   final uk = prefs.getString(kBgUserKey) ?? '';
 
   final pos = await _currentLatLng();
-  if (pos == null) return; // sin fix: el próximo tick reintenta
+  if (pos == null) return true; // sin fix: el próximo tick reintenta
   await prefs.setInt(
       kLastBgFixKey, DateTime.now().millisecondsSinceEpoch);
 
@@ -807,25 +908,25 @@ Future<void> alarmRadarCallback() async {
 
   if (activeRaw != null) {
     // Partido en curso: detectar la SALIDA si nadie más la detectó.
-    if (prefs.getString(_kAlarmEnd) != null) return; // gracia ya programada
+    if (prefs.getString(_kAlarmEnd) != null) return true; // gracia ya programada
     Map<String, dynamic> a;
     try {
       a = jsonDecode(activeRaw) as Map<String, dynamic>;
     } catch (_) {
-      return;
+      return true;
     }
-    if (a['endsAtMillis'] != null) return; // gracia ya en curso
+    if (a['endsAtMillis'] != null) return true; // gracia ya en curso
     // Pausado esperando la respuesta de "¿Seguís jugando?": la pregunta (y su
     // timeout) gobiernan — no sembramos la gracia de salida (semántica de
     // pausa, igual que _evaluate con _pausedAt != null).
-    if (a['confirmAskedAtMillis'] != null) return;
+    if (a['confirmAskedAtMillis'] != null) return true;
     final startMillis = (a['startMillis'] as num?)?.toInt();
     final courtId = (a['courtId'] ?? '') as String;
     final court = await _courtFromCache(prefs, courtId);
-    if (startMillis == null || court == null) return;
+    if (startMillis == null || court == null) return true;
     final d = Geolocator.distanceBetween(
         pos.$1, pos.$2, court.$2, court.$3);
-    if (d <= _kRadiusMeters) return; // seguís adentro: todo normal
+    if (d <= _kRadiusMeters) return true; // seguís adentro: todo normal
 
     // Estás afuera sin gracia en curso: la arrancamos igual que _beginExitGrace
     // (persistir endsAtMillis + alarma de cierre + notificación de cierre).
@@ -842,13 +943,13 @@ Future<void> alarmRadarCallback() async {
       at: endsAt,
     );
     _pingMain();
-    return;
+    return true;
   }
 
   // Sin partido en curso: detectar la LLEGADA si no hay permanencia armada.
-  if (prefs.getString(_kAlarmStart) != null) return; // dwell ya sembrado
+  if (prefs.getString(_kAlarmStart) != null) return true; // dwell ya sembrado
   final near = await _nearestCourtInRadius(prefs, pos.$1, pos.$2);
-  if (near == null) return;
+  if (near == null) return true;
 
   // "No juego" vigente en esta cancha: no sembramos (arranque manual desde la
   // app). Si el snooze ya venció, lo limpiamos de paso.
@@ -858,7 +959,7 @@ Future<void> alarmRadarCallback() async {
       final s = jsonDecode(snoozeRaw) as Map<String, dynamic>;
       final until = (s['untilMillis'] as num?)?.toInt() ?? 0;
       if (until > DateTime.now().millisecondsSinceEpoch) {
-        if (s['courtId'] == near.$1) return;
+        if (s['courtId'] == near.$1) return true;
       } else {
         await prefs.remove(bgNsKey(_kDwellSnoozeBase, uk));
       }
@@ -879,6 +980,10 @@ Future<void> alarmRadarCallback() async {
   await NotificationsService.instance
       .showDwellCountdown(near.$2, _kDwellThreshold.inSeconds);
   _pingMain();
+  // Llegaste a una cancha: si el ahorro está activo, avisar ANTES de que se
+  // pierda el partido (todavía faltan los 6 min de permanencia).
+  await maybeNotifyPowerSave(prefs, playing: false);
+  return true;
 }
 
 /// Posición actual (lat, lng) respetando la ubicación simulada del modo

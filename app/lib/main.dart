@@ -29,6 +29,7 @@ import 'services/session.dart';
 import 'services/sync_coordinator.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_logo.dart';
+import 'widgets/permissions_modal.dart';
 
 /// Navegador raíz: permite navegar desde fuera del árbol de widgets (p.ej. al
 /// tocar una notificación de pickup para ir a su chat).
@@ -171,6 +172,13 @@ class _RootState extends State<_Root> {
           builder: (_) => PickupChatScreen(pickupId: pickupId),
         ),
       );
+    };
+    // Aviso de ahorro de energía: abre el panel de permisos, que es donde se
+    // explica qué desactivar. Mismo drenaje que el chat si la app se abrió desde
+    // la notificación.
+    NotificationsService.instance.onOpenPermissions = () {
+      final ctx = navigatorKey.currentContext;
+      if (ctx != null) PermissionsModal.show(ctx);
     };
   }
 

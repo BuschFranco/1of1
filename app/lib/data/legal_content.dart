@@ -47,8 +47,11 @@ QUÉ DATOS RECOLECTAMOS
   solo registramos en qué cancha jugaste. (Ver "Servicios de terceros": para el
   mapa y las rutas, tus coordenadas se envían a Google en el momento.)
 • Datos de salud (opcional): si conectás Salud (Health Connect / Apple Health),
-  leemos calorías, pulso, pasos y distancia de tus partidos. Estos datos quedan
-  SOLO en tu dispositivo y no se suben a nuestros servidores.
+  leemos calorías, pulso, pasos, distancia, velocidad, oxígeno en sangre,
+  frecuencia cardíaca en reposo, variabilidad cardíaca y ritmo respiratorio de
+  tus partidos, además de las sesiones de ejercicio que registre tu reloj.
+  SOLO los leemos (nunca escribimos en tu historial de salud), quedan
+  ÚNICAMENTE en tu dispositivo y no se suben a nuestros servidores.
 • Actividad de juego: historial de partidos (cancha, fecha, duración, puntos).
 • Mensajes: el contenido de los chats de pickups que enviás se guarda en nuestro
   servidor para poder mostrárselo a los participantes de ese pickup.

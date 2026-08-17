@@ -1954,6 +1954,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _historyRow(PlaySession s) {
     final (color, label) = _resultStyle(s.result);
+    final healthOn = context.read<PlaySessionService>().healthEnabled;
     final hasUserStats = s.userTriples != null || s.userDoubles != null || s.userFreeThrows != null;
     // Fila plana: el resultado es un dot+etiqueta de color, sin card tintada
     // ni chip con borde.
@@ -1984,6 +1985,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         style: AppText.grotesk(
                             size: 11, color: AppColors.white(0.45)),
                       ),
+                      // Esperando que el reloj sincronice. SOLO mientras la
+                      // ventana sigue abierta: con `healthIncomplete` a secas se
+                      // encenderían todas las filas viejas (y las anteriores a
+                      // conectar Salud) y el indicador no significaría nada.
+                      if (healthOn && s.healthPending) ...[
+                        const SizedBox(width: 6),
+                        Icon(Icons.hourglass_empty,
+                            size: 11, color: AppColors.accent),
+                      ],
                     ],
                   ),
                   if (hasUserStats) ...[

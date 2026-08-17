@@ -23,6 +23,21 @@ class HealthMetrics {
   /// Null si no hay datos de pulso.
   final List<int>? hrZones;
 
+  // ── Métricas de muestreo esporádico ──────────────────────────────────────
+  // Null = el reloj no registró ninguna muestra en la ventana del partido, que
+  // es lo NORMAL para varias de ellas (SpO2 y HRV suelen medirse en reposo).
+  /// Saturación de oxígeno en sangre, en % (promedio de las muestras).
+  final int? spo2;
+  /// Frecuencia cardíaca en reposo (bpm). Es un valor diario del reloj, no del
+  /// partido: sirve como indicador de estado de forma.
+  final int? restingHr;
+  /// Variabilidad cardíaca RMSSD, en ms. Indicador de recuperación/fatiga.
+  final int? hrv;
+  /// Ritmo respiratorio, en respiraciones por minuto.
+  final int? respiratoryRate;
+  /// Velocidad promedio, en m/s.
+  final double? speed;
+
   const HealthMetrics({
     this.calories = 0,
     this.avgHr,
@@ -32,6 +47,11 @@ class HealthMetrics {
     this.fromWorkout = false,
     this.workoutActivity,
     this.hrZones,
+    this.spo2,
+    this.restingHr,
+    this.hrv,
+    this.respiratoryRate,
+    this.speed,
   });
 
   /// ¿Hay algo que valga la pena registrar? (sin wearable suele venir todo en 0)
@@ -59,6 +79,7 @@ class HealthService {
   /// WORKOUT es la sesión de ejercicio del reloj (básquet, etc.): sus totales
   /// (calorías, distancia) son los que muestra Samsung y cubren la duración
   /// real de la sesión, así que enriquecen el partido cuando existe.
+  /// Métricas "de esfuerzo": las que un reloj mide DURANTE el partido.
   static const List<HealthDataType> _types = [
     HealthDataType.HEART_RATE,
     HealthDataType.ACTIVE_ENERGY_BURNED,
@@ -66,10 +87,24 @@ class HealthService {
     HealthDataType.STEPS,
     HealthDataType.DISTANCE_DELTA,
     HealthDataType.WORKOUT,
+    // Añadidas después: los relojes las muestrean de forma ESPORÁDICA (SpO2 y
+    // HRV suelen medirse en reposo o de noche), así que es normal que un partido
+    // no tenga ninguna muestra. La UI las omite cuando faltan en vez de
+    // mostrarlas en cero, que se leería como "tu oxígeno fue 0".
+    HealthDataType.BLOOD_OXYGEN,
+    HealthDataType.RESTING_HEART_RATE,
+    HealthDataType.HEART_RATE_VARIABILITY_RMSSD,
+    HealthDataType.RESPIRATORY_RATE,
+    HealthDataType.SPEED,
   ];
 
   static final List<HealthDataAccess> _perms =
       List.filled(_types.length, HealthDataAccess.READ);
+
+  /// Promedio de las muestras, o null si no hubo ninguna. Null y 0 significan
+  /// cosas distintas acá: "el reloj no midió" vs "midió cero".
+  static double? _promedio(List<double> v) =>
+      v.isEmpty ? null : v.reduce((a, b) => a + b) / v.length;
 
   Future<void> _ensureConfigured() async {
     if (_configured) return;
@@ -109,10 +144,87 @@ class HealthService {
     }
   }
 
-  /// Diagnóstico: lee las últimas [back] horas y devuelve un resumen legible
-  /// (estado de Health Connect, muestras por tipo, agregados y error si falla).
-  /// Sirve para entender por qué un partido no trae datos de salud.
-  Future<String> diagnose({Duration back = const Duration(hours: 6)}) async {
+  /// Nombre legible de un origen de datos. En Android `sourceName` trae el
+  /// **packageName** de la app que escribió el dato (`sourceId` viene siempre
+  /// vacío y `deviceModel` siempre null), así que es la ÚNICA señal de origen
+  /// disponible — y la que distingue "lo escribió el reloj" de "lo escribió el
+  /// celular".
+  static String _sourceLabel(String raw) {
+    const conocidos = {
+      'com.sec.android.app.shealth': 'Samsung Health',
+      'com.google.android.apps.fitness': 'Google Fit',
+      'com.google.android.gms': 'Google Play Services',
+      'com.huawei.health': 'Huawei Health',
+      'com.xiaomi.wearable': 'Xiaomi Wearable',
+      'com.huami.watch.hmwatchmanager': 'Zepp',
+      'com.garmin.android.apps.connectmobile': 'Garmin Connect',
+      'com.fitbit.FitbitMobile': 'Fitbit',
+      'com.buschfranco.oneofone': '1of1 (esta app)',
+    };
+    if (raw.isEmpty) return 'origen desconocido';
+    return conocidos[raw] ?? raw;
+  }
+
+  /// Desglose por origen de una lista de puntos: "Samsung Health: 4820 (12 reg.)".
+  /// Es el corazón del diagnóstico: si acá solo figura el proveedor del teléfono,
+  /// el problema no está en la app sino en el puente del reloj.
+  /// Tipos que se PROMEDIAN en vez de sumarse: sumar pulsos o saturaciones de
+  /// oxígeno no significa nada (31 muestras de ~78 bpm dan "2404", que confunde).
+  static const _promediables = {
+    HealthDataType.HEART_RATE,
+    HealthDataType.BLOOD_OXYGEN,
+    HealthDataType.RESTING_HEART_RATE,
+    HealthDataType.HEART_RATE_VARIABILITY_RMSSD,
+    HealthDataType.RESPIRATORY_RATE,
+    HealthDataType.SPEED,
+  };
+
+  static String _porOrigen(List<HealthDataPoint> puntos, HealthDataType t) {
+    final sumas = <String, double>{};
+    final conteos = <String, int>{};
+    for (final p in puntos) {
+      final k = _sourceLabel(p.sourceName);
+      final v = p.value;
+      sumas[k] = (sumas[k] ?? 0) + (v is NumericHealthValue ? v.numericValue.toDouble() : 0);
+      conteos[k] = (conteos[k] ?? 0) + 1;
+    }
+    if (sumas.isEmpty) return '';
+    final promediar = _promediables.contains(t);
+    final partes = sumas.entries.map((e) {
+      final n = conteos[e.key] ?? 1;
+      final valor = promediar ? (e.value / n) : e.value;
+      return '${e.key}: ${valor.round()}${promediar ? ' prom' : ''} ($n reg.)';
+    }).toList();
+    return '\n    ↳ ${partes.join('\n    ↳ ')}';
+  }
+
+  /// Rango temporal cubierto por los puntos, para ver si están repartidos en el
+  /// partido o concentrados en dos minutos.
+  static String _rango(List<HealthDataPoint> puntos) {
+    if (puntos.isEmpty) return '';
+    var min = puntos.first.dateFrom;
+    var max = puntos.first.dateTo;
+    for (final p in puntos) {
+      if (p.dateFrom.isBefore(min)) min = p.dateFrom;
+      if (p.dateTo.isAfter(max)) max = p.dateTo;
+    }
+    String hhmm(DateTime d) =>
+        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    return '\n    ↳ de ${hhmm(min)} a ${hhmm(max)}';
+  }
+
+  /// Diagnóstico legible de por qué un partido no trae datos de salud.
+  ///
+  /// Con [from]/[to] analiza la ventana EXACTA de un partido; sin ellos, las
+  /// últimas [back] horas. Lo importante es el desglose **por origen**: sirve
+  /// para distinguir "el reloj no sincronizó" de "solo escribió el celular",
+  /// que es la diferencia entre un bug de la app y un problema del puente del
+  /// fabricante.
+  Future<String> diagnose({
+    Duration back = const Duration(hours: 6),
+    DateTime? from,
+    DateTime? to,
+  }) async {
     final sb = StringBuffer();
     try {
       await _ensureConfigured();
@@ -133,14 +245,21 @@ class HealthService {
       perm = 'error: $e';
     }
     sb.writeln('Permiso lectura: $perm');
-    sb.writeln('Ventana: últimas ${back.inHours}h');
-    sb.writeln('');
 
-    final end = DateTime.now();
-    final start = end.subtract(back);
+    // Ventana del partido si nos la dan; si no, las últimas `back` horas.
+    final end = to ?? DateTime.now();
+    final start = from ?? end.subtract(back);
+    String hhmm(DateTime d) =>
+        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    sb.writeln(from != null
+        ? 'Ventana: el partido (${hhmm(start)} a ${hhmm(end)})'
+        : 'Ventana: últimas ${back.inHours}h');
+    sb.writeln('');
     // Un renglón por tipo: permiso individual, muestras y agregado, o el error.
     // El permiso por tipo es lo que más importa: Health Connect concede de a
     // uno, así que Calorías/Distancia pueden estar denegadas aunque HR ande.
+    // Todos los orígenes vistos, para el veredicto del final.
+    final origenes = <String>{};
     for (final t in _types) {
       // Estado del permiso de ESTE tipo (en Android puede venir null = oculto).
       String permLabel;
@@ -159,6 +278,9 @@ class HealthService {
           types: [t],
         );
         final clean = _health.removeDuplicates(points);
+        for (final p in clean) {
+          if (p.sourceName.isNotEmpty) origenes.add(p.sourceName);
+        }
         // WORKOUT: cada punto es una sesión de ejercicio (no un número). Se
         // reporta actividad + totales para poder verificar el enriquecimiento.
         if (t == HealthDataType.WORKOUT) {
@@ -168,11 +290,16 @@ class HealthService {
             final w = p.value as WorkoutHealthValue;
             final kcal = w.totalEnergyBurned;
             final m = w.totalDistance;
-            return '${w.workoutActivityType.name}'
+            // El horario de la sesión importa: si no solapa con el partido, no
+            // lo enriquece por más que exista.
+            return '${w.workoutActivityType.name} '
+                '(${hhmm(p.dateFrom)}-${hhmm(p.dateTo)}, '
+                '${_sourceLabel(p.sourceName)})'
                 '${kcal != null ? ' · $kcal kcal' : ''}'
                 '${m != null ? ' · $m m' : ''}';
           }).toList();
-          final detalle = sesiones.isEmpty ? '' : ' · ${sesiones.join(' | ')}';
+          final detalle =
+              sesiones.isEmpty ? '' : '\n    ↳ ${sesiones.join('\n    ↳ ')}';
           sb.writeln('${t.name} ($permLabel): ${clean.length} sesiones$detalle');
           continue;
         }
@@ -186,17 +313,46 @@ class HealthService {
           HealthDataType.TOTAL_CALORIES_BURNED => ' · ${sum.round()} kcal',
           HealthDataType.STEPS => ' · ${sum.round()} pasos',
           HealthDataType.DISTANCE_DELTA => ' · ${sum.round()} m',
+          HealthDataType.HEART_RATE => ' · prom ${clean.isEmpty ? 0 : (sum / clean.length).round()} bpm',
           _ => '',
         };
-        sb.writeln('${t.name} ($permLabel): ${clean.length} muestras$agg');
+        // El desglose por origen es LO importante de todo el diagnóstico.
+        sb.writeln('${t.name} ($permLabel): ${clean.length} muestras$agg'
+            '${_porOrigen(clean, t)}${_rango(clean)}');
       } catch (e) {
         sb.writeln('${t.name} ($permLabel): ERROR → $e');
       }
     }
+    // Veredicto: lo primero que hay que mirar es QUIÉN escribió los datos. Si
+    // solo figura el proveedor del propio teléfono, ningún cambio en la app va a
+    // traer los datos del reloj — hay que arreglar el puente del fabricante.
     sb.writeln('');
-    sb.writeln('Si calorías o distancia dan 0 con permiso OK: en Samsung '
-        'Health → Ajustes → Health Connect, confirmá que "Actividad" '
-        '(calorías, distancia) esté compartida.');
+    sb.writeln('── Orígenes de datos ──');
+    if (origenes.isEmpty) {
+      sb.writeln('NINGUNO escribió datos en esta ventana.');
+      sb.writeln('Ni el reloj ni el teléfono. Revisá que Health Connect tenga '
+          'permisos y que la app de tu reloj esté sincronizando.');
+    } else {
+      for (final o in origenes) {
+        sb.writeln('· ${_sourceLabel(o)}');
+      }
+      const puente = {
+        'com.sec.android.app.shealth',
+        'com.huawei.health',
+        'com.xiaomi.wearable',
+        'com.huami.watch.hmwatchmanager',
+        'com.garmin.android.apps.connectmobile',
+        'com.fitbit.FitbitMobile',
+      };
+      if (!origenes.any(puente.contains)) {
+        sb.writeln('');
+        sb.writeln('⚠ No aparece ninguna app de reloj/pulsera. Los datos que ves '
+            'son del TELÉFONO, por eso los números son bajos.');
+        sb.writeln('En Samsung: abrí Samsung Health → Ajustes → Health Connect y '
+            'activá el compartido de Pasos, Frecuencia cardíaca, Actividad '
+            '(calorías y distancia) y Ejercicio.');
+      }
+    }
     return sb.toString();
   }
 
@@ -217,6 +373,8 @@ class HealthService {
     WorkoutHealthValue? workout;
     DateTime winStart = start;
     DateTime winEnd = end;
+    /// Qué porción de la sesión del reloj cae dentro del partido (1.0 = toda).
+    double workoutShare = 1.0;
     try {
       final wpoints = await _health.getHealthDataFromTypes(
         startTime: start.subtract(const Duration(minutes: 30)),
@@ -238,7 +396,11 @@ class HealthService {
         // deporte no relacionado que pudiera solapar por casualidad.
         final relevante = act == HealthWorkoutActivityType.BASKETBALL ||
             act == HealthWorkoutActivityType.OTHER;
-        final score = overlap + (relevante ? 1 : 0);
+        // El bonus tiene que ser PROPORCIONAL, no +1: el solape está en
+        // milisegundos, así que sumarle 1 no desempata nunca (1 ms de más ya lo
+        // supera). Con +25 % un deporte relevante gana ante solapes parecidos,
+        // pero uno claramente más largo sigue ganando.
+        final score = overlap * (relevante ? 1.25 : 1.0);
         if (best == null || score > bestOverlap) {
           best = p;
           bestOverlap = score;
@@ -246,6 +408,17 @@ class HealthService {
       }
       if (best != null) {
         workout = best.value as WorkoutHealthValue;
+        // Fracción de la sesión que cae DENTRO del partido, para prorratear sus
+        // totales. Sin esto, dejar el entrenamiento del reloj corriendo mientras
+        // volvías a casa inflaba las calorías del partido (y podía regalar el
+        // bonus de récord).
+        final so = best.dateFrom.isAfter(start) ? best.dateFrom : start;
+        final eo = best.dateTo.isBefore(end) ? best.dateTo : end;
+        final durSesion = best.dateTo.difference(best.dateFrom).inMilliseconds;
+        final durSolape = eo.difference(so).inMilliseconds;
+        workoutShare = (durSesion > 0 && durSolape > 0)
+            ? (durSolape / durSesion).clamp(0.0, 1.0)
+            : 1.0;
         // Ampliamos la ventana de lectura a la unión con la sesión: así el
         // pulso/pasos cubren todo lo que el reloj grabó.
         if (best.dateFrom.isBefore(winStart)) winStart = best.dateFrom;
@@ -264,6 +437,12 @@ class HealthService {
     final hrs = <double>[];
     // Muestras crudas de HR con timestamps para calcular zonas.
     final hrTimestamps = <DateTime>[];
+    // Métricas esporádicas: se juntan las muestras y se promedian al final.
+    final spo2s = <double>[];
+    final restingHrs = <double>[];
+    final hrvs = <double>[];
+    final resps = <double>[];
+    final speeds = <double>[];
     for (final t in _types) {
       if (t == HealthDataType.WORKOUT) continue; // se maneja aparte (arriba)
       try {
@@ -295,6 +474,24 @@ class HealthService {
                 hrTimestamps.add(p.dateFrom);
               }
               break;
+            // Las esporádicas se promedian: no tiene sentido sumarlas (sumar
+            // saturaciones de oxígeno no significa nada). Se descartan los 0,
+            // que en estas métricas siempre son lectura fallida.
+            case HealthDataType.BLOOD_OXYGEN:
+              if (n > 0) spo2s.add(n.toDouble());
+              break;
+            case HealthDataType.RESTING_HEART_RATE:
+              if (n > 0) restingHrs.add(n.toDouble());
+              break;
+            case HealthDataType.HEART_RATE_VARIABILITY_RMSSD:
+              if (n > 0) hrvs.add(n.toDouble());
+              break;
+            case HealthDataType.RESPIRATORY_RATE:
+              if (n > 0) resps.add(n.toDouble());
+              break;
+            case HealthDataType.SPEED:
+              if (n > 0) speeds.add(n.toDouble());
+              break;
             default:
               break;
           }
@@ -302,21 +499,42 @@ class HealthService {
       } catch (_) {/* seguimos con los demás tipos */}
     }
 
+    // Pasos por la API de AGREGACIÓN de Health Connect, que deduplica del lado
+    // del sistema. Sumar los registros crudos (arriba) sobrecuenta cuando el
+    // reloj y el teléfono cubren el mismo rato: `removeDuplicates` compara los
+    // puntos por todos sus campos —uuid y origen incluidos— así que dos fuentes
+    // distintas nunca se deduplican entre sí. La suma cruda queda de fallback.
+    try {
+      final agg = await _health.getTotalStepsInInterval(winStart, winEnd);
+      if (agg != null && agg > 0) steps = agg;
+    } catch (_) {/* nos quedamos con la suma cruda */}
+
     int? avgHr;
     int? maxHr;
     List<int>? hrZones;
     if (hrs.isNotEmpty) {
-      avgHr = (hrs.reduce((a, b) => a + b) / hrs.length).round();
-      maxHr = hrs.reduce((a, b) => a > b ? a : b).round();
-      // Calcular distribución de zonas cardíacas (segundos por zona).
-      hrZones = _computeHrZones(hrs, hrTimestamps, maxHr);
+      // Ordenar por fecha ANTES de calcular zonas: Health Connect no garantiza
+      // el orden y, mezclando dos orígenes, los deltas entre muestras salían
+      // negativos y caían todos en el sanity check de 5 s.
+      final idx = List<int>.generate(hrs.length, (i) => i)
+        ..sort((a, b) => hrTimestamps[a].compareTo(hrTimestamps[b]));
+      final hrsOrd = [for (final i in idx) hrs[i]];
+      final tsOrd = [for (final i in idx) hrTimestamps[i]];
+      avgHr = (hrsOrd.reduce((a, b) => a + b) / hrsOrd.length).round();
+      maxHr = hrsOrd.reduce((a, b) => a > b ? a : b).round();
+      hrZones = _computeHrZones(hrsOrd, tsOrd, maxHr);
     }
 
     // 3) La sesión manda para calorías/distancia (coincide con lo que muestra
     //    el reloj). Si no la trae, caemos a la agregación por tipo: calorías
     //    ACTIVAS y, si el origen no las escribe, TOTALES (nunca se suman).
-    final workoutCal = (workout?.totalEnergyBurned ?? 0).toDouble();
-    final workoutDist = (workout?.totalDistance ?? 0).toDouble();
+    //    Los totales de la sesión se PRORRATEAN por la porción que solapa con el
+    //    partido (ver workoutShare): una sesión de 3 h que cubre 2 h de partido
+    //    aporta 2/3 de sus calorías, no las 3 h enteras.
+    final workoutCal =
+        (workout?.totalEnergyBurned ?? 0).toDouble() * workoutShare;
+    final workoutDist =
+        (workout?.totalDistance ?? 0).toDouble() * workoutShare;
     return HealthMetrics(
       calories: workoutCal > 0
           ? workoutCal
@@ -328,6 +546,11 @@ class HealthService {
       fromWorkout: workout != null,
       workoutActivity: workout?.workoutActivityType.name,
       hrZones: hrZones,
+      spo2: _promedio(spo2s)?.round(),
+      restingHr: _promedio(restingHrs)?.round(),
+      hrv: _promedio(hrvs)?.round(),
+      respiratoryRate: _promedio(resps)?.round(),
+      speed: _promedio(speeds),
     );
   }
 
@@ -351,7 +574,17 @@ class HealthService {
                 (timestamps.length - 1))
             : 5;
       }
-      if (sec <= 0 || sec > 60) sec = 5; // Sanity check.
+      // Antes, TODO hueco > 60 s se colapsaba a 5 s. Con el reloj fuera de modo
+      // ejercicio las muestras vienen cada varios minutos, así que un partido de
+      // 2 h daba ~2 min de zonas: el gráfico quedaba vacío. Ahora el hueco se
+      // respeta y solo se TOPEA, para que un reloj apagado una hora no invente
+      // tiempo que no se jugó.
+      const maxHueco = 300; // 5 min
+      if (sec <= 0) {
+        sec = 5;
+      } else if (sec > maxHueco) {
+        sec = maxHueco;
+      }
       final pct = hrs[i] / maxHr;
       final zi = pct < 0.6
           ? 0

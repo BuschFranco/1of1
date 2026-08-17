@@ -28,6 +28,11 @@ const String kOpenPickupChatAction = 'open_pickup_chat';
 /// Prefijo del payload que lleva el id del pickup para enrutar al chat.
 const String kPickupChatPayload = 'pickup_chat:';
 
+/// Payload del aviso de "ahorro de energía activo": abre el panel de permisos,
+/// que es el único lugar donde se puede explicar qué hay que desactivar (la
+/// suspensión profunda de Samsung no se puede abrir con un intent).
+const String kPowerSavePayload = 'power_save';
+
 /// Handler de respuestas que corre en un ISOLATE DE BACKGROUND (app cerrada).
 /// No puede tocar el estado vivo del partido, así que es un no-op: la acción
 /// "EMPEZAR YA" solo arranca el partido con el proceso vivo (app minimizada).
@@ -99,6 +104,22 @@ class NotificationsService {
   /// (app cerrada). Se drena cuando se cablea [onOpenPickupChat].
   String? _pendingChatPickupId;
 
+  /// Se invoca al tocar el aviso de ahorro de energía. Lo cablea main.dart para
+  /// abrir el panel de permisos. Mismo mecanismo de drenaje que
+  /// [onOpenPickupChat]: si la app se abrió DESDE la notificación, el callback
+  /// todavía no está cableado cuando llega la respuesta.
+  VoidCallback? get onOpenPermissions => _onOpenPermissions;
+  VoidCallback? _onOpenPermissions;
+  set onOpenPermissions(VoidCallback? cb) {
+    _onOpenPermissions = cb;
+    if (cb != null && _pendingPermissions) {
+      _pendingPermissions = false;
+      cb();
+    }
+  }
+
+  bool _pendingPermissions = false;
+
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'rewards',
     'Recompensas',
@@ -123,8 +144,18 @@ class NotificationsService {
     if (response.actionId == kDeclineAction) onDeclineAction?.call();
     if (response.actionId == kConfirmYesAction) onConfirmYesAction?.call();
     if (response.actionId == kConfirmNoAction) onConfirmNoAction?.call();
-    // Pickup: tap del cuerpo (actionId null) o botón "Ir al chat".
     final payload = response.payload;
+    // Ahorro de energía: solo tiene tap de cuerpo, sin botones.
+    if (payload == kPowerSavePayload) {
+      final cb = _onOpenPermissions;
+      if (cb != null) {
+        cb();
+      } else {
+        _pendingPermissions = true;
+      }
+      return;
+    }
+    // Pickup: tap del cuerpo (actionId null) o botón "Ir al chat".
     if (payload != null &&
         payload.startsWith(kPickupChatPayload) &&
         (response.actionId == null ||
@@ -169,11 +200,13 @@ class NotificationsService {
       try {
         final launch = await _plugin.getNotificationAppLaunchDetails();
         final payload = launch?.notificationResponse?.payload;
-        if (launch?.didNotificationLaunchApp == true &&
-            payload != null &&
-            payload.startsWith(kPickupChatPayload)) {
-          final id = payload.substring(kPickupChatPayload.length);
-          if (id.isNotEmpty) _pendingChatPickupId = id;
+        if (launch?.didNotificationLaunchApp == true && payload != null) {
+          if (payload == kPowerSavePayload) {
+            _pendingPermissions = true;
+          } else if (payload.startsWith(kPickupChatPayload)) {
+            final id = payload.substring(kPickupChatPayload.length);
+            if (id.isNotEmpty) _pendingChatPickupId = id;
+          }
         }
       } catch (_) {/* ignorar */}
     } catch (_) {/* sin push: la app sigue con el banner in-app */}
@@ -227,6 +260,29 @@ class NotificationsService {
         iOS: DarwinNotificationDetails(),
       );
       await _plugin.show(_nextId++, title, body, details);
+    } catch (_) {/* ignorar */}
+  }
+
+  /// Aviso de que el ahorro de energía está activo y puede estar frenando la
+  /// detección. Canal `rewards` (importancia alta) a propósito: si no suena, el
+  /// usuario se entera cuando ya perdió el partido. Al tocarla se abre el panel
+  /// de permisos, vía [onOpenPermissions].
+  Future<void> showPowerSave(String title, String body) async {
+    if (!_ready) await init();
+    if (!_ready) return;
+    try {
+      const details = NotificationDetails(
+        android: AndroidNotificationDetails(
+          'rewards',
+          'Recompensas',
+          channelDescription: 'Logros, títulos y subidas de nivel',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      );
+      await _plugin.show(_nextId++, title, body, details,
+          payload: kPowerSavePayload);
     } catch (_) {/* ignorar */}
   }
 

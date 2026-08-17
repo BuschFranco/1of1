@@ -112,6 +112,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   String get _kNotifs => _k('reward_notifications');
   String get _kCalRecord => _k('play_calorie_record');
   String get _kHealthEnabled => _k('play_health_enabled');
+  String get _kVisibility => _k('match_visibility');
   // Buffer de partidos pendientes de subir a la DB "Partidos" de Notion. Se
   // sube en lote en el flush (mala señal en la cancha = reintento, sin perder
   // el registro). Ver SyncCoordinator._flushPendingMatches.
@@ -126,6 +127,29 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   // Batería: para cerrar el partido si el equipo queda con muy poca carga.
   final Battery _battery = Battery();
   bool _batteryChecking = false;
+
+  // ── Ahorro de energía ────────────────────────────────────────────────────
+  // Con el ahorro activo el SO estrangula ubicación, geofences y foreground
+  // service: la detección se degrada en silencio. Lo exponemos para poder
+  // advertirlo en el mapa y en el panel de permisos.
+  bool _powerSaveOn = false;
+  bool get powerSaveOn => _powerSaveOn;
+  int _powerSaveCheckedAt = 0;
+
+  /// Relee el modo ahorro. Throttle de 1 min: se lo llama desde el ticker (cada
+  /// ~20 s) y una llamada de plataforma por tick sería desperdicio.
+  Future<void> refreshPowerSave({bool force = false}) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (!force && now - _powerSaveCheckedAt < 60000) return;
+    _powerSaveCheckedAt = now;
+    try {
+      final on = await _battery.isInBatterySaveMode;
+      if (on != _powerSaveOn) {
+        _powerSaveOn = on;
+        notifyListeners();
+      }
+    } catch (_) {/* sin lectura: se conserva el último valor conocido */}
+  }
   bool _background = false;
 
   /// Si el usuario habilitó la detección en segundo plano.
@@ -293,6 +317,49 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   // Bonus fijo de puntos al batir el récord de calorías.
   static const int calorieRecordBonus = 25;
 
+  // ── Visibilidad del detalle del partido ──────────────────────────────────
+  // Secciones que el usuario oculta POR DEFECTO en todos sus partidos (y en la
+  // imagen que comparte). Un partido puntual puede pisar esto con su propio
+  // PlaySession.hiddenSections; la precedencia la resuelve effectiveHiddenFor().
+  final Set<MatchSection> _defaultHidden = {};
+  Set<MatchSection> get defaultHiddenSections => Set.unmodifiable(_defaultHidden);
+
+  /// Secciones ocultas que aplican a [s]: su override si tiene uno, y si no el
+  /// default del usuario. **Única** fuente de verdad de la precedencia: la
+  /// pantalla de detalle y la tarjeta para compartir tienen que usar esto.
+  Set<MatchSection> effectiveHiddenFor(PlaySession s) =>
+      s.hiddenSections ?? defaultHiddenSections;
+
+  /// True si [s] tiene configuración propia (para ofrecer "volver al default").
+  bool hasVisibilityOverride(PlaySession s) => s.hiddenSections != null;
+
+  /// Guarda el default del usuario. Los partidos SIN override lo reflejan al
+  /// instante; los que tienen uno conservan el suyo.
+  Future<void> setDefaultHiddenSections(Set<MatchSection> sections) async {
+    _defaultHidden
+      ..clear()
+      ..addAll(sections);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+        _kVisibility, _defaultHidden.map((e) => e.name).toList());
+  }
+
+  /// Guarda el override de UN partido. [sections] en null lo devuelve a seguir
+  /// el default. No-op si el partido no está en el historial (p.ej. todavía sin
+  /// resolver), porque no habría dónde persistirlo.
+  Future<void> setMatchHiddenSections(
+    PlaySession s,
+    Set<MatchSection>? sections,
+  ) async {
+    final i = _log.indexWhere((e) =>
+        e.endedAtMillis == s.endedAtMillis && e.courtId == s.courtId);
+    if (i < 0) return;
+    _log[i] = _log[i].withHiddenSections(sections);
+    notifyListeners();
+    await _persistLog();
+  }
+
   // IDs de logros desbloqueados (insignias permanentes). Una vez logrado, queda
   // logrado aunque las stats que lo originaron ya no estén (p.ej. tras reinstalar
   // se pierde el historial pero el set se siembra desde Notion).
@@ -435,12 +502,16 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   List<StreakEntry> get streakHistory => List.unmodifiable(_streakHistory);
   PlaySession? get pending => _pendingSession;
 
-  /// Cantidad de partidos ganados (resultado "Ganó").
-  int get wins => _log.where((e) => e.result == PlayResult.win).length;
+  // Los tres contadores SUMAN lo que representa cada entrada en vez de contar
+  // entradas: una sesión con desglose puede valer por varios partidos. Sin
+  // desglose, los getters de PlaySession devuelven 1/0 como siempre, así que el
+  // historial viejo cuenta igual que antes.
+
+  /// Cantidad de partidos ganados.
+  int get wins => _log.fold(0, (a, e) => a + e.winsCount);
 
   /// Cantidad de entrenamientos completados.
-  int get trainings =>
-      _log.where((e) => e.result == PlayResult.training).length;
+  int get trainings => _log.fold(0, (a, e) => a + e.trainingsDone);
 
   /// Partidos ganados en los últimos 365 días.
   int get winsLastYear {
@@ -448,9 +519,8 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         .subtract(const Duration(days: 365))
         .millisecondsSinceEpoch;
     return _log
-        .where((e) =>
-            e.result == PlayResult.win && e.endedAtMillis >= cutoff)
-        .length;
+        .where((e) => e.endedAtMillis >= cutoff)
+        .fold(0, (a, e) => a + e.winsCount);
   }
 
   /// Puntos de la semana actual (lunes a hoy).
@@ -1337,6 +1407,22 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     // real (p. ej. una cancha cerca de tu casa) no debe interferir la prueba.
     if (_mock != null) return;
     if (_background) _startStream();
+    // Llegaste a una cancha: si el ahorro de energía está activo, la detección
+    // puede no llegar a arrancar. Comparte el anti-spam con los caminos de
+    // background, así el usuario no recibe dos avisos por el mismo episodio.
+    unawaited(_warnPowerSaveIfNeeded(playing: false));
+  }
+
+  /// Avisa por notificación si el ahorro de energía está frenando la detección.
+  /// Delega en el helper compartido con los isolates de background, que es el
+  /// dueño del anti-spam (una vez cada 6 h por episodio).
+  Future<void> _warnPowerSaveIfNeeded({required bool playing}) async {
+    await refreshPowerSave(force: true);
+    if (!_powerSaveOn) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await maybeNotifyPowerSave(prefs, playing: playing);
+    } catch (_) {/* best-effort */}
   }
 
   /// Llamado al SALIR de la zona de una cancha (geofence EXIT).
@@ -1400,6 +1486,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _points = 0;
     _calorieRecord = 0;
     _healthEnabled = false;
+    _defaultHidden.clear();
     _streak = 0;
     _streakHistory = [];
     _log = [];
@@ -1495,6 +1582,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       // El reloj pudo sincronizar salud mientras estábamos afuera: completar
       // los partidos recientes que quedaron con calorías/distancia en 0.
       unawaited(refreshRecentIncomplete());
+      // El usuario pudo prender el ahorro mientras estábamos afuera: `force`
+      // porque acá el dato tiene que estar fresco sí o sí (de esto dependen los
+      // avisos del mapa y del panel de permisos).
+      unawaited(refreshPowerSave(force: true));
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached ||
         state == AppLifecycleState.hidden) {
@@ -1912,6 +2003,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// cerramos el partido para proteger tu información antes de que el SO mate la
   /// app. Best-effort: si no se puede leer la batería, no hace nada.
   Future<void> _maybeEndForLowBattery() async {
+    // Se aprovecha el mismo pulso para releer el ahorro de energía (tiene su
+    // propio throttle, así que no se hace una llamada por tick).
+    unawaited(refreshPowerSave());
     if (!isPlaying || _batteryChecking) return;
     _batteryChecking = true;
     try {
@@ -1974,17 +2068,33 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     int? userTriples,
     int? userDoubles,
     int? userFreeThrows,
+    int? matchCount,
+    int? trainingCount,
+    int? winCount,
+    List<int>? gamePoints,
   }) async {
     final p = _pendingSession;
     if (p == null) return;
+
+    // Desglose de la sesión (si el usuario lo cargó). Se arma acá para poder
+    // preguntarle cuánto vale la sesión ANTES de guardarla en el log.
+    final resolved = p.withResult(
+      result,
+      matchCount: matchCount,
+      trainingCount: trainingCount,
+      winCount: winCount,
+      gamePoints: gamePoints,
+    );
 
     // ¿Primera vez en esta cancha? (antes de registrar el tiempo de la cancha)
     final isNewCourt =
         p.courtId.isEmpty ? false : !_totals.containsKey(p.courtId);
 
     // Registro local del partido (recién ahora, con el resultado confirmado):
-    // sumamos la jugada y volcamos el tiempo al total de la cancha.
-    _totalPlays++;
+    // sumamos la jugada y volcamos el tiempo al total de la cancha. Con desglose
+    // suma todo lo que se jugó en la sesión (partidos + entrenamientos); sin él,
+    // los getters devuelven 1/0 y esto es el `++` de siempre.
+    _totalPlays += resolved.gamesPlayed + resolved.trainingsDone;
     if (p.courtId.isNotEmpty) {
       final cur = _totals[p.courtId];
       _totals[p.courtId] = _CourtPlay(
@@ -1993,9 +2103,12 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       );
     }
 
-    // Racha: al ganar sube; al perder se corta (y se archiva).
-    if (result == PlayResult.win) {
-      _streak++;
+    // Racha: sube UNA POR VICTORIA cargada (una sesión con 2 victorias suma 2);
+    // al perder se corta (y se archiva). Sin desglose, `winsCount` vale 1 si el
+    // resultado fue Victoria, que es el comportamiento de siempre.
+    final sessionWins = resolved.winsCount;
+    if (sessionWins > 0) {
+      _streak += sessionWins;
     } else if (result == PlayResult.loss) {
       if (_streak > 0) {
         _streakHistory.insert(
@@ -2028,8 +2141,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     // Bonus de racha: +5% de los puntos por tiempo por cada victoria seguida,
     // con tope de 25% (racha de 5). La racha puede seguir creciendo, pero el
     // porcentaje se mantiene en 25%.
-    final streakPct =
-        result == PlayResult.win ? _streak.clamp(0, 5) * 0.05 : 0.0;
+    // Se condiciona a que la racha REALMENTE haya avanzado en esta sesión, no a
+    // `result`: con desglose puede elegirse "Victoria" y cargar 0 victorias.
+    final streakPct = sessionWins > 0 ? _streak.clamp(0, 5) * 0.05 : 0.0;
     final streakBonus = (timePoints * streakPct).round();
 
     // ── Salud: enriquecer con datos del wearable (si el usuario conectó Salud).
@@ -2082,6 +2196,15 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         userFreeThrows: userFreeThrows,
         calorieRecord: newCalorieRecord,
         fromWorkout: hm?.fromWorkout ?? false,
+        matchCount: matchCount,
+        trainingCount: trainingCount,
+        winCount: winCount,
+        gamePoints: gamePoints,
+        spo2: hm?.spo2,
+        restingHr: hm?.restingHr,
+        hrv: hm?.hrv,
+        respiratoryRate: hm?.respiratoryRate,
+        speed: hm?.speed,
       ),
     );
     if (_log.length > 100) _log = _log.sublist(0, 100);
@@ -2274,10 +2397,37 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// datos): devuelve un resumen legible de las últimas horas.
   Future<String> diagnoseHealth() => _health.diagnose();
 
+  /// Diagnóstico acotado a la ventana EXACTA de [s]. Es el que sirve para
+  /// entender por qué un partido concreto quedó sin datos: el genérico mira las
+  /// últimas 6 h y puede ni cubrir el partido si se consulta un rato después.
+  Future<String> diagnoseHealthForSession(PlaySession s) {
+    final end = DateTime.fromMillisecondsSinceEpoch(s.endedAtMillis);
+    return _health.diagnose(
+      from: end.subtract(Duration(seconds: s.seconds)),
+      to: end,
+    );
+  }
+
   /// Tras esta espera, si el origen sigue sin escribir calorías/distancia
   /// (pero sí hay pasos), se estiman: la ventana real de sincronización del
   /// reloj ya pasó y esperar más no trae datos nuevos.
   static const _healthEstimateAfter = Duration(hours: 3);
+
+  /// Cuánto se espera a que el reloj sincronice antes de dar los datos por
+  /// perdidos. El vuelco real es de minutos: si en 30 no llegó, no llega.
+  static const healthSyncWindow = Duration(minutes: 30);
+
+  /// Último intento de re-lectura por partido (clave: `endedAtMillis`). Sin esto
+  /// se consultaba a Health Connect en CADA apertura del detalle, para siempre,
+  /// en los partidos cuyos datos no van a llegar nunca. Solo en memoria.
+  final Map<int, DateTime> _lastHealthTry = {};
+  static const _healthRetryCooldown = Duration(minutes: 1);
+
+  /// Partidos con una re-lectura EN VUELO, para poder mostrar el spinner solo
+  /// mientras se está leyendo de verdad.
+  final Set<int> _healthRefreshing = {};
+  bool isRefreshingHealth(PlaySession s) =>
+      _healthRefreshing.contains(s.endedAtMillis);
 
   /// Re-lee las métricas de salud de un partido del historial al que le
   /// FALTAN calorías o distancia: el reloj sincroniza Health Connect DESPUÉS
@@ -2288,13 +2438,27 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// pero sí pasos, se estiman para que el partido no quede en 0/0.
   Future<void> refreshHealthFor(PlaySession s) async {
     if (!_healthEnabled || !s.healthIncomplete) return;
+    // Cooldown por partido: entrar y salir del detalle no dispara una lectura
+    // por vez. Clave por endedAtMillis, que identifica al partido.
+    final ahora = DateTime.now();
+    final ultimo = _lastHealthTry[s.endedAtMillis];
+    if (ultimo != null && ahora.difference(ultimo) < _healthRetryCooldown) {
+      return;
+    }
+    _lastHealthTry[s.endedAtMillis] = ahora;
+
     final end = DateTime.fromMillisecondsSinceEpoch(s.endedAtMillis);
     final start = end.subtract(Duration(seconds: s.seconds));
     HealthMetrics? hm;
+    _healthRefreshing.add(s.endedAtMillis);
+    notifyListeners();
     try {
       hm = await _health.metricsFor(start, end);
     } catch (_) {
       hm = null;
+    } finally {
+      _healthRefreshing.remove(s.endedAtMillis);
+      notifyListeners();
     }
     final idx = _log.indexWhere(
         (e) => e.endedAtMillis == s.endedAtMillis && e.courtId == s.courtId);
@@ -2415,6 +2579,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _points = prefs.getInt(_kPoints) ?? 0;
     _calorieRecord = prefs.getDouble(_kCalRecord) ?? 0;
     _healthEnabled = prefs.getBool(_kHealthEnabled) ?? false;
+    _defaultHidden
+      ..clear()
+      ..addAll(MatchSectionX.parseAll(prefs.getStringList(_kVisibility)));
     _unlockedBadges
       ..clear()
       ..addAll(prefs.getStringList(_kBadges) ?? const []);
@@ -2672,6 +2839,63 @@ extension PlayResultX on PlayResult {
   }
 }
 
+/// Secciones del detalle de un partido que el usuario puede ocultar.
+///
+/// Gobierna las DOS superficies a la vez: la pantalla de detalle y la imagen que
+/// se comparte en redes (así lo que ve en pantalla es exactamente lo que va a
+/// publicar). El EXP ganado no está acá a propósito: siempre se muestra, y eso
+/// garantiza que la tarjeta nunca quede sin contenido.
+enum MatchSection {
+  resultado,
+  ubicacion,
+  horario,
+  duracion,
+  desglose,
+  stats,
+  salud,
+}
+
+extension MatchSectionX on MatchSection {
+  String get label => switch (this) {
+        MatchSection.resultado => 'Resultado',
+        MatchSection.ubicacion => 'Cancha y zona',
+        MatchSection.horario => 'Fecha y hora',
+        MatchSection.duracion => 'Duración',
+        MatchSection.desglose => 'Desglose de la sesión',
+        MatchSection.stats => 'Tus estadísticas',
+        MatchSection.salud => 'Datos de salud',
+      };
+
+  /// Qué implica ocultarla, para el subtítulo de cada fila del sheet.
+  String get hint => switch (this) {
+        MatchSection.resultado => 'Si ganaste, perdiste o entrenaste',
+        MatchSection.ubicacion => 'Nombre, zona y foto de la cancha',
+        MatchSection.horario => 'El día y la hora que jugaste',
+        MatchSection.duracion => 'Cuánto duró el partido',
+        MatchSection.desglose => 'Cuántos partidos, victorias y entrenamientos',
+        MatchSection.stats => 'Tus puntos y el desglose 3PT/2PT/TL',
+        MatchSection.salud => 'Calorías, pulso, pasos y distancia',
+      };
+
+  static MatchSection? fromName(String? n) {
+    for (final s in MatchSection.values) {
+      if (s.name == n) return s;
+    }
+    return null;
+  }
+
+  /// Parsea la lista persistida (nombres del enum), ignorando lo que no cazó:
+  /// una clave vieja o corrupta no debe tirar abajo la lectura del historial.
+  static Set<MatchSection> parseAll(List<dynamic>? raw) {
+    final out = <MatchSection>{};
+    for (final e in raw ?? const []) {
+      final s = fromName(e is String ? e : null);
+      if (s != null) out.add(s);
+    }
+    return out;
+  }
+}
+
 /// Métricas físicas agregadas de UN día (para el gráfico de evolución semanal
 /// del perfil). `avgHr` es null si ningún partido del día tuvo pulso.
 class DailyHealth {
@@ -2721,6 +2945,29 @@ class PlaySession {
   /// cardio, pico, maximo] — segundos en cada zona. Null si sin datos HR.
   final List<int>? hrZones;
 
+  // Métricas de muestreo esporádico. Null = el reloj no midió nada en la ventana
+  // del partido, que para varias de ellas es lo normal.
+  /// Oxígeno en sangre (%).
+  final int? spo2;
+  /// Frecuencia cardíaca en reposo (bpm) — valor diario del reloj.
+  final int? restingHr;
+  /// Variabilidad cardíaca RMSSD (ms).
+  final int? hrv;
+  /// Ritmo respiratorio (respiraciones por minuto).
+  final int? respiratoryRate;
+  /// Velocidad promedio (m/s).
+  final double? speed;
+
+  // ── Marcas de "esto lo calculamos nosotros" ──────────────────────────────
+  // Pasada la ventana de sincronización, la app estima calorías y distancia a
+  // partir de los pasos (con un peso FIJO de 70 kg). Sin estas marcas se
+  // mostraban idénticas a las medidas por el reloj — y las calorías dan el bonus
+  // de récord, así que un récord podía ser de un número inventado.
+  /// Las calorías son una estimación, no una medición del reloj.
+  final bool caloriesEstimated;
+  /// La distancia es una estimación (pasos × zancada media), no una medición.
+  final bool distanceEstimated;
+
   // ── Estadísticas ingresadas por el usuario (opcionales) ──────────────────
   /// Puntos anotados por el usuario en este partido.
   final int? userPoints;
@@ -2737,6 +2984,28 @@ class PlaySession {
   /// True si las calorías/distancia vinieron de una sesión de entrenamiento
   /// registrada en el reloj (se destaca en el detalle).
   final bool fromWorkout;
+
+  /// Secciones ocultas SOLO para este partido (override).
+  ///
+  /// **`null` = seguir la configuración por defecto del usuario**, que es lo que
+  /// tienen todas las entradas viejas del historial. Un set vacío es distinto:
+  /// significa "este partido muestra todo" incluso si el default oculta cosas.
+  /// Resolvé siempre con `PlaySessionService.effectiveHiddenFor()`, nunca a mano.
+  final Set<MatchSection>? hiddenSections;
+
+  // ── Desglose de la sesión (opcional) ─────────────────────────────────────
+  // Una sesión puede contener VARIOS partidos, y hasta mezclar partidos con
+  // entrenamiento en la misma tarde. Todo null = sesión de un solo partido, que
+  // es el historial viejo y el camino normal.
+  /// Partidos jugados en la sesión.
+  final int? matchCount;
+  /// Entrenamientos hechos en la sesión.
+  final int? trainingCount;
+  /// Victorias de la sesión (nunca mayor que [matchCount]).
+  final int? winCount;
+  /// Puntos que anotó el usuario en cada partido. Vacío/null = solo se cargó el
+  /// total ([userPoints]).
+  final List<int>? gamePoints;
 
   const PlaySession({
     required this.courtId,
@@ -2757,31 +3026,81 @@ class PlaySession {
     this.userFreeThrows,
     this.calorieRecord = false,
     this.fromWorkout = false,
+    this.hiddenSections,
+    this.matchCount,
+    this.trainingCount,
+    this.winCount,
+    this.gamePoints,
+    this.spo2,
+    this.restingHr,
+    this.hrv,
+    this.respiratoryRate,
+    this.speed,
+    this.caloriesEstimated = false,
+    this.distanceEstimated = false,
   });
 
-  /// Señal de que hubo un WEARABLE (reloj): pulso o zonas cardíacas —el celular
-  /// no mide pulso, solo un reloj lo hace— o una sesión de entrenamiento
-  /// detectada. Pasos/distancia/calorías por sí solos NO cuentan: pueden venir
-  /// del podómetro del celular o de la estimación de último recurso.
-  bool get _fromWearable =>
+  // ── Cuántos partidos/entrenamientos/victorias representa esta entrada ──────
+  // Toda la agregación (stats, logros, racha) tiene que preguntar por ESTO y no
+  // por `result`: así una sesión con desglose cuenta lo que realmente pasó, y el
+  // historial viejo —sin los campos nuevos— sigue valiendo 1 como siempre, sin
+  // necesidad de migrar nada.
+
+  /// Partidos "de verdad" que representa (los entrenamientos van aparte).
+  int get gamesPlayed =>
+      matchCount ??
+      (result != null && result != PlayResult.training ? 1 : 0);
+
+  /// Entrenamientos que representa.
+  int get trainingsDone =>
+      trainingCount ?? (result == PlayResult.training ? 1 : 0);
+
+  /// Victorias que representa.
+  int get winsCount => winCount ?? (result == PlayResult.win ? 1 : 0);
+
+  /// Si el usuario cargó el desglose de la sesión.
+  bool get isMultiGame => matchCount != null || trainingCount != null;
+
+  /// Puntos por partido, solo si hay algo cargado.
+  bool get hasGamePoints => (gamePoints?.isNotEmpty ?? false);
+
+  /// Señal de que hubo un WEARABLE: el celular no mide pulso, solo un reloj lo
+  /// hace. Ya no gatea la franja de salud (ver [hasHealth]), pero sirve para
+  /// distinguir en la UI un dato del reloj de uno del teléfono.
+  bool get fromWearable =>
       fromWorkout ||
       avgHr != null ||
       maxHr != null ||
       (hrZones?.any((z) => z > 0) ?? false);
 
-  /// Si mostrar la franja de métricas físicas en el historial. Exige una señal
-  /// real de wearable ([_fromWearable]) para no mostrar datos solo-celular como
-  /// si fueran del reloj, pero YA NO exige una sesión de entrenamiento explícita:
-  /// alcanza con que el reloj haya registrado el pulso.
+  /// Si mostrar la franja de métricas físicas en el historial.
+  ///
+  /// Basta con que HAYA datos. Antes se exigía además una señal de wearable
+  /// ([_fromWearable]: sesión de entrenamiento o pulso), y eso escondía todo
+  /// cuando el reloj sincronizaba pasos y calorías pero no pulso — con el efecto
+  /// de que ponerlo en modo ejercicio parecía obligatorio, cuando debería ser
+  /// solo recomendable. Ocultar el dato en silencio es peor que mostrarlo: si
+  /// vino del teléfono, el usuario lo nota por lo bajo del número y tiene el
+  /// diagnóstico del partido para ver el origen exacto.
   bool get hasHealth =>
-      _fromWearable &&
-      (calories > 0 || steps > 0 || avgHr != null || distance > 0);
+      calories > 0 || steps > 0 || avgHr != null || distance > 0;
 
   /// ¿Faltan las métricas principales? El wearable sincroniza Health Connect
   /// por partes: puede haber pasos ya escritos y pulso/calorías/distancia aún
   /// no. Mientras falten, la re-lectura diferida sigue reintentando (gatear
   /// con [hasHealth] dejaba datos parciales para siempre). Incluye el pulso:
   /// sin él no se considera "del reloj", así que conviene seguir esperándolo.
+  /// Faltan datos pero el partido es RECIENTE: el reloj todavía puede estar
+  /// sincronizando. Es el estado "procesando".
+  bool get healthPending =>
+      healthIncomplete &&
+      DateTime.now().difference(
+              DateTime.fromMillisecondsSinceEpoch(endedAtMillis)) <
+          PlaySessionService.healthSyncWindow;
+
+  /// Faltan datos y ya venció la ventana de sincronización: no van a llegar.
+  bool get healthMissing => healthIncomplete && !healthPending;
+
   bool get healthIncomplete =>
       seconds > 0 && (calories <= 0 || distance <= 0 || avgHr == null);
 
@@ -2807,6 +3126,17 @@ class PlaySession {
     int? userFreeThrows,
     bool calorieRecord = false,
     bool fromWorkout = false,
+    int? matchCount,
+    int? trainingCount,
+    int? winCount,
+    List<int>? gamePoints,
+    int? spo2,
+    int? restingHr,
+    int? hrv,
+    int? respiratoryRate,
+    double? speed,
+    bool caloriesEstimated = false,
+    bool distanceEstimated = false,
   }) =>
       PlaySession(
         courtId: courtId,
@@ -2827,6 +3157,18 @@ class PlaySession {
         userFreeThrows: userFreeThrows,
         calorieRecord: calorieRecord,
         fromWorkout: fromWorkout,
+        hiddenSections: hiddenSections,
+        matchCount: matchCount,
+        trainingCount: trainingCount,
+        winCount: winCount,
+        gamePoints: gamePoints,
+        spo2: spo2,
+        restingHr: restingHr,
+        hrv: hrv,
+        respiratoryRate: respiratoryRate,
+        speed: speed,
+        caloriesEstimated: caloriesEstimated,
+        distanceEstimated: distanceEstimated,
       );
 
   /// Fusiona datos de salud llegados tarde (el wearable sincroniza Health
@@ -2841,11 +3183,18 @@ class PlaySession {
         endedAtMillis: endedAtMillis,
         result: result,
         points: points,
-        calories: calories > 0 ? calories : hm.calories,
+        // Un valor ESTIMADO no puede bloquear al real: con la condición vieja
+        // (`calories > 0 ? calories : ...`), una vez estimadas las calorías ya
+        // nunca se reemplazaban por las que después sí medía el reloj.
+        calories: (calories > 0 && !caloriesEstimated)
+            ? calories
+            : (hm.calories > 0 ? hm.calories : calories),
         avgHr: avgHr ?? hm.avgHr,
         maxHr: maxHr ?? hm.maxHr,
         steps: steps > 0 ? steps : hm.steps,
-        distance: distance > 0 ? distance : hm.distance,
+        distance: (distance > 0 && !distanceEstimated)
+            ? distance
+            : (hm.distance > 0 ? hm.distance : distance),
         hrZones: hrZones ?? hm.hrZones,
         userPoints: userPoints,
         userTriples: userTriples,
@@ -2853,9 +3202,30 @@ class PlaySession {
         userFreeThrows: userFreeThrows,
         calorieRecord: calorieRecord,
         fromWorkout: fromWorkout || hm.fromWorkout,
+        // Arrastrar el override: los datos del reloj llegan DESPUÉS de que el
+        // usuario configuró qué mostrar, y olvidarlo acá se lo borraría sin que
+        // toque nada.
+        hiddenSections: hiddenSections,
+        matchCount: matchCount,
+        trainingCount: trainingCount,
+        winCount: winCount,
+        gamePoints: gamePoints,
+        // Estas SÍ se fusionan (no se arrastran): son el motivo de la re-lectura
+        // diferida. Solo rellenan lo que falta, igual que el pulso y los pasos.
+        spo2: spo2 ?? hm.spo2,
+        restingHr: restingHr ?? hm.restingHr,
+        hrv: hrv ?? hm.hrv,
+        respiratoryRate: respiratoryRate ?? hm.respiratoryRate,
+        speed: speed ?? hm.speed,
+        // Si llegó el dato REAL, se limpia la marca de estimado: si no, un buen
+        // dato quedaría rotulado como inventado para siempre.
+        caloriesEstimated: hm.calories > 0 ? false : caloriesEstimated,
+        distanceEstimated: hm.distance > 0 ? false : distanceEstimated,
       );
 
   /// Copia con calorías/distancia puntuales (estimación de último recurso).
+  /// Un valor no nulo acá SIEMPRE es una estimación (el llamador solo la calcula
+  /// cuando el dato real no llegó), así que de paso queda marcado como tal.
   PlaySession withEstimates({double? calories, double? distance}) =>
       PlaySession(
         courtId: courtId,
@@ -2876,6 +3246,54 @@ class PlaySession {
         userFreeThrows: userFreeThrows,
         calorieRecord: calorieRecord,
         fromWorkout: fromWorkout,
+        hiddenSections: hiddenSections,
+        matchCount: matchCount,
+        trainingCount: trainingCount,
+        winCount: winCount,
+        gamePoints: gamePoints,
+        spo2: spo2,
+        restingHr: restingHr,
+        hrv: hrv,
+        respiratoryRate: respiratoryRate,
+        speed: speed,
+        // Un valor no nulo acá es, por definición, una estimación.
+        caloriesEstimated: caloriesEstimated || calories != null,
+        distanceEstimated: distanceEstimated || distance != null,
+      );
+
+  /// Copia con otro override de visibilidad. [sections] en null vuelve a seguir
+  /// la configuración por defecto del usuario.
+  PlaySession withHiddenSections(Set<MatchSection>? sections) => PlaySession(
+        courtId: courtId,
+        courtName: courtName,
+        seconds: seconds,
+        endedAtMillis: endedAtMillis,
+        result: result,
+        points: points,
+        calories: calories,
+        avgHr: avgHr,
+        maxHr: maxHr,
+        steps: steps,
+        distance: distance,
+        hrZones: hrZones,
+        userPoints: userPoints,
+        userTriples: userTriples,
+        userDoubles: userDoubles,
+        userFreeThrows: userFreeThrows,
+        calorieRecord: calorieRecord,
+        fromWorkout: fromWorkout,
+        hiddenSections: sections,
+        matchCount: matchCount,
+        trainingCount: trainingCount,
+        winCount: winCount,
+        gamePoints: gamePoints,
+        spo2: spo2,
+        restingHr: restingHr,
+        hrv: hrv,
+        respiratoryRate: respiratoryRate,
+        speed: speed,
+        caloriesEstimated: caloriesEstimated,
+        distanceEstimated: distanceEstimated,
       );
 
   Map<String, dynamic> toJson() => {
@@ -2897,6 +3315,24 @@ class PlaySession {
         'uFT': userFreeThrows,
         'calorieRecord': calorieRecord,
         'fromWorkout': fromWorkout,
+        // Se OMITE la clave cuando no hay override: "sin configurar" (seguir el
+        // default) y "configurado sin ocultar nada" son estados distintos, y una
+        // lista vacía los confundiría.
+        if (hiddenSections != null)
+          'hidden': hiddenSections!.map((e) => e.name).toList(),
+        // Mismo criterio que 'hidden': se omiten si no se cargaron, porque "sin
+        // desglose" y "cargó cero partidos" son estados distintos.
+        if (matchCount != null) 'nMatches': matchCount,
+        if (trainingCount != null) 'nTrainings': trainingCount,
+        if (winCount != null) 'nWins': winCount,
+        if (gamePoints != null) 'gamePts': gamePoints,
+        if (spo2 != null) 'spo2': spo2,
+        if (restingHr != null) 'restHr': restingHr,
+        if (hrv != null) 'hrv': hrv,
+        if (respiratoryRate != null) 'resp': respiratoryRate,
+        if (speed != null) 'speed': speed,
+        if (caloriesEstimated) 'calEst': true,
+        if (distanceEstimated) 'distEst': true,
       };
 
   factory PlaySession.fromJson(Map<String, dynamic> j) => PlaySession(
@@ -2920,6 +3356,23 @@ class PlaySession {
         userFreeThrows: (j['uFT'] as num?)?.toInt(),
         calorieRecord: (j['calorieRecord'] as bool?) ?? false,
         fromWorkout: (j['fromWorkout'] as bool?) ?? false,
+        // Ausente (historial viejo) ⇒ null ⇒ sigue el default del usuario.
+        hiddenSections: j.containsKey('hidden')
+            ? MatchSectionX.parseAll(j['hidden'] as List<dynamic>?)
+            : null,
+        matchCount: (j['nMatches'] as num?)?.toInt(),
+        trainingCount: (j['nTrainings'] as num?)?.toInt(),
+        winCount: (j['nWins'] as num?)?.toInt(),
+        gamePoints: (j['gamePts'] as List<dynamic>?)
+            ?.map((e) => (e as num).toInt())
+            .toList(),
+        spo2: (j['spo2'] as num?)?.toInt(),
+        restingHr: (j['restHr'] as num?)?.toInt(),
+        hrv: (j['hrv'] as num?)?.toInt(),
+        respiratoryRate: (j['resp'] as num?)?.toInt(),
+        speed: (j['speed'] as num?)?.toDouble(),
+        caloriesEstimated: (j['calEst'] as bool?) ?? false,
+        distanceEstimated: (j['distEst'] as bool?) ?? false,
       );
 }
 

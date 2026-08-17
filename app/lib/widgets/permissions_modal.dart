@@ -227,6 +227,110 @@ class _PermissionsModalState extends State<PermissionsModal>
     ),
   };
 
+  /// Una de las dos salidas del aviso de ahorro: qué pasa si lo apagás y qué
+  /// pasa si no. Se muestran las dos juntas para que la decisión sea obvia.
+  Widget _powerSaveOption(String titulo, String detalle) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Container(
+            width: 4,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.white(0.45),
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+        const SizedBox(width: 7),
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              text: '$titulo: ',
+              style: AppText.grotesk(
+                  size: 11.5, weight: FontWeight.w800, height: 1.35),
+              children: [
+                TextSpan(
+                  text: detalle,
+                  style: AppText.grotesk(
+                      size: 11.5,
+                      weight: FontWeight.w400,
+                      color: AppColors.white(0.7),
+                      height: 1.35),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Aviso de ahorro de energía. No es un permiso —no hay nada que conceder—,
+  /// así que va como cartel aparte y no como fila de [_row].
+  ///
+  /// Incluye a mano el paso de "suspensión profunda" de Samsung porque es una
+  /// lista distinta de la optimización de batería y **no existe un intent** para
+  /// abrirla: explicárselo al usuario es lo único que podemos hacer.
+  Widget _powerSaveWarning() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.busy.withAlpha(30),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.busy.withAlpha(90)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.battery_saver, size: 18, color: AppColors.busy),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Ahorro de energía activo',
+                    style: AppText.grotesk(
+                        size: 13, weight: FontWeight.w800)),
+                const SizedBox(height: 3),
+                Text(
+                  'Mientras esté prendido, el sistema puede frenar la detección '
+                  'automática y tu partido podría no contarse.',
+                  style: AppText.grotesk(
+                      size: 11.5, color: AppColors.white(0.7), height: 1.35),
+                ),
+                const SizedBox(height: 8),
+                // Lo importante no es el diagnóstico sino qué hacer: o lo
+                // apagás y funciona solo, o lo dejás y registrás a mano.
+                _powerSaveOption(
+                  'Si lo apagás',
+                  'Tus partidos arrancan y se cierran solos, sin que toques nada.',
+                ),
+                const SizedBox(height: 6),
+                _powerSaveOption(
+                  'Si lo dejás prendido',
+                  'Vas a tener que registrar el partido a mano: abrí 1of1 en la '
+                      'cancha y tocá EMPEZAR YA, y al terminar, DETENER.',
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Se apaga desde Ajustes → Batería. En Samsung, revisá además '
+                  'que 1of1 no esté en "Apps en suspensión profunda" (Ajustes → '
+                  'Batería → Límites de uso en segundo plano).',
+                  style: AppText.grotesk(
+                      size: 11, color: AppColors.white(0.5), height: 1.35),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final st = _state;
@@ -262,6 +366,10 @@ class _PermissionsModalState extends State<PermissionsModal>
               ),
             )
           else ...[
+            // Va PRIMERO y fuera de `pending`: aunque estén todos los permisos,
+            // el ahorro de energía rompe la detección igual, así que es lo más
+            // urgente que el usuario tiene para leer acá.
+            if (st.powerSave) _powerSaveWarning(),
             // Con todo concedido, el modal queda como panel de Salud a secas
             // (sin intro de permisos ni cartel de "todo listo").
             if (pending.isNotEmpty) ...[

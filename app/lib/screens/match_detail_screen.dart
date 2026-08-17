@@ -13,7 +13,9 @@ import '../services/courts_provider.dart';
 import '../services/play_session_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
+import '../widgets/busy_overlay.dart';
 import '../widgets/court_image.dart';
+import '../widgets/match_visibility_sheet.dart';
 import '../widgets/pressable_widget.dart';
 
 class MatchDetailScreen extends StatefulWidget {
@@ -65,6 +67,12 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     }
     final (color, label) = _resultStyle(s.result);
     final ended = DateTime.fromMillisecondsSinceEpoch(s.endedAtMillis);
+    // Qué ocultó el usuario (el override de este partido, o su default). La
+    // precedencia la resuelve el servicio: acá solo se consulta.
+    final hidden = context.read<PlaySessionService>().effectiveHiddenFor(s);
+    // Null si ocultó duración Y horario: sin items la franja quedaría como una
+    // caja vacía con bordes.
+    final statStrip = _statStrip(s, ended, hidden);
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -104,7 +112,17 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                           style: AppText.grotesk(
                               size: 14, weight: FontWeight.w600, color: AppColors.white(0.6))),
                       const Spacer(),
-                      const SizedBox(width: 44),
+                      // Qué se muestra de este partido (y de la imagen que se
+                      // comparte). Ocupa el hueco que balanceaba el título.
+                      PressableWidget(
+                        onTap: () => showMatchVisibilitySheet(context, s),
+                        child: SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: Icon(Icons.tune_rounded,
+                              size: 20, color: AppColors.white(0.7)),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -116,22 +134,60 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                       children: [
                         const SizedBox(height: 4),
                         // Hero: imagen de la cancha con el resultado y el nombre.
-                        _heroBanner(court, s, color, label),
-                        const SizedBox(height: 22),
-                        // Puntos protagonista.
+                        // Si ocultó la cancha pero no el resultado, este último
+                        // necesita su propia fila (vive DENTRO del hero, que es
+                        // la foto de la cancha).
+                        if (!hidden.contains(MatchSection.ubicacion))
+                          _heroBanner(court, s, color, label,
+                              showResult:
+                                  !hidden.contains(MatchSection.resultado))
+                        else if (!hidden.contains(MatchSection.resultado))
+                          _resultOnlyBanner(color, label),
+                        if (!hidden.contains(MatchSection.ubicacion) ||
+                            !hidden.contains(MatchSection.resultado))
+                          const SizedBox(height: 22),
+                        // Puntos protagonista. Nunca se oculta: es lo que
+                        // garantiza que el resumen no quede vacío.
                         _pointsHero(s),
-                        const SizedBox(height: 22),
                         // Franja de stats (duración · fecha · hora).
-                        _statStrip(s, ended),
+                        if (statStrip != null) ...[
+                          const SizedBox(height: 22),
+                          statStrip,
+                        ],
+                        // Desglose de la sesión (varios partidos).
+                        if (s.isMultiGame &&
+                            !hidden.contains(MatchSection.desglose)) ...[
+                          const SizedBox(height: 22),
+                          _sessionBreakdown(s),
+                        ],
                         // Lo que anotó el usuario (total + desglose 3PT/2PT/TL).
-                        if (s.hasUserStats) ...[
+                        if (s.hasUserStats &&
+                            !hidden.contains(MatchSection.stats)) ...[
                           const SizedBox(height: 22),
                           _userStatsSection(s),
                         ],
                         // Salud (todas las métricas disponibles).
-                        if (s.hasHealth) ...[
+                        if (s.hasHealth &&
+                            !hidden.contains(MatchSection.salud)) ...[
                           const SizedBox(height: 22),
                           _healthStrip(s),
+                        ],
+                        // Estado de la sincronización: "procesando" mientras el
+                        // reloj todavía puede volcar los datos, y el aviso de
+                        // que no llegaron cuando esa ventana venció.
+                        if (!hidden.contains(MatchSection.salud) &&
+                            s.healthPending) ...[
+                          const SizedBox(height: 14),
+                          _healthPendingNotice(s),
+                        ],
+                        // El diagnóstico va SIEMPRE que la sección de salud esté
+                        // visible, no solo cuando falta todo: el caso más común
+                        // es que haya algún dato pero incompleto (pasos del
+                        // teléfono y nada del reloj), y ahí es cuando más falta
+                        // hace saber de dónde vino cada número.
+                        if (!hidden.contains(MatchSection.salud)) ...[
+                          const SizedBox(height: 14),
+                          _healthDiagnoseLink(s),
                         ],
                         const SizedBox(height: 24),
                         _brandFooter(),
@@ -162,7 +218,8 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
 
   /// Hero: imagen de la cancha a ancho completo con degradado; el resultado como
   /// chip arriba-izquierda y el nombre/zona sobre la imagen abajo.
-  Widget _heroBanner(Court? court, PlaySession s, Color color, String label) {
+  Widget _heroBanner(Court? court, PlaySession s, Color color, String label,
+      {bool showResult = true}) {
     final name = court?.name ?? (s.courtName.isEmpty ? 'Cancha' : s.courtName);
     final sub = court == null
         ? ''
@@ -194,22 +251,23 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
           ),
           // Resultado: plano y editorial (misma directiva que la story),
           // barrita de acento a la izquierda; el scrim ya da contraste.
-          Positioned(
-            top: 14,
-            left: 16,
-            child: Row(
-              children: [
-                Container(width: 4, height: 14, color: color),
-                const SizedBox(width: 8),
-                Text(label,
-                    style: AppText.archivo(
-                        size: 12,
-                        weight: FontWeight.w900,
-                        color: color,
-                        letterSpacing: 0.2)),
-              ],
+          if (showResult)
+            Positioned(
+              top: 14,
+              left: 16,
+              child: Row(
+                children: [
+                  Container(width: 4, height: 14, color: color),
+                  const SizedBox(width: 8),
+                  Text(label,
+                      style: AppText.archivo(
+                          size: 12,
+                          weight: FontWeight.w900,
+                          color: color,
+                          letterSpacing: 0.2)),
+                ],
+              ),
             ),
-          ),
           // Nombre + zona.
           Positioned(
             left: 16,
@@ -230,6 +288,197 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Resultado sin la foto de la cancha, para cuando ocultó la ubicación pero no
+  /// el resultado (que normalmente vive dentro del hero).
+  Widget _resultOnlyBanner(Color color, String label) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        border: Border.all(color: AppColors.line, width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(width: 4, height: 14, color: color),
+          const SizedBox(width: 8),
+          Text(label,
+              style: AppText.archivo(
+                  size: 12,
+                  weight: FontWeight.w900,
+                  color: color,
+                  letterSpacing: 0.2)),
+        ],
+      ),
+    );
+  }
+
+  /// Acceso al diagnóstico de salud de ESTE partido. Aparece solo cuando no hubo
+  /// datos: es la diferencia entre "el reloj no sincronizó" y "la app no leyó".
+  /// "Procesando datos de salud…": el reloj vuelca a Health Connect con retraso,
+  /// así que un partido recién terminado casi siempre llega incompleto. El
+  /// spinner aparece solo mientras hay una lectura EN VUELO, para no dejar una
+  /// animación eterna girando sobre algo que no está pasando.
+  Widget _healthPendingNotice(PlaySession s) {
+    final leyendo = context.watch<PlaySessionService>().isRefreshingHealth(s);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withAlpha(20),
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        border: Border.all(color: AppColors.accent.withAlpha(60)),
+      ),
+      child: Row(
+        children: [
+          if (leyendo)
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppColors.accent),
+            )
+          else
+            Icon(Icons.hourglass_empty, size: 15, color: AppColors.accent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Procesando datos de salud…\nTu reloj puede tardar unos minutos en '
+              'sincronizar. Volvé a entrar en un rato.',
+              style: AppText.grotesk(
+                  size: 12, color: AppColors.white(0.75), height: 1.35),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _healthDiagnoseLink(PlaySession s) {
+    // El texto describe el problema real de cada caso: sin nada, con datos que
+    // no vinieron del reloj, o todo en orden (ahí es solo curiosidad).
+    final label = s.healthMissing && !s.hasHealth
+        ? 'No llegaron datos del reloj · ver por qué'
+        : (!s.hasHealth
+            ? '¿Por qué no hay datos de salud?'
+            : (!s.fromWearable
+                ? '¿Por qué no aparecen los datos del reloj?'
+                : 'Ver de dónde vienen estos datos'));
+    return PressableWidget(
+      onTap: () => _showHealthDiagnose(s),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.white(0.04),
+          borderRadius: BorderRadius.circular(AppShape.rCard),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.help_outline, size: 16, color: AppColors.white(0.4)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(label,
+                  style: AppText.grotesk(
+                      size: 12.5, color: AppColors.white(0.6))),
+            ),
+            Icon(Icons.chevron_right, size: 18, color: AppColors.white(0.3)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showHealthDiagnose(PlaySession s) async {
+    final play = context.read<PlaySessionService>();
+    final report = await runBusy(
+      context,
+      () => play.diagnoseHealthForSession(s),
+    );
+    if (report == null || !mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bgElev,
+        title: Text('Lectura de salud',
+            style: AppText.archivo(size: 18, weight: FontWeight.w800)),
+        content: SingleChildScrollView(
+          child: Text(report,
+              style: AppText.grotesk(size: 12, color: AppColors.white(0.8))),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cerrar',
+                style: AppText.grotesk(size: 13, color: AppColors.accent)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Desglose de una sesión con varios partidos: cuántos se jugaron, cuántos se
+  /// ganaron y cuántos entrenamientos hubo, más los puntos de cada partido si se
+  /// cargaron.
+  Widget _sessionBreakdown(PlaySession s) {
+    final items = <(String, String)>[
+      if (s.gamesPlayed > 0) ('PARTIDOS', '${s.gamesPlayed}'),
+      if (s.gamesPlayed > 0) ('VICTORIAS', '${s.winsCount}'),
+      if (s.trainingsDone > 0) ('ENTRENAM.', '${s.trainingsDone}'),
+    ];
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        border: Border.all(color: AppColors.line, width: 1),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              for (var i = 0; i < items.length; i++) ...[
+                if (i > 0) _vDivider(),
+                Expanded(child: _inlineStat(items[i].$1, items[i].$2)),
+              ],
+            ],
+          ),
+          // Puntos partido por partido (solo si los cargó).
+          if (s.hasGamePoints) ...[
+            const SizedBox(height: 14),
+            Container(height: 1, color: AppColors.white(0.08)),
+            const SizedBox(height: 12),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 10,
+              runSpacing: 8,
+              children: [
+                for (var i = 0; i < s.gamePoints!.length; i++)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.white(0.05),
+                      borderRadius: BorderRadius.circular(AppShape.rChip),
+                    ),
+                    child: Text(
+                      'P${i + 1}  ${s.gamePoints![i]}',
+                      style: AppText.grotesk(
+                          size: 12,
+                          weight: FontWeight.w700,
+                          color: AppColors.white(0.75)),
+                    ),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -258,7 +507,28 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
   }
 
   /// Franja única con duración · fecha · hora, separadas por líneas finas.
-  Widget _statStrip(PlaySession s, DateTime ended) {
+  ///
+  /// Los items se arman según lo que el usuario dejó visible (duración y horario
+  /// son toggles distintos) y los divisores se intercalan después, así no queda
+  /// una línea colgando de un borde. Devuelve **null** si no sobrevivió ningún
+  /// item: la franja vacía sería una caja con bordes y nada adentro.
+  Widget? _statStrip(PlaySession s, DateTime ended, Set<MatchSection> hidden) {
+    final items = <Widget>[
+      if (!hidden.contains(MatchSection.duracion))
+        _inlineStat('DURACIÓN', PlaySessionService.fmt(s.seconds)),
+      if (!hidden.contains(MatchSection.horario)) ...[
+        _inlineStat('FECHA', _fmtDate(ended)),
+        _inlineStat('HORA',
+            '${ended.hour.toString().padLeft(2, '0')}:${ended.minute.toString().padLeft(2, '0')}'),
+      ],
+    ];
+    if (items.isEmpty) return null;
+
+    final row = <Widget>[];
+    for (var i = 0; i < items.length; i++) {
+      if (i > 0) row.add(_vDivider());
+      row.add(Expanded(child: items[i]));
+    }
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
@@ -266,17 +536,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
         borderRadius: BorderRadius.circular(AppShape.rCard),
         border: Border.all(color: AppColors.line, width: 1),
       ),
-      child: Row(
-        children: [
-          Expanded(child: _inlineStat('DURACIÓN', PlaySessionService.fmt(s.seconds))),
-          _vDivider(),
-          Expanded(child: _inlineStat('FECHA', _fmtDate(ended))),
-          _vDivider(),
-          Expanded(
-              child: _inlineStat('HORA',
-                  '${ended.hour.toString().padLeft(2, '0')}:${ended.minute.toString().padLeft(2, '0')}')),
-        ],
-      ),
+      child: Row(children: row),
     );
   }
 
@@ -392,9 +652,15 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     // Métricas planas con color por tipo (sin cajas grises). Solo las que tienen
     // dato: lo que esté en 0/null no aparece.
     final metrics = <Widget>[
+      // El "~" y el sufijo "est." marcan lo que calculamos nosotros a partir de
+      // los pasos (con un peso fijo), no lo que midió el reloj. Sin eso, un
+      // récord de calorías podía ser de un número inventado.
       if (s.calories > 0)
-        _healthMetric(Icons.local_fire_department, const Color(0xFFFF6B1A),
-            '${s.calories.round()}', 'kcal'),
+        _healthMetric(
+            Icons.local_fire_department,
+            const Color(0xFFFF6B1A),
+            '${s.caloriesEstimated ? '~' : ''}${s.calories.round()}',
+            s.caloriesEstimated ? 'kcal est.' : 'kcal'),
       if (s.steps > 0)
         _healthMetric(Icons.directions_walk, const Color(0xFF22C55E),
             '${s.steps}', 'pasos'),
@@ -408,16 +674,32 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
         _healthMetric(
             Icons.straighten,
             const Color(0xFF3B82F6),
-            s.distance >= 1000
-                ? (s.distance / 1000).toStringAsFixed(2)
-                : '${s.distance.round()}',
-            s.distance >= 1000 ? 'km' : 'm'),
+            '${s.distanceEstimated ? '~' : ''}'
+                '${s.distance >= 1000 ? (s.distance / 1000).toStringAsFixed(2) : s.distance.round()}',
+            '${s.distance >= 1000 ? 'km' : 'm'}${s.distanceEstimated ? ' est.' : ''}'),
       if (s.calories > 0 && s.seconds > 0)
         _healthMetric(Icons.whatshot, const Color(0xFFF97316),
             (s.calories / (s.seconds / 60)).toStringAsFixed(1), 'kcal/min'),
       if (s.steps > 0 && s.seconds > 0)
         _healthMetric(Icons.speed, const Color(0xFF10B981),
             '${(s.steps / (s.seconds / 60)).round()}', 'pasos/min'),
+      // Métricas esporádicas: solo si el reloj las midió. Null ≠ 0 — mostrar
+      // "0% de oxígeno" cuando simplemente no hubo muestra sería alarmante.
+      if (s.spo2 != null)
+        _healthMetric(Icons.bloodtype, const Color(0xFF06B6D4), '${s.spo2}',
+            '% O₂'),
+      if (s.restingHr != null)
+        _healthMetric(Icons.bedtime_outlined, const Color(0xFF8B5CF6),
+            '${s.restingHr}', 'bpm reposo'),
+      if (s.hrv != null)
+        _healthMetric(Icons.ssid_chart, const Color(0xFFA855F7), '${s.hrv}',
+            'ms HRV'),
+      if (s.respiratoryRate != null)
+        _healthMetric(Icons.air, const Color(0xFF0EA5E9),
+            '${s.respiratoryRate}', 'resp/min'),
+      if (s.speed != null && s.speed! > 0)
+        _healthMetric(Icons.directions_run, const Color(0xFF14B8A6),
+            (s.speed! * 3.6).toStringAsFixed(1), 'km/h'),
     ];
     final hasZones = s.hrZones != null &&
         s.hrZones!.any((z) => z > 0);
@@ -436,6 +718,14 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                     weight: FontWeight.w700,
                     color: AppColors.white(0.5),
                     letterSpacing: 0.12)),
+            // Sin señal de reloj (no hay pulso ni sesión), estos números salen
+            // del teléfono: decirlo evita que un dato bajo se lea como propio.
+            if (!s.fromWearable) ...[
+              const SizedBox(width: 6),
+              Text('· del teléfono',
+                  style: AppText.grotesk(
+                      size: 10, color: AppColors.white(0.35))),
+            ],
             if (s.calorieRecord) ...[
               const Spacer(),
               Container(
@@ -473,7 +763,18 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
           ),
           const SizedBox(height: 12),
         ],
-        Wrap(spacing: 22, runSpacing: 14, children: metrics),
+        // Centradas. El SizedBox de ancho infinito es imprescindible: la Column
+        // usa crossAxisAlignment.start, así que sin él el Wrap se encoge al
+        // ancho de su contenido y `WrapAlignment.center` no centra nada.
+        SizedBox(
+          width: double.infinity,
+          child: Wrap(
+            spacing: 22,
+            runSpacing: 14,
+            alignment: WrapAlignment.center,
+            children: metrics,
+          ),
+        ),
       ],
     );
   }
@@ -719,6 +1020,9 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     }
     final (color, label) = _resultStyle(s.result);
     final ended = DateTime.fromMillisecondsSinceEpoch(s.endedAtMillis);
+    // La tarjeta respeta lo mismo que la pantalla: lo que el usuario ve es
+    // exactamente lo que publica.
+    final hidden = context.read<PlaySessionService>().effectiveHiddenFor(s);
 
     // Overlay temporal FUERA de pantalla (left: -3000) para renderizar la
     // tarjeta 1080×1920 sin que el usuario la vea. El RepaintBoundary con [key]
@@ -740,6 +1044,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
               color: color,
               label: label,
               ended: ended,
+              hidden: hidden,
             ),
           ),
         ),
@@ -759,7 +1064,10 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       final buffer = byteData!.buffer.asUint8List();
 
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/match_result.png');
+      // Un archivo por partido: con un nombre fijo, compartir dos partidos
+      // seguidos mandaba la imagen del anterior (varias apps del share sheet
+      // leen el archivo DESPUÉS de que el sheet volvió).
+      final file = File('${dir.path}/match_${s.endedAtMillis}.png');
       await file.writeAsBytes(buffer);
 
       entry.remove();
@@ -841,12 +1149,18 @@ class _ShareCard extends StatelessWidget {
   final String label;
   final DateTime ended;
 
+  /// Secciones que el usuario ocultó (ya resueltas por
+  /// `PlaySessionService.effectiveHiddenFor`). El logo, el EXP y el disclaimer
+  /// no son ocultables, así que la tarjeta nunca queda sin contenido.
+  final Set<MatchSection> hidden;
+
   const _ShareCard({
     required this.session,
     required this.court,
     required this.color,
     required this.label,
     required this.ended,
+    required this.hidden,
   });
 
   @override
@@ -870,52 +1184,109 @@ class _ShareCard extends StatelessWidget {
           const AppLogo(height: 150),
           const Spacer(),
           // Resultado: plano y editorial (sin globo), barrita de acento arriba.
-          Container(width: 56, height: 5, color: color),
-          const SizedBox(height: 22),
-          Text(label,
+          if (!hidden.contains(MatchSection.resultado)) ...[
+            Container(width: 56, height: 5, color: color),
+            const SizedBox(height: 22),
+            Text(label,
+                style: AppText.display(
+                    size: 36,
+                    weight: FontWeight.w900,
+                    color: color,
+                    letterSpacing: 0.25)),
+            const SizedBox(height: 40),
+          ],
+          // Cancha: nombre, zona y el chip de tipo se van juntos. La foto no
+          // está en la tarjeta, pero el nombre alcanza para delatar el lugar.
+          if (!hidden.contains(MatchSection.ubicacion)) ...[
+            Text(
+              court?.name ?? (s.courtName.isEmpty ? 'Cancha' : s.courtName),
+              textAlign: TextAlign.center,
               style: AppText.display(
-                  size: 36,
-                  weight: FontWeight.w900,
-                  color: color,
-                  letterSpacing: 0.25)),
-          const SizedBox(height: 40),
-          // Cancha.
-          Text(
-            court?.name ?? (s.courtName.isEmpty ? 'Cancha' : s.courtName),
-            textAlign: TextAlign.center,
-            style: AppText.display(
-                size: 64, weight: FontWeight.w900, height: 1.05),
-          ),
-          if (court != null && court!.area.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text(court!.area,
-                style: AppText.grotesk(size: 28, color: AppColors.white(0.5))),
+                  size: 64, weight: FontWeight.w900, height: 1.05),
+            ),
+            if (court != null && court!.area.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(court!.area,
+                  style: AppText.grotesk(size: 28, color: AppColors.white(0.5))),
+            ],
+            // Exterior/Interior: mismo dato que ya se muestra en el detalle de
+            // cancha (court.type), acá como chip con ícono para la imagen.
+            if (court != null && court!.type.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _shareTypeBadge(court!.type),
+            ],
+            const SizedBox(height: 24),
           ],
-          // Exterior/Interior: mismo dato que ya se muestra en el detalle de
-          // cancha (court.type), acá como chip con ícono para la imagen.
-          if (court != null && court!.type.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _shareTypeBadge(court!.type),
-          ],
-          const SizedBox(height: 24),
-          Text(
-            '${_fmtDate(ended)} · ${ended.hour.toString().padLeft(2, '0')}:${ended.minute.toString().padLeft(2, '0')}',
-            style: AppText.grotesk(size: 26, color: AppColors.white(0.4)),
-          ),
+          if (!hidden.contains(MatchSection.horario))
+            Text(
+              '${_fmtDate(ended)} · ${ended.hour.toString().padLeft(2, '0')}:${ended.minute.toString().padLeft(2, '0')}',
+              style: AppText.grotesk(size: 26, color: AppColors.white(0.4)),
+            ),
           const SizedBox(height: 80),
-          // Stats principales.
+          // Stats principales. El EXP va siempre, así que el divisor nunca queda
+          // colgado de un borde.
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _shareStat('DURACIÓN', PlaySessionService.fmt(s.seconds)),
-              _shareDivider(),
+              if (!hidden.contains(MatchSection.duracion)) ...[
+                _shareStat('DURACIÓN', PlaySessionService.fmt(s.seconds)),
+                _shareDivider(),
+              ],
               _shareStat('EXP', s.points > 0 ? '+${s.points}' : '—',
                   color: s.points > 0 ? AppColors.accent : null),
             ],
           ),
           // Stats del usuario: total anotado (número grande) + el desglose como
           // planilla de texto plano (mismas métricas y valores que el registro).
-          if (s.hasUserStats) ...[
+          // Desglose de la sesión (varios partidos).
+          if (s.isMultiGame && !hidden.contains(MatchSection.desglose)) ...[
+            const SizedBox(height: 56),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (s.gamesPlayed > 0) ...[
+                  _shareStat('PARTIDOS', '${s.gamesPlayed}'),
+                  _shareDivider(),
+                  _shareStat('VICTORIAS', '${s.winsCount}'),
+                ],
+                if (s.trainingsDone > 0) ...[
+                  if (s.gamesPlayed > 0) _shareDivider(),
+                  _shareStat('ENTRENAM.', '${s.trainingsDone}'),
+                ],
+              ],
+            ),
+            if (s.hasGamePoints) ...[
+              const SizedBox(height: 32),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 20,
+                  runSpacing: 16,
+                  children: [
+                    for (var i = 0; i < s.gamePoints!.length; i++)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 22, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.white(0.06),
+                          borderRadius: BorderRadius.circular(AppShape.rChip),
+                          border: Border.all(color: AppColors.white(0.14)),
+                        ),
+                        child: Text(
+                          'P${i + 1}  ${s.gamePoints![i]}',
+                          style: AppText.grotesk(
+                              size: 26,
+                              weight: FontWeight.w700,
+                              color: AppColors.white(0.8)),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+          if (s.hasUserStats && !hidden.contains(MatchSection.stats)) ...[
             const SizedBox(height: 56),
             if ((s.userPoints ?? 0) > 0) ...[
               Text('${s.userPoints}',
@@ -943,15 +1314,18 @@ class _ShareCard extends StatelessWidget {
             ),
           ],
           // Salud: todas las métricas disponibles.
-          if (s.hasHealth) ...[
+          if (s.hasHealth && !hidden.contains(MatchSection.salud)) ...[
             const SizedBox(height: 72),
             Wrap(
               alignment: WrapAlignment.center,
               spacing: 52,
               runSpacing: 36,
               children: [
+                // Las estimadas van marcadas también acá: publicar un número
+                // calculado como si lo hubiera medido el reloj es peor todavía.
                 if (s.calories > 0)
-                  _shareMiniStat(Icons.local_fire_department, '${s.calories.round()} kcal'),
+                  _shareMiniStat(Icons.local_fire_department,
+                      '${s.caloriesEstimated ? '~' : ''}${s.calories.round()} kcal'),
                 if (s.steps > 0)
                   _shareMiniStat(Icons.directions_walk, '${s.steps} pasos'),
                 if (s.avgHr != null)
@@ -961,9 +1335,8 @@ class _ShareCard extends StatelessWidget {
                 if (s.distance > 0)
                   _shareMiniStat(
                     Icons.straighten,
-                    s.distance >= 1000
-                        ? '${(s.distance / 1000).toStringAsFixed(1)} km'
-                        : '${s.distance.round()} m',
+                    '${s.distanceEstimated ? '~' : ''}'
+                        '${s.distance >= 1000 ? '${(s.distance / 1000).toStringAsFixed(1)} km' : '${s.distance.round()} m'}',
                   ),
                 if (s.calories > 0 && s.seconds > 0)
                   _shareMiniStat(Icons.whatshot,
@@ -971,6 +1344,19 @@ class _ShareCard extends StatelessWidget {
                 if (s.steps > 0 && s.seconds > 0)
                   _shareMiniStat(Icons.speed,
                       '${(s.steps / (s.seconds / 60)).round()} pasos/min'),
+                // Solo las que el reloj llegó a medir (ver la franja del detalle).
+                if (s.spo2 != null)
+                  _shareMiniStat(Icons.bloodtype, '${s.spo2}% O₂'),
+                if (s.restingHr != null)
+                  _shareMiniStat(
+                      Icons.bedtime_outlined, '${s.restingHr} bpm reposo'),
+                if (s.hrv != null)
+                  _shareMiniStat(Icons.ssid_chart, '${s.hrv} ms HRV'),
+                if (s.respiratoryRate != null)
+                  _shareMiniStat(Icons.air, '${s.respiratoryRate} resp/min'),
+                if (s.speed != null && s.speed! > 0)
+                  _shareMiniStat(Icons.directions_run,
+                      '${(s.speed! * 3.6).toStringAsFixed(1)} km/h'),
               ],
             ),
             // Mini barra de zonas cardíacas.

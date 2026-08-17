@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'notifications_service.dart';
+import 'session_alarms.dart' show isPowerSaveOn;
 
 /// Permisos que la app necesita para funcionar bien.
 enum AppPerm { location, background, notifications, alarm, battery }
@@ -22,17 +23,26 @@ class PermState {
   // mata el proceso (y el foreground service) en pleno partido.
   final bool battery;
 
+  /// Modo ahorro de energía ACTIVO (no es un permiso: es un estado del device).
+  /// Mientras esté prendido, el SO estrangula ubicación, geofences y foreground
+  /// service, así que la detección se degrada aunque todos los permisos estén.
+  final bool powerSave;
+
   const PermState({
     required this.location,
     required this.background,
     required this.notifications,
     required this.alarm,
     required this.battery,
+    this.powerSave = false,
   });
 
   // Ni la batería ni el background cuentan acá: son RECOMENDADOS (sin ellos la
   // detección funciona solo con la app abierta/foreground service) pero no
   // obligatorios. Así el modal no insiste si el usuario los ignora.
+  //
+  // El ahorro de energía TAMPOCO: es transitorio y el usuario no puede
+  // "concederlo", así que incluirlo dejaría el modal insistiendo para siempre.
   bool get allGranted => location && notifications && alarm;
 
   List<AppPerm> get missing => [
@@ -77,12 +87,17 @@ Future<PermState> checkPermissions() async {
   final notif = await NotificationsService.instance.isEnabled();
   final alarm = await _canScheduleExact();
   final battery = await _ignoresBatteryOptimizations();
+  // Vía battery_plus (→ PowerManager.isPowerSaveMode), no por el canal propio:
+  // así la misma lectura sirve en los isolates de background, donde
+  // `oneofone/alarm_perm` no existe.
+  final powerSave = await isPowerSaveOn();
   return PermState(
       location: loc,
       background: bg,
       notifications: notif,
       alarm: alarm,
-      battery: battery);
+      battery: battery,
+      powerSave: powerSave);
 }
 
 /// Pide (o guía a activar) la ubicación. Si el servicio está apagado abre sus

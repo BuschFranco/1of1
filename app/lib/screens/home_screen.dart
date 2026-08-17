@@ -1197,6 +1197,31 @@ class _HomeScreenState extends State<HomeScreen>
                       ],
                     ),
                   ],
+                  // El ahorro de energía puede congelar el cronómetro: avisarlo
+                  // acá, que es donde el usuario mira mientras juega.
+                  if (ps.powerSaveOn) ...[
+                    const SizedBox(height: 1),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.battery_saver,
+                            size: 10, color: AppColors.busy),
+                        const SizedBox(width: 3),
+                        Flexible(
+                          child: Text(
+                            'Ahorro de energía: puede frenarse',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppText.grotesk(
+                              size: 9,
+                              weight: FontWeight.w600,
+                              color: AppColors.busy,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

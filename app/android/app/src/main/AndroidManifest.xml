@@ -25,6 +25,14 @@
     <uses-permission android:name="android.permission.health.READ_STEPS"/>
     <uses-permission android:name="android.permission.health.READ_DISTANCE"/>
     <uses-permission android:name="android.permission.health.READ_EXERCISE"/>
+    <!-- Métricas de muestreo esporádico: el reloj las mide de a ratos (SpO2 y
+         HRV normalmente en reposo), así que muchos partidos no van a tener
+         ninguna muestra. Son solo de lectura y nunca salen del dispositivo. -->
+    <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION"/>
+    <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE"/>
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE_VARIABILITY"/>
+    <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE"/>
+    <uses-permission android:name="android.permission.health.READ_SPEED"/>
     <application
         android:label="1of1"
         android:name="${applicationName}"
