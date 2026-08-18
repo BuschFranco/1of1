@@ -11,10 +11,12 @@ import '../data/achievements.dart';
 import '../data/courts.dart';
 import '../services/courts_provider.dart';
 import '../services/play_session_service.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/busy_overlay.dart';
 import '../widgets/court_image.dart';
+import '../widgets/form_style.dart';
 import '../widgets/match_visibility_sheet.dart';
 import '../widgets/pressable_widget.dart';
 
@@ -166,8 +168,11 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                           const SizedBox(height: 22),
                           _userStatsSection(s),
                         ],
-                        // Salud (todas las métricas disponibles).
+                        // Salud (todas las métricas disponibles). Mientras
+                        // se procesa NO se muestra nada: media franja de datos
+                        // junto al cartel de "procesando" se lee como un bug.
                         if (s.hasHealth &&
+                            !s.healthPending &&
                             !hidden.contains(MatchSection.salud)) ...[
                           const SizedBox(height: 22),
                           _healthStrip(s),
@@ -180,12 +185,14 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                           const SizedBox(height: 14),
                           _healthPendingNotice(s),
                         ],
-                        // El diagnóstico va SIEMPRE que la sección de salud esté
-                        // visible, no solo cuando falta todo: el caso más común
-                        // es que haya algún dato pero incompleto (pasos del
-                        // teléfono y nada del reloj), y ahí es cuando más falta
-                        // hace saber de dónde vino cada número.
-                        if (!hidden.contains(MatchSection.salud)) ...[
+                        // El diagnóstico aparece aunque HAYA datos: el caso
+                        // más común es tenerlos incompletos (pasos del teléfono
+                        // y nada del reloj), y ahí es cuando más falta hace saber
+                        // de dónde vino cada número. Pero no mientras se procesa:
+                        // preguntar "¿por qué no aparecen?" debajo de un cartel
+                        // que dice que están llegando es contradictorio.
+                        if (!hidden.contains(MatchSection.salud) &&
+                            !s.healthPending) ...[
                           const SizedBox(height: 14),
                           _healthDiagnoseLink(s),
                         ],
@@ -327,36 +334,58 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
   /// animación eterna girando sobre algo que no está pasando.
   Widget _healthPendingNotice(PlaySession s) {
     final leyendo = context.watch<PlaySessionService>().isRefreshingHealth(s);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.accent.withAlpha(20),
-        borderRadius: BorderRadius.circular(AppShape.rCard),
-        border: Border.all(color: AppColors.accent.withAlpha(60)),
-      ),
-      child: Row(
-        children: [
-          if (leyendo)
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppColors.accent),
-            )
-          else
-            Icon(Icons.hourglass_empty, size: 15, color: AppColors.accent),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Procesando datos de salud…\nTu reloj puede tardar unos minutos en '
-              'sincronizar. Volvé a entrar en un rato.',
-              style: AppText.grotesk(
-                  size: 12, color: AppColors.white(0.75), height: 1.35),
-            ),
+    // Sin caja tintada: barra de acento a la izquierda (el mismo recurso que las
+    // opciones de resultado), titular en Anton y una linea fina que se convierte
+    // en barra de progreso solo mientras se esta leyendo de verdad.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        hairline(),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(width: 3, height: 36, color: AppColors.accent),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('ESPERANDO AL RELOJ',
+                        style: AppText.display(
+                          size: 21,
+                          color: AppColors.accent,
+                          letterSpacing: -0.01,
+                          height: 1.0,
+                          shadows: AppFx.accentGlow(),
+                        )),
+                    const SizedBox(height: 7),
+                    Text(
+                      'Sincroniza sus datos unos minutos después del partido. '
+                      'Volvé a entrar y van a estar acá.',
+                      style: AppText.grotesk(
+                          size: 11.5,
+                          color: AppColors.white(0.45),
+                          height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+        SizedBox(
+          height: 2,
+          child: leyendo
+              ? LinearProgressIndicator(
+                  minHeight: 2,
+                  backgroundColor: AppColors.white(0.06),
+                  color: AppColors.accent,
+                )
+              : hairline(),
+        ),
+      ],
     );
   }
 
@@ -1314,7 +1343,9 @@ class _ShareCard extends StatelessWidget {
             ),
           ],
           // Salud: todas las métricas disponibles.
-          if (s.hasHealth && !hidden.contains(MatchSection.salud)) ...[
+          if (s.hasHealth &&
+              !s.healthPending &&
+              !hidden.contains(MatchSection.salud)) ...[
             const SizedBox(height: 72),
             Wrap(
               alignment: WrapAlignment.center,

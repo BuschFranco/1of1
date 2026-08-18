@@ -11,6 +11,7 @@ import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_loader.dart';
 import '../widgets/app_tab_bar.dart';
+import '../widgets/form_style.dart';
 import '../widgets/match_status_pill.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/reward_banner.dart';
@@ -313,67 +314,104 @@ class _MainShellState extends State<MainShell> {
 
   Future<void> _askResult(PlaySession s) async {
     final play = context.read<PlaySessionService>();
+
+    // Fila de resultado a ancho completo: una barra de color a la izquierda y el
+    // label en Anybody mayúsculas. Sin caja ni chip redondeado — la jerarquía la
+    // dan el color y la tipografía, no un rectángulo gris más.
     Widget option(PlayResult r, IconData icon, Color color) {
-      return GestureDetector(
+      return PressableWidget(
         onTap: () => Navigator.pop(context, r),
-        behavior: HitTestBehavior.opaque,
         child: Container(
-          margin: const EdgeInsets.only(top: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.white(0.04),
-            borderRadius: BorderRadius.circular(14),
-          ),
+          color: Colors.transparent, // area de toque completa
+          padding: const EdgeInsets.symmetric(vertical: 15),
           child: Row(
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: color.withAlpha(38),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, size: 18, color: color),
-              ),
+              Container(width: 4, height: 26, color: color),
+              const SizedBox(width: 14),
+              Icon(icon, size: 19, color: color),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(r.label,
-                    style:
-                        AppText.grotesk(size: 14, weight: FontWeight.w700)),
+                child: Text(r.label.toUpperCase(),
+                    style: AppText.archivo(
+                        size: 16,
+                        weight: FontWeight.w800,
+                        letterSpacing: 0.02)),
               ),
-              Icon(Icons.chevron_right, size: 18, color: AppColors.white(0.25)),
             ],
           ),
         ),
       );
     }
 
-    // Si el usuario descarta sin responder, se guarda como "Sin información".
-    final chosen = await showDialog<PlayResult>(
+    // Bottom sheet y no diálogo: lo que sigue (las estadísticas) también es un
+    // sheet, y encadenar diálogo → sheet para un mismo flujo se siente como dos
+    // apps distintas. Descartar sigue devolviendo null ⇒ "Sin información".
+    final chosen = await showModalBottomSheet<PlayResult>(
       context: context,
-      barrierDismissible: true,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.bgElev,
-        scrollable: true,
-        title: Text('¿Cómo te fue?',
-            style: AppText.archivo(size: 18, weight: FontWeight.w800)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${s.courtName.isEmpty ? 'Cancha' : s.courtName} · ${PlaySessionService.fmt(s.seconds)} · x${PlaySessionService.multiplierFor(s.seconds).toStringAsFixed(2)}',
-              style: AppText.grotesk(size: 12, color: AppColors.white(0.55)),
-            ),
-            option(PlayResult.win, Icons.emoji_events_outlined, AppColors.open),
-            option(PlayResult.loss, Icons.thumb_down_outlined,
-                AppColors.accentDark),
-            option(PlayResult.tie, Icons.handshake_outlined, AppColors.white(0.7)),
-            option(PlayResult.training, Icons.fitness_center, AppColors.accent),
-            option(PlayResult.notCounted, Icons.not_interested,
-                AppColors.white(0.5)),
-          ],
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.bgElev,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.white(0.15),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    displayTitle('¿CÓMO TE FUE?', size: 32),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${s.courtName.isEmpty ? 'Cancha' : s.courtName}  ·  ${PlaySessionService.fmt(s.seconds)}  ·  x${PlaySessionService.multiplierFor(s.seconds).toStringAsFixed(2)}',
+                      style: AppText.grotesk(
+                          size: 12, color: AppColors.white(0.5)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    for (final o in <(PlayResult, IconData, Color)>[
+                      (PlayResult.win, Icons.emoji_events, AppColors.open),
+                      (PlayResult.loss, Icons.thumb_down_alt_outlined,
+                          AppColors.accentDark),
+                      (PlayResult.tie, Icons.handshake_outlined,
+                          AppColors.white(0.7)),
+                      (PlayResult.training, Icons.fitness_center,
+                          AppColors.accent),
+                      (PlayResult.notCounted, Icons.not_interested,
+                          AppColors.white(0.4)),
+                    ]) ...[
+                      if (o.$1 != PlayResult.win) hairline(),
+                      option(o.$1, o.$2, o.$3),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );
@@ -766,21 +804,19 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
 
     // Input numérico compacto (plano: filled sin borde, foco en acento).
+    // Sin caja: hairline abajo que se enciende en acento al enfocar. El relleno
+    // gris de antes convertia cada input en un rectangulo mas.
     InputDecoration numDecoration(double size) => InputDecoration(
           hintText: '0',
-          hintStyle: AppText.archivo(
-              size: size, weight: FontWeight.w800, color: AppColors.white(0.2)),
-          filled: true,
-          fillColor: AppColors.white(0.05),
+          hintStyle: AppText.display(size: size, color: AppColors.white(0.14)),
+          filled: false,
           isDense: true,
-          contentPadding: const EdgeInsets.symmetric(vertical: 12),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide.none,
+          contentPadding: const EdgeInsets.only(bottom: 6, top: 2),
+          enabledBorder: UnderlineInputBorder(
+            borderSide: BorderSide(color: AppColors.white(0.12)),
           ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+          focusedBorder: const UnderlineInputBorder(
+            borderSide: BorderSide(color: AppColors.accent, width: 2),
           ),
         );
 
@@ -808,7 +844,7 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
               // árbol: puntos → 3PT → 2PT → TL.
               textInputAction:
                   isLast ? TextInputAction.done : TextInputAction.next,
-              style: AppText.archivo(size: 16, weight: FontWeight.w800),
+              style: AppText.display(size: 26, height: 1.0),
               cursorColor: AppColors.accent,
               inputFormatters: [
                 FilteringTextInputFormatter.digitsOnly,
@@ -828,15 +864,9 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
   /// Desplegable "Fue más de un partido": cantidad de partidos, entrenamientos
   /// y victorias de la sesión, más los puntos de cada partido si se quieren.
   Widget _multiSection(InputDecoration Function(double) numDecoration) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.white(0.04),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: _multi ? AppColors.accent.withAlpha(80) : AppColors.white(0.08),
-        ),
-      ),
-      child: Column(
+    // Sin caja contenedora: es una seccion mas del sheet, separada por hairlines.
+    // La caja con borde la hacia competir visualmente con los inputs de arriba.
+    return Column(
         children: [
           PressableWidget(
             onTap: () => setState(() {
@@ -844,7 +874,7 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
               if (_multi) _syncGameCtrls();
             }),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: 14),
               child: Row(
                 children: [
                   Icon(Icons.groups_2_outlined,
@@ -852,10 +882,11 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                       color: _multi ? AppColors.accent : AppColors.white(0.45)),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text('Fue más de un partido',
-                        style: AppText.grotesk(
+                    child: Text('FUE MÁS DE UN PARTIDO',
+                        style: AppText.archivo(
                             size: 13,
-                            weight: FontWeight.w700,
+                            weight: FontWeight.w800,
+                            letterSpacing: 0.04,
                             color: _multi ? Colors.white : AppColors.white(0.7))),
                   ),
                   Icon(_multi ? Icons.expand_less : Icons.expand_more,
@@ -866,7 +897,7 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
           ),
           if (_multi)
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              padding: const EdgeInsets.only(bottom: 14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -960,8 +991,7 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                 ],
               ),
             ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -997,19 +1027,18 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                   color: AppColors.white(0.4),
                   letterSpacing: 0.06)),
           const SizedBox(height: 4),
+          // Sin pildora gris: el valor grande manda y los -/+ quedan a los lados.
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 2),
+            padding: const EdgeInsets.only(bottom: 4),
             decoration: BoxDecoration(
-              color: AppColors.white(0.05),
-              borderRadius: BorderRadius.circular(12),
+              border: Border(
+                  bottom: BorderSide(color: AppColors.white(0.12))),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 btn(Icons.remove, value > min, () => onChanged(value - 1)),
-                Text('$value',
-                    style:
-                        AppText.archivo(size: 15, weight: FontWeight.w800)),
+                Text('$value', style: AppText.display(size: 22, height: 1.0)),
                 btn(Icons.add, value < max, () => onChanged(value + 1)),
               ],
             ),
@@ -1061,9 +1090,7 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Tus estadísticas',
-                            style: AppText.archivo(
-                                size: 18, weight: FontWeight.w800)),
+                        displayTitle('TUS ESTADÍSTICAS', size: 28),
                         const SizedBox(height: 4),
                         Text(
                             '${widget.courtName.isEmpty ? 'Cancha' : widget.courtName} · ${widget.duration}',
@@ -1110,7 +1137,7 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                       // la suma y se bloquea: dos fuentes editables para el mismo
                       // número solo generan contradicciones.
                       readOnly: _gamePointsTotal != null,
-                      style: AppText.archivo(size: 22, weight: FontWeight.w800),
+                      style: AppText.display(size: 52, height: 1.0),
                       cursorColor: AppColors.accent,
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
@@ -1134,29 +1161,13 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                     _multiSection(numDecoration),
                     const SizedBox(height: 18),
                     // Por qué cargar esto (tono relajado: es para promedios).
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.accent.withAlpha(20),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(Icons.info_outline,
-                              size: 16, color: AppColors.accent),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Sirve para llevar el registro de tu progreso. No importa si no es exacto, con el tiempo se crea un promedio 🙂',
-                              style: AppText.grotesk(
-                                  size: 12,
-                                  color: AppColors.white(0.7),
-                                  height: 1.35),
-                            ),
-                          ),
-                        ],
-                      ),
+                    // Nota al pie, no caja: antes competia con los inputs.
+                    Text(
+                      'No importa si no es exacto: con el tiempo se arma tu promedio.',
+                      style: AppText.grotesk(
+                          size: 11.5,
+                          color: AppColors.white(0.4),
+                          height: 1.4),
                     ),
                     const SizedBox(height: 20),
                   ],
@@ -1186,11 +1197,12 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                               color: AppColors.white(0.12), width: 1),
                         ),
                       ),
-                      child: Text('Listo',
-                          style: AppText.grotesk(
-                              size: 14,
-                              weight: FontWeight.w700,
-                              color: AppColors.white(0.8))),
+                      child: Text('LISTO',
+                          style: AppText.archivo(
+                              size: 13,
+                              weight: FontWeight.w800,
+                              letterSpacing: 0.06,
+                              color: AppColors.white(0.75))),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1201,16 +1213,19 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                           Navigator.pop(context, _payload(viewDetail: true)),
                       style: TextButton.styleFrom(
                         backgroundColor: AppColors.accent,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shadowColor: Colors.black,
+                        elevation: 6,
                         shape: RoundedRectangleBorder(
                           borderRadius:
                               BorderRadius.circular(AppShape.rChip),
                         ),
                       ),
-                      child: Text('Ver resultado',
-                          style: AppText.grotesk(
-                              size: 14,
-                              weight: FontWeight.w700,
+                      child: Text('VER RESULTADO',
+                          style: AppText.archivo(
+                              size: 13,
+                              weight: FontWeight.w800,
+                              letterSpacing: 0.06,
                               color: Colors.white)),
                     ),
                   ),

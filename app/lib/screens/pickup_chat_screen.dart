@@ -14,6 +14,7 @@ import '../services/pickups_provider.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
 import '../theme/app_theme.dart';
+import '../widgets/form_style.dart';
 import '../widgets/pickup_schedule_picker.dart';
 import '../widgets/busy_overlay.dart';
 import '../widgets/pickup_rules_dialog.dart';
@@ -330,9 +331,35 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
         backgroundColor: AppColors.bg,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: Text(pickup.title,
-            style: AppText.archivo(
-                size: 18, weight: FontWeight.w900, color: Colors.white)),
+        titleSpacing: 0,
+        toolbarHeight: 64,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(pickup.title.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.display(
+                    size: 22, letterSpacing: -0.01, height: 1.05)),
+            Builder(builder: (_) {
+              final c = _court(pickup);
+              final cuando = pickup.dateTime == null
+                  ? ''
+                  : _dateLabel(pickup.dateTime!);
+              final partes = [
+                if (c != null && c.name.isNotEmpty) c.name,
+                if (cuando.isNotEmpty) cuando,
+              ];
+              if (partes.isEmpty) return const SizedBox.shrink();
+              return Text(partes.join('  ·  '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.grotesk(
+                      size: 11, color: AppColors.white(0.45)));
+            }),
+          ],
+        ),
         actions: [
           if (isCreator)
             IconButton(
@@ -936,13 +963,63 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
       controller: _scrollCtrl,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       itemCount: _messages.length,
-      itemBuilder: (_, i) => _bubble(pickup, _messages[i]),
+      itemBuilder: (_, i) {
+        final m = _messages[i];
+        final prev = i > 0 ? _messages[i - 1] : null;
+        // Encadenado: mensajes seguidos del mismo autor no repiten el nombre y
+        // se juntan. Es lo que separa un chat moderno de una lista de tarjetas.
+        final mismoAutor = prev != null &&
+            prev.email.trim().toLowerCase() == m.email.trim().toLowerCase();
+        final nuevoDia = prev == null || !_mismoDia(prev, m);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (nuevoDia) _daySeparator(m),
+            _bubble(pickup, m, encadenado: mismoAutor && !nuevoDia),
+          ],
+        );
+      },
     );
   }
 
   /// Burbuja de un mensaje. Las mías a la derecha en acento; las ajenas a la
   /// izquierda con el nombre del autor tintado con el color de SU equipo.
-  Widget _bubble(Pickup pickup, ChatMessage m) {
+  /// Dos mensajes del mismo dia (por el reloj local del device).
+  bool _mismoDia(ChatMessage a, ChatMessage b) {
+    final da = DateTime.fromMillisecondsSinceEpoch(a.createdAtMillis);
+    final db = DateTime.fromMillisecondsSinceEpoch(b.createdAtMillis);
+    return da.year == db.year && da.month == db.month && da.day == db.day;
+  }
+
+  /// Separador de fecha: hairline a los costados y la fecha al medio, sin caja.
+  Widget _daySeparator(ChatMessage m) {
+    final d = DateTime.fromMillisecondsSinceEpoch(m.createdAtMillis);
+    final hoy = DateTime.now();
+    final ayer = hoy.subtract(const Duration(days: 1));
+    String etiqueta;
+    if (d.year == hoy.year && d.month == hoy.month && d.day == hoy.day) {
+      etiqueta = 'HOY';
+    } else if (d.year == ayer.year && d.month == ayer.month && d.day == ayer.day) {
+      etiqueta = 'AYER';
+    } else {
+      etiqueta = '${d.day}/${d.month}/${d.year}';
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        children: [
+          Expanded(child: hairline(opacity: 0.06)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: microLabel(etiqueta, color: AppColors.white(0.35)),
+          ),
+          Expanded(child: hairline(opacity: 0.06)),
+        ],
+      ),
+    );
+  }
+
+  Widget _bubble(Pickup pickup, ChatMessage m, {bool encadenado = false}) {
     final isMe = m.email.trim().toLowerCase() == _myEmail;
     final team = pickup.teamOf(m.email);
     final teamColor = team == 'A'
@@ -951,7 +1028,7 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
             ? _hex(pickup.teamBColor)
             : AppColors.white(0.6);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: encadenado ? 3 : 10),
       child: Row(
         mainAxisAlignment:
             isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
@@ -971,14 +1048,14 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(14),
                   topRight: const Radius.circular(14),
-                  bottomLeft: Radius.circular(isMe ? 14 : 4),
-                  bottomRight: Radius.circular(isMe ? 4 : 14),
+                  bottomLeft: Radius.circular(isMe || encadenado ? 14 : 4),
+                  bottomRight: Radius.circular(!isMe || encadenado ? 14 : 4),
                 ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (!isMe)
+                  if (!isMe && !encadenado)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 2),
                       child: Text(
@@ -1056,11 +1133,24 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(AppShape.rBtn),
+              // ValueListenableBuilder y no setState: el borde depende de lo
+              // tipeado, y un setState por tecla redibujaria TODA la lista de
+              // mensajes. Asi solo se repinta la pildora.
+              child: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _msgCtrl,
+                builder: (_, value, child) => Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(AppShape.rBtn),
+                    border: Border.all(
+                      color: value.text.trim().isEmpty
+                          ? AppColors.white(0.08)
+                          : AppColors.accent.withAlpha(120),
+                    ),
+                  ),
+                  child: child,
                 ),
                 child: TextField(
                   controller: _msgCtrl,

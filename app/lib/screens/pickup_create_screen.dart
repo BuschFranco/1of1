@@ -12,7 +12,9 @@ import '../services/notifications_service.dart';
 import '../services/pickups_provider.dart';
 import '../services/play_session_service.dart';
 import '../services/session.dart';
+import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
+import '../widgets/form_style.dart';
 import '../widgets/pickup_schedule_picker.dart';
 import '../widgets/pressable_widget.dart';
 import 'main_shell.dart';
@@ -245,8 +247,8 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
             icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: Colors.white),
             onPressed: _saving ? null : () => Navigator.pop(context),
           ),
-          title: Text('Nuevo pickup',
-              style: AppText.archivo(size: 20, weight: FontWeight.w900, color: Colors.white)),
+          // El titular va grande DENTRO del scroll (como Perfil y Crear), no
+          // centrado y chico en el appbar: es lo que crea la jerarquia.
           centerTitle: true,
         ),
         body: GestureDetector(
@@ -254,6 +256,10 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
           child: ListView(
             padding: EdgeInsets.fromLTRB(20, 8, 20, 40 + bottomPad),
             children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 18, top: 4),
+                child: displayTitle('NUEVO PICKUP', size: 32),
+              ),
               // ── Cancha ──
               _sectionCard(
                 child: Column(
@@ -277,32 +283,22 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                             size: 14, color: AppColors.white(0.35)),
                         counterStyle: AppText.grotesk(
                             size: 10, color: AppColors.white(0.3)),
-                        filled: true,
-                        fillColor: AppColors.white(0.05),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
+                        filled: false,
+                        isDense: true,
+                        contentPadding:
+                            const EdgeInsets.only(bottom: 8, top: 4),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide:
+                              BorderSide(color: AppColors.white(0.12)),
                         ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                              color: AppColors.accent, width: 1.5),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: AppColors.accent, width: 2),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
-
-              // ── Visibilidad ──
-              _visibilityCard(),
-              const SizedBox(height: 12),
-
-              // ── Configuraciones personalizadas (recompensa + requisitos) ──
-              _customConfigCard(),
               const SizedBox(height: 12),
 
               // ── Formato + Puntuación ──
@@ -384,6 +380,14 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                 const SizedBox(height: 12),
               ],
 
+              // ── Visibilidad ──
+              _visibilityCard(),
+              const SizedBox(height: 12),
+
+              // ── Configuraciones personalizadas (recompensa + requisitos) ──
+              _customConfigCard(),
+              const SizedBox(height: 12),
+
               // ── Notas ──
               _sectionCard(
                 child: Column(
@@ -399,15 +403,16 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                       decoration: InputDecoration(
                         hintText: 'Ej. nivel intermedio, traer pelota',
                         hintStyle: AppText.grotesk(size: 13, color: AppColors.white(0.35)),
-                        filled: true,
-                        fillColor: AppColors.white(0.05),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
+                        filled: false,
+                        isDense: true,
+                        contentPadding:
+                            const EdgeInsets.only(bottom: 8, top: 4),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide:
+                              BorderSide(color: AppColors.white(0.12)),
                         ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: AppColors.accent, width: 2),
                         ),
                       ),
                     ),
@@ -427,6 +432,9 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
                   decoration: BoxDecoration(
                     color: _saving ? AppColors.white(0.1) : AppColors.accent,
                     borderRadius: BorderRadius.circular(AppShape.rBtn),
+                    boxShadow: _saving
+                        ? null
+                        : AppFx.hardShadow(offset: const Offset(0, 3)),
                   ),
                   alignment: Alignment.center,
                   child: _saving
@@ -1062,16 +1070,17 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
         prefixText: prefix,
         hintStyle: AppText.grotesk(size: 13, color: AppColors.white(0.35)),
         prefixStyle: AppText.grotesk(size: 13, color: AppColors.white(0.45)),
-        filled: true,
-        fillColor: AppColors.white(0.05),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
-        ),
+        filled: false,
+                        isDense: true,
+                        contentPadding:
+                            const EdgeInsets.only(bottom: 8, top: 4),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide:
+                              BorderSide(color: AppColors.white(0.12)),
+                        ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: AppColors.accent, width: 2),
+                        ),
       ),
       onChanged: onChanged,
     );
@@ -1102,8 +1111,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: AppColors.white(0.05),
-        borderRadius: BorderRadius.circular(12),
+        border: Border(bottom: BorderSide(color: AppColors.white(0.12))),
       ),
       child: DropdownButton<Court>(
         value: _selected,
@@ -1135,8 +1143,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
-          color: AppColors.white(0.05),
-          borderRadius: BorderRadius.circular(12),
+          border: Border(bottom: BorderSide(color: AppColors.white(0.12))),
         ),
         child: Row(
           children: [
@@ -1186,16 +1193,17 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
       decoration: InputDecoration(
         hintText: 'Nombre del equipo',
         hintStyle: AppText.grotesk(size: 13, color: AppColors.white(0.3)),
-        filled: true,
-        fillColor: AppColors.white(0.05),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: cursorColor, width: 1.5),
-        ),
+        filled: false,
+                        isDense: true,
+                        contentPadding:
+                            const EdgeInsets.only(bottom: 8, top: 4),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide:
+                              BorderSide(color: AppColors.white(0.12)),
+                        ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: cursorColor, width: 2),
+                        ),
       ),
     );
   }
@@ -1329,15 +1337,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
 
   static Widget _label(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: Text(
-          text.toUpperCase(),
-          style: AppText.grotesk(
-            size: 11,
-            weight: FontWeight.w700,
-            color: AppColors.white(0.45),
-            letterSpacing: 0.08,
-          ),
-        ),
+        child: microLabel(text),
       );
 
   /// Selector segmentado: una sola barra con opciones de igual ancho, la activa
@@ -1348,7 +1348,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: AppColors.white(0.05),
+        border: Border.all(color: AppColors.white(0.10)),
         borderRadius: BorderRadius.circular(AppShape.rChip),
       ),
       child: Row(
@@ -1387,7 +1387,7 @@ class _PickupCreateScreenState extends State<PickupCreateScreen> {
     return Container(
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
-        color: AppColors.white(0.05),
+        border: Border.all(color: AppColors.white(0.10)),
         borderRadius: BorderRadius.circular(AppShape.rBtn),
       ),
       child: Row(
