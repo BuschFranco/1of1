@@ -55,8 +55,11 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
   // Zona/barrio (el `Court.area` que se ve en listas y detalle). Se
   // autocompleta con reverse geocoding al asentarse el pin; editable.
   final _areaCtrl = TextEditingController();
-  bool _areaEdited = false;
   bool _areaLookupBusy = false;
+  /// Posición del último reverse geocode exitoso. Sirve para no volver a pedir
+  /// la zona cuando la cámara se asienta sin que el pin se haya movido de
+  /// verdad (un zoom dispara `onCameraIdle` igual, y cada lookup se paga).
+  LatLng? _lastAreaLookup;
 
   // Horario estructurado: apertura, cierre y toggle 24h.
   TimeOfDay? _openTime = const TimeOfDay(hour: 8, minute: 0);
@@ -103,15 +106,33 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
     super.dispose();
   }
 
-  /// El pin se asentó (onCameraIdle): resolver la zona/barrio y prellenar el
-  /// campo, salvo que el usuario ya lo haya escrito a mano.
+  /// Distancia mínima que tiene que moverse el pin para volver a pedir la zona.
+  /// Por debajo de esto se asume el mismo lugar: evita gastar una llamada de
+  /// geocoding (y sobrescribir el campo) cuando el usuario solo hizo zoom.
+  static const double _areaLookupMinMove = 50; // metros
+
+  /// El pin se asentó (onCameraIdle): resolver la zona/barrio y actualizar el
+  /// campo.
+  ///
+  /// El pin MANDA: si te movés a otro barrio, la zona se actualiza aunque la
+  /// hayas escrito a mano — un texto viejo apuntando a otro lugar es peor que
+  /// perder lo tipeado. Lo que sí se respeta es el caso inverso: si escribís algo
+  /// y NO movés el pin, no se dispara ningún lookup y tu texto queda intacto.
   Future<void> _onPinSettled() async {
-    if (_areaEdited || _areaLookupBusy) return;
+    if (_areaLookupBusy) return;
+    final prev = _lastAreaLookup;
+    if (prev != null) {
+      final movido = Geolocator.distanceBetween(prev.latitude, prev.longitude,
+          _pinLocation.latitude, _pinLocation.longitude);
+      if (movido < _areaLookupMinMove) return;
+    }
     _areaLookupBusy = true;
+    final donde = _pinLocation;
     final area = await GeocodingService.areaFromLatLng(
-        _pinLocation.latitude, _pinLocation.longitude);
+        donde.latitude, donde.longitude);
     _areaLookupBusy = false;
-    if (!mounted || area == null || _areaEdited) return;
+    if (!mounted || area == null) return;
+    _lastAreaLookup = donde;
     setState(() => _areaCtrl.text = area);
   }
 
@@ -200,6 +221,22 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
           '';
     }
     if (!mounted) return;
+    // La zona es OBLIGATORIA. Se autocompleta al mover el pin, así que esto solo
+    // corta cuando el geocoding falló (sin red, o sin MAPS_API_KEY) — que es
+    // justamente como se crearon canchas sin ubicación textual. El mensaje dice
+    // qué hacer, no solo que falta.
+    if (area.isEmpty) {
+      setState(() => _submitted = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'No pudimos detectar la zona. Escribila a mano en "Zona / barrio".',
+              style: AppText.grotesk(size: 13)),
+          backgroundColor: AppColors.bgElev,
+        ),
+      );
+      return;
+    }
 
     // Foto: comprimir a WebP y subir a Storage; guardamos la URL pública.
     // Si falla, abortamos el submit (el usuario reintenta o quita la foto).
@@ -348,7 +385,6 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
                     _glassField(
                       controller: _areaCtrl,
                       hint: 'Se completa solo al mover el pin',
-                      onChanged: (_) => _areaEdited = true,
                     ),
                     const SizedBox(height: 24),
                     _sectionTitle('Tipo'),

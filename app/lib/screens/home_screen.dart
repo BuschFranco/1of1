@@ -2518,7 +2518,8 @@ class _CourtSwipeCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  '${court.area} · ${court.type} · ${court.hoops} aros',
+                  dotJoin(
+                      [court.area, court.type, '${court.hoops} aros']),
                   style: AppText.grotesk(
                     size: 11,
                     color: AppColors.white(0.55),

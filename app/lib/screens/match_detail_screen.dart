@@ -230,7 +230,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     final name = court?.name ?? (s.courtName.isEmpty ? 'Cancha' : s.courtName);
     final sub = court == null
         ? ''
-        : (court.area.isEmpty ? court.type : '${court.area} · ${court.type}');
+        : dotJoin([court.area, court.type]);
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppShape.rCard),
       child: Stack(

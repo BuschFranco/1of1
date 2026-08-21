@@ -290,8 +290,7 @@ class DetailScreen extends StatelessWidget {
                   );
                   final dist = m != null ? formatDist(m) : court.dist;
                   return Text(
-                    [court.area, if (dist.isNotEmpty) dist, court.hoursLabel]
-                        .join(' · '),
+                    dotJoin([court.area, dist, court.hoursLabel]),
                     style: AppText.grotesk(
                       size: 13,
                       color: AppColors.white(0.6),

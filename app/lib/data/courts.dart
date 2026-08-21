@@ -9,6 +9,15 @@ CourtStatus _statusFromString(String s) => switch (s) {
       _ => CourtStatus.open,
     };
 
+/// Une las partes no vacías con " · ".
+///
+/// Existe porque cada pantalla resolvía esta concatenación por su cuenta, y las
+/// que no filtraban dejaban un separador colgando cuando la cancha no tenía zona
+/// ("· 1.1 km · Abierto 24h"). Con el helper, agregar un campo opcional al
+/// subtítulo no puede volver a generar ese bug.
+String dotJoin(Iterable<String?> parts) =>
+    parts.where((p) => p != null && p.trim().isNotEmpty).join(' · ');
+
 /// Parsea un "HH:mm" a TimeOfDay. null si no matchea o está fuera de rango.
 TimeOfDay? _todFromHHmm(String s) {
   final m = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(s.trim());

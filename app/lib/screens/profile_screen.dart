@@ -2124,7 +2124,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    c.area.isEmpty ? c.type : '${c.area} · ${c.type}',
+                    dotJoin([c.area, c.type]),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppText.grotesk(size: 11, color: AppColors.white(0.5)),

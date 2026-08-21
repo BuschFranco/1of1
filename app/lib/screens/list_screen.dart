@@ -366,7 +366,7 @@ class _CourtListItem extends StatelessWidget {
                               return Text(
                                 dist.isEmpty
                                     ? court.area
-                                    : '${court.area} · $dist',
+                                    : dotJoin([court.area, dist]),
                                 style: AppText.grotesk(
                                   size: 12,
                                   color: AppColors.white(0.6),
