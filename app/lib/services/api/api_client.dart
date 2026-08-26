@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_config.dart';
 
@@ -358,15 +359,41 @@ class ApiClient {
   Future<Map<String, dynamic>> sendPickupMessage(String pickupId, String text) =>
       _map(_send('POST', '/pickups/$pickupId/messages', body: {'text': text}));
 
+  // ── Geocoding ──────────────────────────────────────────────────────────
+
+  /// Barrio y ciudad de un punto: `{city, area}` (strings, vacíos si no se
+  /// pudo resolver). La llamada a Google la hace el backend — ver
+  /// `GeocodingService` para el porqué.
+  Future<Map<String, dynamic>> reverseGeo(double lat, double lng) =>
+      _map(_send('GET', '/geo/reverse',
+          query: {'lat': '$lat', 'lng': '$lng'}));
+
   /// Sube una imagen de cancha (ya comprimida) a Storage vía multipart.
   /// Devuelve la URL pública. Timeout propio más largo que el de JSON.
+  ///
+  /// **El `contentType` va explícito y no es opcional.**
+  /// `MultipartFile.fromPath` NO infiere el MIME del archivo: manda
+  /// `application/octet-stream`, que el backend rechaza contra su whitelist
+  /// (webp/jpeg/png). Sin esto, toda subida falla con 400 — así estuvo desde
+  /// que se escribió el endpoint, por eso nunca llegó una sola imagen.
   Future<String> uploadCourtImage(String filePath) async {
     final req = http.MultipartRequest(
       'POST',
       _uri('/uploads/court-image'),
     );
     if (hasToken) req.headers['Authorization'] = 'Bearer $_token';
-    req.files.add(await http.MultipartFile.fromPath('file', filePath));
+    final ext = filePath.split('.').last.toLowerCase();
+    final mime = switch (ext) {
+      'webp' => MediaType('image', 'webp'),
+      'png' => MediaType('image', 'png'),
+      'jpg' || 'jpeg' => MediaType('image', 'jpeg'),
+      // Cualquier otra cosa (heic del picker de iOS, por ejemplo) el backend la
+      // va a rechazar igual: mejor decirlo acá que mandar un MIME mentido.
+      _ => throw ApiException(
+          0, 'Formato de imagen no soportado (.$ext).', '/uploads/court-image'),
+    };
+    req.files.add(
+        await http.MultipartFile.fromPath('file', filePath, contentType: mime));
     final streamed = await req.send().timeout(const Duration(seconds: 60));
     final res = await http.Response.fromStream(streamed);
     if (res.statusCode < 200 || res.statusCode >= 300) {

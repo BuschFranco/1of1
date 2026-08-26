@@ -1,7 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'notifications_service.dart';
-import 'session_alarms.dart' show isPowerSaveOn;
+import 'session_alarms.dart' show isPowerSaveOn, kCanScheduleExactKey;
 
 /// Permisos que la app necesita para funcionar bien.
 enum AppPerm { location, background, notifications, alarm, battery }
@@ -86,6 +87,13 @@ Future<PermState> checkPermissions() async {
   } catch (_) {}
   final notif = await NotificationsService.instance.isEnabled();
   final alarm = await _canScheduleExact();
+  // Persistido para los isolates de background: ellos no tienen el canal con la
+  // Activity, y sin este dato programarían alarmas exactas que el SO descarta
+  // en silencio (ver `_oneShotAt` en session_alarms.dart).
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(kCanScheduleExactKey, alarm);
+  } catch (_) {/* best-effort: el default de lectura es "sí puede" */}
   final battery = await _ignoresBatteryOptimizations();
   // Vía battery_plus (→ PowerManager.isPowerSaveMode), no por el canal propio:
   // así la misma lectura sirve en los isolates de background, donde

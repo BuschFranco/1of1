@@ -637,7 +637,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SectionTitle(title: 'Últimos partidos'),
+                      const SectionTitle(title: 'Últimas sesiones'),
                       _historySection(),
                     ],
                   ),
@@ -1183,7 +1183,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             item('Qué es',
-                'Todo lo que dejás en la cancha: pulso, calorías, pasos y distancia de cada partido. Así ves cuánto laburaste de verdad.'),
+                'Todo lo que dejás en la cancha: pulso, calorías, pasos y distancia de cada sesión. Así ves cuánto laburaste de verdad.'),
             item('Jugá con tu reloj o banda',
                 'Para medir tu estado necesitás jugar con el reloj o la banda puesta y darle permiso de lectura en Health Connect. Sin wearable no hay datos. Tip: ponelo en modo Básquet y salen mucho más fieles.'),
           ],
@@ -1243,9 +1243,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             item('Qué es',
-                'Los puntos y tiros que cargás al terminar cada partido. Con eso armamos tus métricas y seguís tu progreso partido a partido.'),
+                'Los puntos y tiros que cargás al terminar cada sesión. Con eso armamos tus métricas y seguís tu progreso sesión a sesión.'),
             item('No te compliques',
-                'No importa si no es exacto: con el tiempo se crea un promedio 🙂. Mientras más partidos cargues, mejor ves en qué estás mejorando.'),
+                'No importa si no es exacto: con el tiempo se crea un promedio 🙂. Mientras más sesiones cargues, mejor ves en qué estás mejorando.'),
           ],
         ),
         actions: [
@@ -1349,9 +1349,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (ps.caloriesPerMinute > 0)
         stat('Calorías/min', ps.caloriesPerMinute.toStringAsFixed(1), 'prom',
             Icons.whatshot, const Color(0xFFF97316)),
-      if (ps.avgStepsPerMinute > 0)
-        stat('Cadencia', '${ps.avgStepsPerMinute}', 'p/min',
-            Icons.speed, const Color(0xFF10B981)),
     ];
     if (cells.isEmpty) return const SizedBox.shrink();
 
@@ -1450,12 +1447,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final cells = <Widget>[
       stat('Puntos totales', '${ps.totalUserPoints}', Icons.score,
           const Color(0xFFFF6B1A)),
-      stat('Prom. por partido', ps.avgUserPoints.toStringAsFixed(1),
+      stat('Prom. por sesión', ps.avgUserPoints.toStringAsFixed(1),
           Icons.trending_up, const Color(0xFF22C55E)),
       if (ps.bestUserPoints > 0)
-        stat('Mejor partido', '${ps.bestUserPoints}', Icons.emoji_events,
+        stat('Mejor sesión', '${ps.bestUserPoints}', Icons.emoji_events,
             const Color(0xFFEAB308)),
-      stat('Partidos', '${ps.userStatsMatches}', Icons.event_available,
+      stat('Sesiones', '${ps.userStatsMatches}', Icons.event_available,
           const Color(0xFF64748B)),
       if (ps.avgUserPointsPerMinute > 0)
         stat('Puntos por min', ps.avgUserPointsPerMinute.toStringAsFixed(1),
@@ -1463,17 +1460,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (ps.avgPointsPerShot > 0)
         stat('Puntos por tiro', ps.avgPointsPerShot.toStringAsFixed(1),
             Icons.my_location, const Color(0xFF14B8A6)),
-      if (ps.totalUserBaskets > 0)
-        stat('Canastas', '${ps.totalUserBaskets}', Icons.sports_basketball,
-            const Color(0xFFFF6B1A)),
-      if (ps.totalUserTriples > 0)
-        stat('Triples', '${ps.totalUserTriples}', Icons.add_circle_outline,
+      if (ps.totalUserPts3 > 0)
+        stat('Puntos de 3', '${ps.totalUserPts3}', Icons.add_circle_outline,
             const Color(0xFF3B82F6)),
-      if (ps.totalUserDoubles > 0)
-        stat('Dobles', '${ps.totalUserDoubles}', Icons.add_circle,
+      if (ps.totalUserPts2 > 0)
+        stat('Puntos de 2', '${ps.totalUserPts2}', Icons.add_circle,
             const Color(0xFFA855F7)),
-      if (ps.totalUserFreeThrows > 0)
-        stat('Tiros libres', '${ps.totalUserFreeThrows}',
+      if (ps.totalUserPts1 > 0)
+        stat('Puntos de 1', '${ps.totalUserPts1}',
             Icons.free_cancellation, const Color(0xFFEAB308)),
     ];
     final rows = <Widget>[];
@@ -1496,9 +1490,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     // Distribución de puntos: de dónde salen tus puntos (3PT/2PT/TL).
-    final pts3 = ps.totalUserTriples * 3;
-    final pts2 = ps.totalUserDoubles * 2;
-    final ptsTl = ps.totalUserFreeThrows; // 1 c/u
+    final pts3 = ps.totalUserPts3 * 3;
+    final pts2 = ps.totalUserPts2 * 2;
+    final ptsTl = ps.totalUserPts1; // 1 c/u
     final fromBreakdown = pts3 + pts2 + ptsTl;
 
     // Toda la card es tocable: abre la pantalla desarrollada con gráficos y
@@ -1541,10 +1535,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// De dónde vienen tus puntos: barra apilada + leyenda con % de 3PT/2PT/TL.
+  /// De dónde vienen tus puntos: barra apilada + leyenda por valor de tiro.
   Widget _pointsDistribution(int pts3, int pts2, int ptsTl, int total) {
-    const c3 = Color(0xFF3B82F6); // 3PT azul
-    const c2 = Color(0xFFA855F7); // 2PT violeta
+    const c3 = Color(0xFF3B82F6); // puntos de 3, azul
+    const c2 = Color(0xFFA855F7); // puntos de 2, violeta
     const cTl = Color(0xFFEAB308); // TL dorado
     int pct(int v) => (v / total * 100).round();
 
@@ -1594,9 +1588,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             spacing: 16,
             runSpacing: 6,
             children: [
-              legend(c3, '3PT', pts3),
-              legend(c2, '2PT', pts2),
-              legend(cTl, 'TL', ptsTl),
+              legend(c3, '3 pts', pts3),
+              legend(c2, '2 pts', pts2),
+              legend(cTl, '1 pt', ptsTl),
             ],
           ),
         ],
@@ -1928,7 +1922,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _historySection() {
     final log = context.watch<PlaySessionService>().log;
     if (log.isEmpty) {
-      return _emptyCard('Todavía no jugaste partidos.');
+      return _emptyCard('Todavía no jugaste.');
     }
     // clamp: si el log se acorta entre builds (logout y login con otra cuenta),
     // _historyShown puede quedar más alto que la lista.
@@ -1943,8 +1937,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 6),
           _seeMore(
             rest <= _historyPage
-                ? 'Ver los $rest partidos restantes'
-                : 'Ver $_historyPage partidos más',
+                ? 'Ver las $rest sesiones restantes'
+                : 'Ver $_historyPage sesiones más',
             () => setState(() => _historyShown += _historyPage),
           ),
         ],
@@ -1955,7 +1949,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _historyRow(PlaySession s) {
     final (color, label) = _resultStyle(s.result);
     final healthOn = context.read<PlaySessionService>().healthEnabled;
-    final hasUserStats = s.userTriples != null || s.userDoubles != null || s.userFreeThrows != null;
+    final hasUserStats = s.userPts3 != null || s.userPts2 != null || s.userPts1 != null;
     // Fila plana: el resultado es un dot+etiqueta de color, sin card tintada
     // ni chip con borde.
     return GestureDetector(
@@ -2000,19 +1994,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        if (s.userTriples != null && s.userTriples! > 0)
-                          _userStatChip('3pt', s.userTriples!),
-                        if (s.userTriples != null && s.userTriples! > 0 &&
-                            s.userDoubles != null && s.userDoubles! > 0)
+                        if (s.userPts3 != null && s.userPts3! > 0)
+                          _userStatChip('de 3', s.userPts3!),
+                        if (s.userPts3 != null && s.userPts3! > 0 &&
+                            s.userPts2 != null && s.userPts2! > 0)
                           const SizedBox(width: 6),
-                        if (s.userDoubles != null && s.userDoubles! > 0)
-                          _userStatChip('2pt', s.userDoubles!),
-                        if ((s.userTriples != null && s.userTriples! > 0 ||
-                            s.userDoubles != null && s.userDoubles! > 0) &&
-                            s.userFreeThrows != null && s.userFreeThrows! > 0)
+                        if (s.userPts2 != null && s.userPts2! > 0)
+                          _userStatChip('de 2', s.userPts2!),
+                        if ((s.userPts3 != null && s.userPts3! > 0 ||
+                            s.userPts2 != null && s.userPts2! > 0) &&
+                            s.userPts1 != null && s.userPts1! > 0)
                           const SizedBox(width: 6),
-                        if (s.userFreeThrows != null && s.userFreeThrows! > 0)
-                          _userStatChip('TL', s.userFreeThrows!),
+                        if (s.userPts1 != null && s.userPts1! > 0)
+                          _userStatChip('de 1', s.userPts1!),
                       ],
                     ),
                   ],
@@ -2477,7 +2471,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title: Text('Eliminar cuenta',
             style: AppText.archivo(size: 18, weight: FontWeight.w800)),
         content: Text(
-          'Esto borra tu perfil, tu historial de partidos, tus reseñas y tus '
+          'Esto borra tu perfil, tu historial de juego, tus reseñas y tus '
           'amigos de forma permanente. No se puede deshacer.',
           style: AppText.grotesk(size: 13, color: AppColors.white(0.7)),
         ),
@@ -4410,7 +4404,7 @@ class _PrivacyDialogState extends State<_PrivacyDialog> {
         title: Text('Ubicación en segundo plano',
             style: AppText.archivo(size: 17, weight: FontWeight.w800)),
         content: Text(
-          '1of1 recolecta tu ubicación para detectar y registrar tus partidos, '
+          '1of1 recolecta tu ubicación para detectar y registrar tus sesiones de juego, '
           'incluso cuando la app está cerrada o no la estás usando. '
           'Solo guardamos en qué cancha jugaste, no tus coordenadas. '
           'Podés desactivarlo cuando quieras desde acá o desde los ajustes del '
@@ -4505,7 +4499,7 @@ class _PrivacyDialogState extends State<_PrivacyDialog> {
             (v) => setState(() => _time = v),
           ),
           _switchRow(
-            'Mostrar último partido',
+            'Mostrar última sesión',
             'Cuando no estés jugando, tus amigos ven cuándo y dónde jugaste por última vez.',
             _showLast,
             (v) => setState(() => _showLast = v),
@@ -4515,7 +4509,7 @@ class _PrivacyDialogState extends State<_PrivacyDialog> {
           const SizedBox(height: 8),
           _switchRow(
             'Detectar en segundo plano',
-            'Detecta y guarda tus partidos aunque no tengas la app abierta. Requiere permiso de ubicación "Siempre".',
+            'Detecta y guarda tus sesiones de juego aunque no tengas la app abierta. Requiere permiso de ubicación "Siempre".',
             _background,
             _toggleBackground,
           ),

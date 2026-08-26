@@ -163,7 +163,7 @@ class _PermissionsModalState extends State<PermissionsModal>
         title: Text('Ubicación en segundo plano',
             style: AppText.archivo(size: 17, weight: FontWeight.w800)),
         content: Text(
-          '1of1 recolecta tu ubicación para detectar y registrar tus partidos, '
+          '1of1 recolecta tu ubicación para detectar y registrar tus sesiones de juego, '
           'incluso cuando la app está cerrada o no la estás usando. '
           'Solo guardamos en qué cancha jugaste, no tus coordenadas. '
           'En la pantalla que sigue, elegí "Permitir todo el tiempo". '
@@ -203,25 +203,25 @@ class _PermissionsModalState extends State<PermissionsModal>
     AppPerm.background: (
       Icons.share_location,
       'Detección automática',
-      'Tus partidos arrancan y se guardan solos al llegar a la cancha, aunque '
+      'Tus sesiones arrancan y se guardan solas al llegar a la cancha, aunque '
           'la app esté cerrada. Sin esto, solo cuentan con la app abierta.',
     ),
     AppPerm.notifications: (
       Icons.notifications_active_outlined,
-      'Avisos de partido',
-      'Te avisa cuándo arranca y cuándo termina tu partido. Sin esto todo '
+      'Avisos de juego',
+      'Te avisa cuándo arranca y cuándo termina tu sesión. Sin esto todo '
           'funciona igual, pero sin avisos.',
     ),
     AppPerm.alarm: (
       Icons.alarm,
       'Arranque puntual',
-      'El partido arranca y se cierra justo a tiempo, incluso con el celu '
+      'La sesión arranca y se cierra justo a tiempo, incluso con el celu '
           'bloqueado. Sin esto puede demorar unos minutos.',
     ),
     AppPerm.battery: (
       Icons.battery_charging_full,
       'Detección estable',
-      'Evita que el sistema pause la app en pleno partido. No gasta batería '
+      'Evita que el sistema pause la app en plena sesión. No gasta batería '
           'extra (odiaríamos eso): solo se usa cuando estás en una cancha. '
           'Sin esto, el cronómetro puede congelarse en algunos celus.',
     ),
@@ -298,7 +298,7 @@ class _PermissionsModalState extends State<PermissionsModal>
                 const SizedBox(height: 3),
                 Text(
                   'Mientras esté prendido, el sistema puede frenar la detección '
-                  'automática y tu partido podría no contarse.',
+                  'automática y tu sesión podría no contarse.',
                   style: AppText.grotesk(
                       size: 11.5, color: AppColors.white(0.7), height: 1.35),
                 ),
@@ -307,12 +307,12 @@ class _PermissionsModalState extends State<PermissionsModal>
                 // apagás y funciona solo, o lo dejás y registrás a mano.
                 _powerSaveOption(
                   'Si lo apagás',
-                  'Tus partidos arrancan y se cierran solos, sin que toques nada.',
+                  'Tus sesiones arrancan y se cierran solas, sin que toques nada.',
                 ),
                 const SizedBox(height: 6),
                 _powerSaveOption(
                   'Si lo dejás prendido',
-                  'Vas a tener que registrar el partido a mano: abrí 1of1 en la '
+                  'Vas a tener que registrar la sesión a mano: abrí 1of1 en la '
                       'cancha y tocá EMPEZAR YA, y al terminar, DETENER.',
                 ),
                 const SizedBox(height: 8),
@@ -374,7 +374,7 @@ class _PermissionsModalState extends State<PermissionsModal>
             // (sin intro de permisos ni cartel de "todo listo").
             if (pending.isNotEmpty) ...[
               Text(
-                'Con esto 1of1 arranca, cuenta y guarda tus partidos sin que '
+                'Con esto 1of1 arranca, cuenta y guarda tus sesiones sin que '
                 'toques nada. Activá todo para la mejor experiencia:',
                 style: AppText.grotesk(size: 12, color: AppColors.white(0.6)),
               ),
@@ -498,7 +498,7 @@ class _PermissionsModalState extends State<PermissionsModal>
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Registra calorías, pulso y pasos de tus partidos desde tu '
+                  'Registra calorías, pulso y pasos de tus sesiones desde tu '
                   'reloj o anillo. Superar tu récord de calorías suma EXP.',
                   style:
                       AppText.grotesk(size: 11, color: AppColors.white(0.5)),

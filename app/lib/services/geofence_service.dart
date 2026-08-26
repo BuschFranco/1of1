@@ -40,7 +40,7 @@ Future<void> geofenceTriggered(GeofenceCallbackParams params) async {
     await cancelEndAlarmOnReenter();
     await NotificationsService.instance.show(
       'Estás en una cancha',
-      'Abrí 1of1 para registrar tu partido.',
+      'Abrí 1of1 para registrar tu sesión de juego.',
     );
     // Llegaste a una cancha: si el ahorro de energía está activo, la detección
     // puede no llegar a arrancar. Avisar ahora, que todavía se está a tiempo.

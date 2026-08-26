@@ -1657,7 +1657,7 @@ class _MyCourtHistory extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 22),
-        const SectionTitle(title: 'Tus partidos acá'),
+        const SectionTitle(title: 'Tus sesiones acá'),
         Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(

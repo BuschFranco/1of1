@@ -19,6 +19,10 @@ dependencies:
   google_maps_flutter_android: 2.19.7  # 2.19.8 migró a Kotlin Pigeon y rompe el build (cannot find symbol PlatformPolygon)
   google_maps_flutter_platform_interface: any
   http: ^1.2.0
+  # Solo por MediaType, para fijar el Content-Type de los multipart (http no lo
+  # infiere del archivo). Ya venía como transitiva de http; se declara explícita
+  # porque la importamos directo.
+  http_parser: ^4.0.2
   geolocator: ^13.0.0
   android_alarm_manager_plus: ^4.0.4
   battery_plus: ^6.0.0

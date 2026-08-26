@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -60,6 +61,9 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
   /// la zona cuando la cámara se asienta sin que el pin se haya movido de
   /// verdad (un zoom dispara `onCameraIdle` igual, y cada lookup se paga).
   LatLng? _lastAreaLookup;
+  /// El último intento de detectar la zona no dio resultado. Cambia el hint del
+  /// campo para pedirla a mano en vez de prometer que se completa sola.
+  bool _areaFallo = false;
 
   // Horario estructurado: apertura, cierre y toggle 24h.
   TimeOfDay? _openTime = const TimeOfDay(hour: 8, minute: 0);
@@ -131,9 +135,19 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
     final area = await GeocodingService.areaFromLatLng(
         donde.latitude, donde.longitude);
     _areaLookupBusy = false;
-    if (!mounted || area == null) return;
+    if (!mounted) return;
+    if (area == null) {
+      // Dejar el campo vacío sin decir nada hacía que el hint ("Se completa solo
+      // al mover el pin") le mintiera al usuario, que recién se enteraba al
+      // apretar Enviar y encontrarse el alta bloqueada.
+      setState(() => _areaFallo = true);
+      return;
+    }
     _lastAreaLookup = donde;
-    setState(() => _areaCtrl.text = area);
+    setState(() {
+      _areaFallo = false;
+      _areaCtrl.text = area;
+    });
   }
 
   Future<void> _tryLoadCurrentLocation() async {
@@ -148,6 +162,12 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
       setState(() => _pinLocation = loc);
       _mapCtrl?.animateCamera(CameraUpdate.newLatLng(loc));
     } catch (_) {}
+    // El geocode NO puede colgar de `onCameraIdle`: `animateCamera` es
+    // null-safe, así que si el fix llega antes de que el mapa esté creado no hay
+    // animación, no hay idle, y la zona no se resuelve nunca al abrir. Se pide
+    // acá explícitamente — con el pin default si el GPS falló, que igual es una
+    // ubicación válida que el usuario después mueve.
+    if (mounted) unawaited(_onPinSettled());
   }
 
   Future<void> _locateMe() async {
@@ -245,12 +265,18 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
       try {
         final compressed = await _compressToWebp(_pickedImage!.path);
         imgUrl = await ApiClient().uploadCourtImage(compressed);
-      } catch (_) {
+      } catch (e) {
         if (!mounted) return;
         setState(() => _submitted = false);
+        // El motivo real va al mensaje: tragárselo con un `catch (_)` y un texto
+        // fijo es lo que volvió indiagnosticable este error durante meses.
+        final detalle = e is ApiException ? e.message : '';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('No se pudo subir la foto. Reintentá o quitala.',
+            content: Text(
+                detalle.isEmpty
+                    ? 'No se pudo subir la foto. Reintentá o quitala.'
+                    : 'No se pudo subir la foto: $detalle',
                 style: AppText.grotesk(size: 13)),
             backgroundColor: AppColors.bgElev,
           ),
@@ -384,7 +410,9 @@ class _AddCourtScreenState extends State<AddCourtScreen> {
                     _sectionTitle('Zona / barrio'),
                     _glassField(
                       controller: _areaCtrl,
-                      hint: 'Se completa solo al mover el pin',
+                      hint: _areaFallo
+                          ? 'No pudimos detectarla: escribila a mano'
+                          : 'Se completa solo al mover el pin',
                     ),
                     const SizedBox(height: 24),
                     _sectionTitle('Tipo'),

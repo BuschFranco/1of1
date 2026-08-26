@@ -252,7 +252,7 @@ class HealthService {
     String hhmm(DateTime d) =>
         '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
     sb.writeln(from != null
-        ? 'Ventana: el partido (${hhmm(start)} a ${hhmm(end)})'
+        ? 'Ventana: la sesión (${hhmm(start)} a ${hhmm(end)})'
         : 'Ventana: últimas ${back.inHours}h');
     sb.writeln('');
     // Un renglón por tipo: permiso individual, muestras y agregado, o el error.

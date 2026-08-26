@@ -26,14 +26,14 @@ const String kPrivacyPolicyUrl = 'https://buschfranco.github.io/1of1/privacidad'
 const String kTermsUrl = 'https://buschfranco.github.io/1of1/terminos';
 
 /// Fecha de última actualización de los documentos (mostrada al usuario).
-const String kLegalLastUpdated = '22 de julio de 2026';
+const String kLegalLastUpdated = '25 de agosto de 2026';
 
 /// Política de Privacidad (resumen honesto de lo que la app hace hoy).
 const String kPrivacyPolicy = '''
 Última actualización: $kLegalLastUpdated
 
 1of1 ("la app") es una aplicación para encontrar canchas de básquet y registrar
-tus partidos. Esta política explica qué datos usamos y por qué.
+tus sesiones de juego. Esta política explica qué datos usamos y por qué.
 
 QUÉ DATOS RECOLECTAMOS
 • Datos de cuenta: nombre, email y, opcionalmente, ciudad y teléfono que cargás
@@ -49,16 +49,16 @@ QUÉ DATOS RECOLECTAMOS
 • Datos de salud (opcional): si conectás Salud (Health Connect / Apple Health),
   leemos calorías, pulso, pasos, distancia, velocidad, oxígeno en sangre,
   frecuencia cardíaca en reposo, variabilidad cardíaca y ritmo respiratorio de
-  tus partidos, además de las sesiones de ejercicio que registre tu reloj.
+  tus sesiones de juego, además de las sesiones de ejercicio que registre tu reloj.
   SOLO los leemos (nunca escribimos en tu historial de salud), quedan
   ÚNICAMENTE en tu dispositivo y no se suben a nuestros servidores.
-• Actividad de juego: historial de partidos (cancha, fecha, duración, puntos).
+• Actividad de juego: historial de sesiones (cancha, fecha, duración, puntos).
 • Mensajes: el contenido de los chats de pickups que enviás se guarda en nuestro
   servidor para poder mostrárselo a los participantes de ese pickup.
 
 PARA QUÉ LOS USAMOS
 Para hacer funcionar la app: ubicarte en el mapa, detectar y puntuar tus
-partidos, mostrar tu perfil y rankings, y conectar la comunidad (amigos, pickups
+sesiones de juego, mostrar tu perfil y rankings, y conectar la comunidad (amigos, pickups
 y sus chats).
 
 DÓNDE SE GUARDAN
@@ -112,7 +112,7 @@ const String kTermsAndConditions = '''
 Al crear una cuenta y usar 1of1 aceptás estos términos.
 
 USO DE LA APP
-1of1 te ayuda a encontrar canchas y registrar partidos. Sos responsable de la
+1of1 te ayuda a encontrar canchas y registrar tus sesiones de juego. Sos responsable de la
 información que cargás (canchas, reseñas, handle, nombre) y de jugar de forma
 segura: la app no supervisa ni garantiza el estado de las canchas.
 
@@ -125,7 +125,7 @@ reportes y podemos eliminar contenido o suspender cuentas que violen estas
 reglas. No toleramos contenido abusivo.
 
 UBICACIÓN Y SEGUNDO PLANO
-La detección de partidos usa tu ubicación, incluso en segundo plano si lo
+La detección de sesiones de juego usa tu ubicación, incluso en segundo plano si lo
 autorizás. Podés desactivarla cuando quieras desde Ajustes → Privacidad o desde
 los permisos del sistema.
 

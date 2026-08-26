@@ -14,7 +14,7 @@ const String kPauseAction = 'toggle_pause';
 /// detector de esa cancha por una hora).
 const String kDeclineAction = 'decline_dwell';
 
-/// Id de la acción "SÍ, SIGO" de la pregunta de partido largo (2h): reanuda
+/// Id de la acción "SÍ, SIGO" de la pregunta de partido largo (3h): reanuda
 /// el partido con una hora extra como máximo.
 const String kConfirmYesAction = 'confirm_yes';
 
@@ -132,8 +132,8 @@ class NotificationsService {
   static const AndroidNotificationChannel _sessionChannel =
       AndroidNotificationChannel(
     'session',
-    'Partido en curso',
-    description: 'Cronómetro de la cancha y del partido',
+    'Sesión de juego en curso',
+    description: 'Cronómetro de la cancha y de la sesión',
     importance: Importance.low,
   );
 
@@ -325,13 +325,13 @@ class NotificationsService {
     if (!_ready) await init();
     if (!_ready) return;
     // Solo un mensaje, sin contador.
-    const body = 'Tu partido va a arrancar solo';
+    const body = 'Tu sesión de juego va a arrancar sola';
     try {
       final details = NotificationDetails(
         android: AndroidNotificationDetails(
           'session',
-          'Partido en curso',
-          channelDescription: 'Cronómetro de la cancha y del partido',
+          'Sesión de juego en curso',
+          channelDescription: 'Cronómetro de la cancha y de la sesión',
           importance: Importance.low,
           priority: Priority.low,
           ongoing: true,
@@ -369,8 +369,8 @@ class NotificationsService {
       final details = NotificationDetails(
         android: AndroidNotificationDetails(
           'session',
-          'Partido en curso',
-          channelDescription: 'Cronómetro de la cancha y del partido',
+          'Sesión de juego en curso',
+          channelDescription: 'Cronómetro de la cancha y de la sesión',
           importance: Importance.low,
           priority: Priority.low,
           ongoing: true,
@@ -392,7 +392,7 @@ class NotificationsService {
       await _plugin.show(
         _sessionId,
         court.isEmpty ? 'Jugando' : 'Jugando en $court',
-        'Partido en curso',
+        'Sesión de juego en curso',
         details,
       );
     } catch (_) {/* ignorar */}
@@ -407,8 +407,8 @@ class NotificationsService {
       final details = NotificationDetails(
         android: AndroidNotificationDetails(
           'session',
-          'Partido en curso',
-          channelDescription: 'Cronómetro de la cancha y del partido',
+          'Sesión de juego en curso',
+          channelDescription: 'Cronómetro de la cancha y de la sesión',
           importance: Importance.low,
           priority: Priority.low,
           ongoing: true,
@@ -428,8 +428,8 @@ class NotificationsService {
       );
       await _plugin.show(
         _sessionId,
-        court.isEmpty ? 'Partido pausado' : 'Pausado · $court',
-        'Partido en pausa',
+        court.isEmpty ? 'Sesión pausada' : 'Pausado · $court',
+        'Sesión en pausa',
         details,
       );
     } catch (_) {/* ignorar */}
@@ -444,8 +444,8 @@ class NotificationsService {
       final details = NotificationDetails(
         android: AndroidNotificationDetails(
           'session',
-          'Partido en curso',
-          channelDescription: 'Cronómetro de la cancha y del partido',
+          'Sesión de juego en curso',
+          channelDescription: 'Cronómetro de la cancha y de la sesión',
           importance: Importance.low,
           priority: Priority.low,
           ongoing: true,
@@ -467,13 +467,13 @@ class NotificationsService {
       await _plugin.show(
         _sessionId,
         court.isEmpty ? 'Saliste de la cancha' : 'Saliste de $court',
-        'Si no volvés, el partido se cierra solo',
+        'Si no volvés, la sesión se cierra sola',
         details,
       );
     } catch (_) {/* ignorar */}
   }
 
-  /// Pregunta "¿Seguís jugando?" del partido largo (2h). Va por el canal de
+  /// Pregunta "¿Seguís jugando?" del partido largo (3h). Va por el canal de
   /// recompensas (importancia alta: DEBE sonar — la de sesión es silenciosa y
   /// pasarla por alto termina en una cancelación injusta a los 20 min). Botones
   /// SÍ/NO que abren la app y responden en el isolate principal.
@@ -505,8 +505,8 @@ class NotificationsService {
       await _plugin.show(
         _confirmId,
         court.isEmpty ? '¿Seguís jugando?' : '¿Seguís jugando en $court?',
-        'Pausamos tu partido a las 2 horas. Si no respondés en 20 minutos, '
-            'lo cancelamos.',
+        'Pausamos tu sesión a las 3 horas. Si no respondés en 20 minutos, '
+            'la cancelamos.',
         details,
       );
     } catch (_) {/* ignorar */}

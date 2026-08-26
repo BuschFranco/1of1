@@ -1,9 +1,17 @@
-# Sistema de detección de partidos
+# Sistema de detección de sesiones de juego
 
 Documento de referencia del **núcleo de la app**: cómo 1of1 detecta que estás
-jugando en una cancha, arranca el partido solo, lo cierra solo, y cómo logra
+jugando en una cancha, arranca la sesión sola, la cierra sola, y cómo logra
 todo eso incluso con la app minimizada, cerrada o con el celu suspendido —
 sin rastrear tu ubicación de forma continua.
+
+> **Vocabulario.** Lo que este sistema detecta es una **sesión de juego**: tu
+> estancia en la cancha, de que llegás a que te vas, con un solo cronómetro.
+> Adentro puede haber **varios partidos** y entrenamientos, que el usuario carga
+> en el desglose al cerrarla (`PlaySession.gamesPlayed` / `trainingsDone`).
+> En este documento "sesión" es siempre la de juego, nunca la de cuenta.
+> El archivo se sigue llamando `deteccion-partidos.md` porque está enlazado
+> desde `CLAUDE.md` y desde comentarios del código.
 
 > **Archivos involucrados**
 >
@@ -21,8 +29,8 @@ sin rastrear tu ubicación de forma continua.
 ## 1. La idea en una frase
 
 Si permanecés **≥ 6 minutos** dentro de un radio de **110 m** de una cancha,
-el partido **arranca solo**. Si salís del radio y seguís afuera **6 minutos**
-continuos, el partido **se cierra solo**. Todo lo demás del sistema existe
+la sesión **arranca sola**. Si salís del radio y seguís afuera **6 minutos**
+continuos, la sesión **se cierra sola**. Todo lo demás del sistema existe
 para que esas dos frases sigan siendo ciertas con la app minimizada, cerrada,
 el proceso muerto por el fabricante o el celu en Doze.
 
@@ -43,11 +51,13 @@ otro lado** — con una excepción deliberada, ver §8.1.
 | `resumeGapMax` | 3 min | Si el "latido" del partido persistido es más viejo que esto al reabrir, el proceso estuvo muerto: se cierra con el tiempo del último latido en vez de resumir inflado. |
 | `endNotifLeadTime` | 3 min | Cuánto antes del cierre automático se avisa "tu partido se cierra pronto". |
 | `batteryEndPercent` | 5 % | Batería mínima (sin cargar) antes de cerrar el partido para proteger la info. |
-| `pointsTimeCap` | 2 h | El tiempo deja de sumar puntos acá. Es TAMBIÉN el trigger de la pregunta de partido largo "¿Seguís jugando?" (§3.1): mismo número, un solo umbral. |
-| `confirmTimeout` | 20 min | Ventana para responder la pregunta de las 2h. Sin respuesta → el partido se CANCELA por completo (sin puntos, sin historial, sin tiempo). |
-| `overtimeMax` | 1 h | Yapa máxima tras responder "Sí": a las 3h netas (2h + 1h) el partido se cierra y GUARDA solo. |
+| `pointsTimeCap` | 3 h | El tiempo deja de sumar puntos acá. Es TAMBIÉN el trigger de la pregunta de partido largo "¿Seguís jugando?" (§3.1): mismo número, un solo umbral. |
+| `confirmTimeout` | 20 min | Ventana para responder la pregunta de las 3h. Sin respuesta → el partido se CANCELA por completo (sin puntos, sin historial, sin tiempo). |
+| `overtimeMax` | 1 h | Yapa máxima tras responder "Sí": a las 4h netas (3h + 1h) el partido se cierra y GUARDA solo. |
 | `_sampleEvery` | 10 s | Cadencia del muestreo GPS con la app abierta. |
 | `_kRadarEvery` (session_alarms) | 15 min | Cadencia del radar de respaldo en background. Peor caso de demora de detección. |
+| `_kWatchdogEvery` (session_alarms) | 30 min | Cadencia del watchdog que revive el radar si dejó de tickear (§8.4.1). |
+| `_kRadarStaleAfter` (session_alarms) | 35 min | Sin tick del radar en más de esto, el watchdog lo da por muerto y lo re-arma. |
 
 Además el filtro de calidad: `_evaluate` **descarta** cualquier lectura con
 `accuracy > radiusMeters * 1.5` (165 m) — una lectura peor que eso no sirve
@@ -88,14 +98,14 @@ El servicio está siempre en uno de estos estados (por usuario, namespaced):
   "¿Cómo te fue?" y recién ahí `resolvePending()` computa puntos, logros,
   historial y lo encola en `pending_matches` para subir con `POST /matches`.
 
-### 3.1 Partido largo: AWAITING CONFIRM (pregunta de las 2h)
+### 3.1 Partido largo: AWAITING CONFIRM (pregunta de las 3h)
 
-A las **2 h de juego NETO** (`pointsTimeCap` — el mismo umbral donde el tiempo
+A las **3 h de juego NETO** (`pointsTimeCap` — el mismo umbral donde el tiempo
 deja de sumar puntos), PLAYING entra en un sub-estado de pausa forzada:
 
 ```
-              2h de juego neto               ┌─ "SÍ, SIGO"  → reanuda con 1h de tope:
-   ┌──────────┐ ─────────────▶ ┌──────────┐  │   a las 3h netas cierra y GUARDA solo
+              3h de juego neto               ┌─ "SÍ, SIGO"  → reanuda con 1h de tope:
+   ┌──────────┐ ─────────────▶ ┌──────────┐  │   a las 4h netas cierra y GUARDA solo
    │ PLAYING  │                │ AWAITING │──┤   (+ snooze 2:30hs + botón manual)
    │          │                │ CONFIRM  │  ├─ "NO, TERMINÉ" → cierra normal (tiempo
    └──────────┘                │ (pausado)│  │   congelado en 2h) + snooze 2:30hs
@@ -107,10 +117,10 @@ deja de sumar puntos), PLAYING entra en un sub-estado de pausa forzada:
   de pausa) hasta que el usuario responda — por notificación con botones
   SÍ/NO (`showContinueCheck`, canal con sonido) o por el banner del mapa.
 - **"Sí, sigo"**: la espera no cuenta como tiempo jugado; hay **1 h más como
-  máximo** (`overtimeMax`). A las 3 h netas el partido se cierra solo, se
+  máximo** (`overtimeMax`). A las 4 h netas el partido se cierra solo, se
   **guarda normal** (pendiente de resultado) y se avisa "llegaste al tiempo
   límite". No se vuelve a preguntar.
-- **"No, terminé"**: cierre normal con el tiempo congelado en las 2 h — queda
+- **"No, terminé"**: cierre normal con el tiempo congelado en las 3 h — queda
   pendiente de "¿Cómo te fue?" y suma como cualquier partido.
 - **Sin respuesta en 20 min** (`confirmTimeout`): el partido se **cancela por
   completo** — no queda pendiente, no suma puntos, ni tiempo, ni jugadas, ni
@@ -146,11 +156,11 @@ Casos especiales:
 | < 13' | Si el partido termina antes de **13 min**, se descarta: no suma nada. | `minMatch` 13 min |
 | salís del radio | Arranca la **gracia de salida**: **6 min** continuos afuera para cerrar. Aviso "se cierra pronto" cuando faltan **3 min**. Si volvés **15 s** continuos adentro, se cancela. La gracia CUENTA como tiempo jugado. | `exitGrace` 6 min · `endNotifLeadTime` 3 min |
 | **1:30 h** | El multiplicador de puntos por duración llega a su tope (×1.8). | `multiplierCap` 90 min |
-| **2 h netas** | El tiempo deja de sumar puntos Y salta la **pregunta "¿Seguís jugando?"**: el cronómetro se PAUSA hasta que respondas. | `pointsTimeCap` 2 h |
+| **3 h netas** | El tiempo deja de sumar puntos Y salta la **pregunta "¿Seguís jugando?"**: el cronómetro se PAUSA hasta que respondas. | `pointsTimeCap` 3 h |
 | +20' sin respuesta | Partido **CANCELADO por completo** (sin puntos/historial/tiempo) + snooze 2 h 30 min + botón manual. | `confirmTimeout` 20 min |
-| respondés "No" | Cierre normal con el tiempo congelado en 2 h (pendiente de "¿Cómo te fue?") + snooze 2 h 30 min + botón manual. | — |
+| respondés "No" | Cierre normal con el tiempo congelado en 3 h (pendiente de "¿Cómo te fue?") + snooze 2 h 30 min + botón manual. | — |
 | respondés "Sí" | Reanuda (la espera no cuenta) con **1 h más** como máximo. | `overtimeMax` 1 h |
-| **3 h netas** | **Tope duro**: cierra y GUARDA solo + "llegaste al tiempo límite" + snooze 2 h 30 min + botón manual. | 2 h + 1 h |
+| **4 h netas** | **Tope duro**: cierra y GUARDA solo + "llegaste al tiempo límite" + snooze 2 h 30 min + botón manual. | 3 h + 1 h |
 | tras cerrar/cancelar | La cancha queda silenciada **1 h** ("No juego"/DETENER/límite/timeout): arranque solo manual. El snooze se limpia si estás **2 min** continuos fuera del radio. | `dwellSnooze` 2 h 30 min · `snoozeExitClear` 2 min |
 | al reabrir la app | Si el latido quedó > **3 min** viejo (proceso muerto), se guarda con el tiempo del último latido. Una sesión activa de > **6 h** se descarta por corrupta. | `resumeGapMax` 3 min · tope 6 h |
 | batería ≤ **5 %** | (Sin cargar) el partido se cierra para proteger el registro. | `batteryEndPercent` |
@@ -245,9 +255,9 @@ SharedPreferences para que el callback sepa qué hacer sin memoria compartida.
 | **Aviso** | 100014 | Junto con la de cierre, a -3 min | "Tu partido se cierra en 3 minutos. Volvé a la cancha para seguir jugando." Solo si la gracia sigue vigente y seguís afuera. |
 | **Batería** | 100013 | Al arrancar un partido, periódica 15 min | Si el partido sigue y la batería ≤5 % sin cargar, cierra para proteger el registro. |
 | **Radar** | 100015 | Ver §5.5 | — |
-| **Pregunta 2h** | 100016 | Al arrancar el partido, a +2 h (reprogramada al reanudar una pausa: el umbral es juego neto) | Si el partido sigue (sin gracia ni pregunta previa): estampa `confirmAskedAtMillis` en la sesión activa ("pausa" en background), muestra "¿Seguís jugando?" con SÍ/NO y programa el timeout. |
+| **Pregunta 3h** | 100016 | Al arrancar el partido, a +2 h (reprogramada al reanudar una pausa: el umbral es juego neto) | Si el partido sigue (sin gracia ni pregunta previa): estampa `confirmAskedAtMillis` en la sesión activa ("pausa" en background), muestra "¿Seguís jugando?" con SÍ/NO y programa el timeout. |
 | **Timeout pregunta** | 100017 | Al preguntar, a +20 min | Si nadie respondió (el flag sigue en la sesión activa): descarta el partido POR COMPLETO (sin pendiente), snooze 2 h 30 min de la cancha, notifica "Partido cancelado". |
-| **Cierre duro 3h** | 100018 | Al responder "Sí", a +1 h de juego neto | Cierra y GUARDA el partido (pendiente de resultado) con el tope como fin, snooze 2 h 30 min, notifica "Llegaste al tiempo límite". |
+| **Cierre duro 4h** | 100018 | Al responder "Sí", a +1 h de juego neto | Cierra y GUARDA el partido (pendiente de resultado) con el tope como fin, snooze 2 h 30 min, notifica "Llegaste al tiempo límite". |
 
 Detalle importante del arranque en background: la sesión que escribe la
 alarma va **sin** `lastSeenMillis` a propósito. Su ausencia le dice a
@@ -257,10 +267,12 @@ hay latidos que exigir) y debe **resumirlo**, no cerrarlo por "gap".
 ### 5.5 Radar de respaldo (app muerta — red de seguridad, cada 15 min)
 
 Los fabricantes (Samsung especialmente) matan procesos, estrangulan geofences
-y foreground services. El radar es el plan Z: una **cadena de alarmas exactas**
-(`kAlarmRadarId`, cada 15 min, sobrevive reinicios con `rescheduleOnReboot`;
-cada ejecución programa la siguiente — ver §8.4) despierta un isolate que toma
-**UN solo fix** (timeout 12 s) y espeja lo que haría `_evaluate`:
+y foreground services. El radar es el plan Z: una **alarma periódica del SO**
+(`kAlarmRadarId`, cada 15 min, sobrevive reinicios con `rescheduleOnReboot`)
+despierta un isolate que toma **UN solo fix** (timeout 8 s) y espeja lo que
+haría `_evaluate`. Que sea periódica y no una cadena de one-shots es
+deliberado y no negociable: ver §8.4. Un watchdog aparte lo revive si dejó de
+tickear (§8.4.1).
 
 - **Sin partido ni dwell sembrado** → si estás dentro del radio de alguna
   cancha (usa el cache `courts_geo_cache` que escribe SyncCoordinator, porque
@@ -429,25 +441,80 @@ geofences no interfieren (`enterCourtArea`/`leaveCourtArea` retornan) y los
 isolates leen `play_mock_pos` antes de pedir un fix. Sin esto, una cancha
 real cerca de tu casa arruinaría cualquier prueba simulada.
 
-### 8.4 El radar es una CADENA: si se corta, no vuelve
+### 8.4 El radar es PERIÓDICO (y volvió a serlo por una razón)
 
-El radar **ya no** usa `AndroidAlarmManager.periodic` (alarmas inexactas, que en
-Doze y con ahorro de energía se estiraban a lo que el SO quisiera, justo cuando
-más falta hace). Ahora es una **cadena de one-shots exactas**: cada ejecución de
-`alarmRadarCallback` programa la siguiente con `_oneShotAt`
-(`exact + allowWhileIdle`, que sí atraviesa Doze).
+Entre ago-2026 y sep-2026 el radar fue una **cadena de one-shots exactas**: cada
+`alarmRadarCallback` programaba el siguiente eslabón con `_oneShotAt`. La idea era
+atravesar Doze con `exact + allowWhileIdle`, porque `periodic` usa alarmas
+inexactas que en Doze se estiran.
 
-El precio es que **un solo eslabón perdido mata el radar para siempre**. Por eso:
+**Fue un error y se revirtió**: la detección en background dejó de funcionar y
+tardó semanas en detectarse, porque falla en silencio. Hay dos mecanismos
+independientes por los que la cadena se corta de forma PERMANENTE, y conviene
+tenerlos presentes antes de volver a intentar algo parecido:
 
-- El trabajo real vive en `_radarTick()`, que devuelve si la cadena sigue viva, y
-  `alarmRadarCallback` **reprograma en un `finally`** — incluso si el tick lanzó.
-- La ÚNICA salida que corta la cadena es el logout real. Un **JWT vencido no la
-  mata**: se usa `requireFreshToken: false` para decidir si sigue viva, y el gate
-  estricto solo para decidir si se siembra detección nueva. Matarla por un token
-  vencido la dejaría muerta hasta reiniciar el proceso, porque el flag `_radarOn`
-  que la re-arma vive en el isolate principal y no se entera.
+1. **El plugin invoca el callback SIN `await`** (`closure()` a secas, en
+   `android_alarm_manager_plus/lib/android_alarm_manager_plus.dart`). Del lado
+   Java, `onHandleWork` espera un `CountDownLatch` que se libera apenas el handler
+   Dart retorna — y retorna al instante, porque el `Future` queda pendiente. El
+   `JobIntentService` suelta su wakelock y **todo lo caro del tick corre con el
+   CPU pudiendo dormirse**: dos `prefs.reload()`, `hasBgSession()` y el fix de
+   GPS. Si el proceso se congela o el OEM lo mata antes del `finally`, el eslabón
+   siguiente nunca se programa. Un `finally` NO protege contra esto: el problema
+   no es un `return` temprano, es que la ejecución nunca llega ahí.
+2. **`exact: true` se descarta en silencio.** Cuando `canScheduleExactAlarms()`
+   da false, el plugin **solo loguea** del lado Java y el method channel devuelve
+   éxito. No hay excepción que atrapar: la alarma simplemente no queda
+   registrada. (Ver el arreglo de `_oneShotAt` más abajo.)
+
+Con `periodic` el schedule lo mantiene **Android**, no nuestro código Dart: un
+tick truncado cuesta UN tick, no el radar entero. Y al ser inexacta cae en
+`setInexactRepeating`, que no pasa por el gate de alarmas exactas, así que el
+punto 2 tampoco aplica.
+
+**La precisión no hacía falta acá**: el radar es una red de seguridad cada 15 min,
+no un evento con deadline. Las one-shots exactas se conservan donde sí importan y
+donde un fallo no es permanente: arranque del partido a los 6 min, cierre de la
+gracia, aviso previo y pregunta de partido largo.
+
+Lo que queda del diseño de la cadena:
+
+- El trabajo vive en `_radarTick()`, que devuelve si el radar debe seguir
+  programado. La ÚNICA salida que lo apaga es el logout real. Un **JWT vencido no
+  lo apaga**: se usa `requireFreshToken: false` para eso, y el gate estricto solo
+  para decidir si se siembra detección nueva. Apagarlo por un token vencido lo
+  dejaría muerto hasta reiniciar el proceso, porque el flag `_radarOn` que lo
+  re-arma vive en el isolate principal y no se entera.
 - Si agregás un `return` en `_radarTick`, devolvé **`true`** salvo que quieras
   apagar el radar de verdad.
+- El timeout del fix de GPS es corto (8 s) a propósito: cuanto menos tiempo pase
+  el tick corriendo sin wakelock, mejor.
+
+#### `_oneShotAt` decide ANTES de programar
+
+Por el mecanismo 2, no alcanza con un try/catch. `_oneShotAt` lee
+`can_schedule_exact` de prefs (lo escribe el isolate principal en
+`checkPermissions`, que sí tiene el canal `oneofone/alarm_perm` con la Activity)
+y programa inexacta explícitamente si no puede exacta. Los isolates de background
+no pueden consultar ese permiso por su cuenta: el canal se registra en la
+Activity y allá no existe.
+
+### 8.4.1 Watchdog del radar (ago-2026)
+
+Segunda alarma, `kAlarmWatchdogId`, programada por `SyncCoordinator` junto con
+el radar (mismas condiciones: sesión + background + permiso "Siempre"). No
+detecta nada: solo pregunta si el radar sigue vivo.
+
+Cada 30 min (`_kWatchdogEvery`), `alarmWatchdogCallback` compara
+`last_radar_tick_millis` (que `_radarTick` sella al arrancar cada tick, ANTES de
+cualquier return — a diferencia de `last_bg_fix_millis`, que solo se actualiza
+con fix exitoso y por eso queda viejo con solo estar en interiores) contra
+`_kRadarStaleAfter` (35 min, con margen sobre los 15 de cadencia). Si está más
+viejo, vuelve a llamar a `scheduleRadarWatch()`.
+
+Con el radar de vuelta en `periodic` esto es **redundancia**, no el sostén
+principal. Lo que sigue cubriendo es que la alarma del radar **nunca haya quedado
+registrada** — programarla no informa si funcionó, así que ese fallo es mudo.
 
 ### 8.5 Ahorro de energía
 

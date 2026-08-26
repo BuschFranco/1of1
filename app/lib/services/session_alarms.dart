@@ -34,7 +34,7 @@ const int kAlarmWarnId = 100014;
 // arrancar la gracia de salida al irse) aunque Samsung haya matado el proceso
 // y el foreground service. Es la red de seguridad de las geofences.
 const int kAlarmRadarId = 100015;
-// Pregunta de partido largo: a las 2h de juego neto pausa el partido y
+// Pregunta de partido largo: a las 3h de juego neto pausa el partido y
 // pregunta "¿Seguís jugando?" aunque la app esté cerrada.
 const int kAlarmConfirmId = 100016;
 // Timeout de la pregunta: sin respuesta en [_kConfirmTimeout], descarta el
@@ -42,6 +42,10 @@ const int kAlarmConfirmId = 100016;
 const int kAlarmConfirmTimeoutId = 100017;
 // Tope duro de la hora extra tras el "SÍ": cierra y GUARDA el partido.
 const int kAlarmHardEndId = 100018;
+// WATCHDOG del radar: alarma PERIÓDICA (a propósito, no cadena) que revive
+// [scheduleRadarWatch] si dejó de tickear. Ver el comentario de
+// [scheduleWatchdog] para el porqué.
+const int kAlarmWatchdogId = 100019;
 
 /// Puerto para avisarle al isolate principal que reconcilie desde prefs.
 const String kPlayPortName = 'oneofone_play_port';
@@ -63,6 +67,19 @@ const String kCourtsGeoCacheKey = 'courts_geo_cache';
 /// background (radar o stream con la app minimizada). Visible en los controles
 /// DEV del mapa para verificar en la calle que el background funciona.
 const String kLastBgFixKey = 'last_bg_fix_millis';
+
+/// Si el SO nos deja programar alarmas EXACTAS. Lo escribe el isolate principal
+/// (`checkPermissions`, que sí tiene el canal con la Activity) para que los
+/// isolates de background puedan decidir sin poder consultarlo ellos mismos.
+/// Clave GLOBAL, mismo criterio que `session_jwt`. Ver [_oneShotAt].
+const String kCanScheduleExactKey = 'can_schedule_exact';
+
+/// Momento (epoch ms) en que [_radarTick] se EJECUTÓ por última vez, haya
+/// conseguido fix o no. A diferencia de [kLastBgFixKey] (que solo se actualiza
+/// con fix exitoso, y por eso queda viejo con solo estar en interiores sin
+/// señal), esto mide si la CADENA sigue viva, que es lo único que le importa
+/// al watchdog. Interno: no se muestra en ningún diagnóstico de usuario.
+const String kLastRadarTickKey = 'last_radar_tick_millis';
 
 // Claves fijas (no namespaced) con el "objetivo" de cada alarma.
 const String _kAlarmStart = 'play_alarm_start';
@@ -91,10 +108,18 @@ const Duration _kDwellThreshold = Duration(minutes: 6);
 const Duration _kExitGrace = Duration(minutes: 6);
 // Cadencia del radar de respaldo (peor caso de detección sin geofence/FGS).
 const Duration _kRadarEvery = Duration(minutes: 15);
+// Cada cuánto despierta el watchdog a chequear que el radar siga tickeando.
+// Más espaciado que el radar a propósito: es una red de seguridad de la red de
+// seguridad, no necesita la cadencia de [_kRadarEvery].
+const Duration _kWatchdogEvery = Duration(minutes: 30);
+// Si el radar no tickeó en más de esto, se lo considera muerto y se re-arma.
+// 2x [_kRadarEvery] con margen: un tick tardío por Doze no debe disparar un
+// re-arme innecesario.
+const Duration _kRadarStaleAfter = Duration(minutes: 35);
 // GEMELAS de PlaySessionService.pointsTimeCap / confirmTimeout / dwellSnooze:
 // umbral de la pregunta de partido largo, ventana de respuesta, y snooze del
 // detector tras descartar (el celu probablemente sigue en el radio).
-const Duration _kConfirmAfter = Duration(hours: 2);
+const Duration _kConfirmAfter = Duration(hours: 3);
 const Duration _kConfirmTimeout = Duration(minutes: 20);
 const Duration _kDwellSnooze = Duration(hours: 2, minutes: 30);
 
@@ -160,17 +185,36 @@ Future<bool> hasBgSession(SharedPreferences prefs,
 }
 
 /// Programa una alarma exacta con fallback: si el SO rechaza la exacta (p. ej.
-/// el usuario revocó "Alarmas y recordatorios" en Android 14+), reintenta como
-/// inexacta — dispara con demora de minutos, pero dispara (mejor que nada).
+/// el usuario revocó "Alarmas y recordatorios" en Android 14+), cae a inexacta
+/// — dispara con demora de minutos, pero dispara (mejor que nada).
+///
+/// **La decisión se toma ANTES de programar, leyendo [kCanScheduleExactKey].**
+/// No alcanza con un try/catch: cuando `canScheduleExactAlarms()` es false el
+/// plugin solo LOGUEA del lado Java y devuelve éxito por el method channel, así
+/// que no hay excepción que atrapar y la alarma queda sin registrar en silencio.
+/// Ese fue uno de los dos caminos por los que la detección en background se
+/// moría sin dejar rastro.
 Future<void> _oneShotAt(DateTime at, int id, Function callback) async {
+  // El isolate de background no puede consultar el permiso: el canal
+  // `oneofone/alarm_perm` se registra en la Activity. Por eso el isolate
+  // principal deja el resultado acá (ver `AppPermissions.checkPermissions`).
+  // Ausente ⇒ asumimos que sí, que es el caso de la enorme mayoría de devices.
+  var exact = true;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    exact = prefs.getBool(kCanScheduleExactKey) ?? true;
+  } catch (_) {/* ante la duda, exacta */}
   try {
     await AndroidAlarmManager.oneShotAt(
       at,
       id,
       callback,
-      exact: true,
+      exact: exact,
       wakeup: true,
-      allowWhileIdle: true,
+      // allowWhileIdle solo tiene sentido con exacta: en inexacta el SO ya
+      // agrupa el disparo con las ventanas de mantenimiento de Doze.
+      allowWhileIdle: exact,
       rescheduleOnReboot: true,
     );
   } catch (_) {
@@ -331,34 +375,74 @@ Future<void> cancelBatteryWatch() async {
 /// Arranca el radar de respaldo. Lo programa SyncCoordinator cuando hay sesión +
 /// background habilitado + permiso "Siempre".
 ///
-/// **Es una CADENA de alarmas exactas, no una periódica.** `AndroidAlarmManager
-/// .periodic` usa alarmas inexactas y en Doze / ahorro de energía los 15 min se
-/// estiran a lo que el SO quiera, justo cuando el radar más falta hace (es la
-/// red de seguridad de todo el sistema de detección). Con `_oneShotAt` cada
-/// disparo es `exact + allowWhileIdle`, que sí atraviesa Doze — el límite de
-/// ~1 disparo cada 9 min de `allowWhileIdle` entra cómodo en la cadencia de 15.
+/// **Es una alarma PERIÓDICA, y tiene que seguir siéndolo.** Entre ago-2026 y
+/// este arreglo fue una cadena de one-shots exactas, buscando atravesar Doze con
+/// `exact + allowWhileIdle`. Ganaba precisión y perdía lo único que importa acá:
+/// que el radar siga existiendo. La cadena se cortaba de forma PERMANENTE por
+/// dos caminos, y el usuario lo reportó como "con la app cerrada no detecta
+/// nada":
 ///
-/// El precio: cada ejecución tiene que reprogramar la siguiente. Si un solo
-/// eslabón se corta, el radar no vuelve nunca. Por eso `alarmRadarCallback`
-/// reprograma en un `finally` (ver allá).
+///  1. El plugin invoca el callback SIN await (`closure()` a secas), así que el
+///     `CountDownLatch` nativo se libera apenas el handler retorna y el
+///     JobIntentService suelta su wakelock mientras el resto del `Future` sigue
+///     pendiente. Todo lo caro del tick (prefs, `hasBgSession`, y sobre todo el
+///     fix de GPS) corre ya sin wakelock: si el CPU se duerme o el OEM mata el
+///     proceso antes del `finally`, el eslabón siguiente NUNCA se programa.
+///  2. Cuando `canScheduleExactAlarms()` es false, el plugin solo LOGUEA y
+///     sigue: el method channel devuelve éxito, así que el `catch` de
+///     [_oneShotAt] jamás corre y la alarma simplemente no queda registrada.
+///
+/// Con `periodic` el schedule lo mantiene Android, no nuestro código Dart: un
+/// tick truncado cuesta UN tick, no el radar entero. Y al ser inexacta no pasa
+/// por el gate de alarmas exactas (`setInexactRepeating`), así que el punto 2
+/// tampoco aplica. La precisión que se pierde no hace falta: esto es una red de
+/// seguridad cada 15 min, no un evento con deadline (para esos siguen las
+/// one-shots exactas: arranque, cierre, aviso previo, partido largo).
 Future<void> scheduleRadarWatch() async {
   if (!_isAndroid) return;
   await AndroidAlarmManager.cancel(kAlarmRadarId);
-  await _scheduleNextRadar();
-}
-
-/// Programa el siguiente eslabón de la cadena del radar.
-Future<void> _scheduleNextRadar() async {
-  await _oneShotAt(
-    DateTime.now().add(_kRadarEvery),
+  await AndroidAlarmManager.periodic(
+    _kRadarEvery,
     kAlarmRadarId,
     alarmRadarCallback,
+    wakeup: true,
+    allowWhileIdle: true,
+    rescheduleOnReboot: true,
   );
 }
 
 Future<void> cancelRadarWatch() async {
   if (!_isAndroid) return;
   await AndroidAlarmManager.cancel(kAlarmRadarId);
+}
+
+/// Arranca el watchdog del radar. Lo programa SyncCoordinator junto con
+/// [scheduleRadarWatch] (mismas condiciones: sesión + background + permiso
+/// "Siempre").
+///
+/// Chequea que el radar siga tickeando y lo re-programa si no. Es una alarma
+/// PERIÓDICA de las inexactas: no necesita precisión, solo llegar eventualmente.
+///
+/// Segunda red, no la principal: desde que el radar volvió a ser `periodic`
+/// (ver [scheduleRadarWatch]) Android mantiene ese schedule solo. Lo que este
+/// watchdog cubre es que la alarma del radar **nunca haya quedado registrada**
+/// — que es un fallo mudo, porque programarla no informa si funcionó.
+Future<void> scheduleWatchdog() async {
+  if (!_isAndroid) return;
+  await AndroidAlarmManager.cancel(kAlarmWatchdogId);
+  await AndroidAlarmManager.periodic(
+    _kWatchdogEvery,
+    kAlarmWatchdogId,
+    alarmWatchdogCallback,
+    wakeup: true,
+    allowWhileIdle: true,
+    rescheduleOnReboot: true,
+  );
+}
+
+Future<void> cancelWatchdog() async {
+  if (!_isAndroid) return;
+  await AndroidAlarmManager.cancel(kAlarmWatchdogId);
 }
 
 // ── Ahorro de energía ──────────────────────────────────────────────────────
@@ -412,15 +496,15 @@ Future<void> maybeNotifyPowerSave(
     // El texto dice qué hacer, no solo qué pasa: apagarlo y que funcione solo,
     // o registrar el partido a mano desde el mapa.
     await NotificationsService.instance.showPowerSave(
-      playing ? 'Tu partido puede no contarse' : 'Ahorro de energía activo',
+      playing ? 'Tu sesión puede no contarse' : 'Ahorro de energía activo',
       playing
-          ? 'Puede frenar el cronómetro. Apagalo y sigue solo; si no, cortá el partido a mano con DETENER.'
-          : 'Puede impedir que detectemos tu partido. Apagalo y arranca solo; si no, tocá EMPEZAR YA en la cancha.',
+          ? 'Puede frenar el cronómetro. Apagalo y sigue sola; si no, cortá la sesión a mano con DETENER.'
+          : 'Puede impedir que detectemos tu sesión de juego. Apagalo y arranca sola; si no, tocá EMPEZAR YA en la cancha.',
     );
   } catch (_) {/* el aviso es best-effort: nunca romper la detección */}
 }
 
-/// Programa la pregunta de partido largo para [at] (2h de juego NETO). La
+/// Programa la pregunta de partido largo para [at] (3h de juego NETO). La
 /// programa PlaySessionService al arrancar el partido y la REPROGRAMA al
 /// reanudar una pausa manual (la pausa corre el umbral). También la programa
 /// alarmStartCallback cuando el partido arranca en background.
@@ -486,6 +570,7 @@ Future<void> cancelAllPlayAlarms() async {
   await cancelConfirmTimeoutAlarm();
   await cancelHardEndAlarm();
   await cancelRadarWatch();
+  await cancelWatchdog();
   try {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(kBgUserKey);
@@ -558,7 +643,7 @@ Future<void> alarmStartCallback() async {
   // Aviso VISIBLE (la notif de sesión de arriba es silenciosa): paridad con el
   // camino en-proceso, donde onPresenceChanged postea este mismo mensaje.
   await NotificationsService.instance.show(
-    '¡Arrancó tu partido!',
+    '¡Arrancó tu sesión de juego!',
     courtName.isEmpty
         ? 'Estamos contando tu tiempo en la cancha.'
         : 'Contando tu tiempo en $courtName.',
@@ -658,7 +743,7 @@ Future<void> alarmWarnCallback() async {
   await NotificationsService.instance.init();
   await NotificationsService.instance.show(
     courtName.isEmpty ? 'Estás saliendo de la cancha' : 'Estás saliendo de $courtName',
-    'Tu partido se cierra en 3 minutos. Volvé a la cancha para seguir jugando.',
+    'Tu sesión se cierra en 3 minutos. Volvé a la cancha para seguir jugando.',
   );
 }
 
@@ -696,7 +781,7 @@ Future<void> alarmBatteryCallback() async {
   _pingMain();
 }
 
-/// Pregunta de partido largo (2h de juego): "pausa" el partido estampando
+/// Pregunta de partido largo (3h de juego): "pausa" el partido estampando
 /// `confirmAskedAtMillis` en la sesión activa y muestra "¿Seguís jugando?".
 /// Con la app viva el ticker suele adelantarse (_beginConfirm) y este callback
 /// no hace nada (idempotente). Es la vía con el proceso muerto.
@@ -805,7 +890,7 @@ Future<void> alarmHardEndCallback() async {
     lowBattery: false,
     endsAtMillis: atMillis,
     notifTitle: 'Llegaste al tiempo límite',
-    notifBody: 'Guardamos tu partido de 3 horas. Abrí 1of1 para registrar '
+    notifBody: 'Guardamos tu sesión de 4 horas. Abrí 1of1 para registrar '
         'el resultado.',
   );
   _pingMain();
@@ -841,10 +926,39 @@ Future<void> _discardActive(
   await NotificationsService.instance.init();
   await NotificationsService.instance.cancelContinueCheck();
   await NotificationsService.instance.show(
-    'Partido cancelado',
-    'No respondiste si seguías jugando, así que no lo guardamos.',
+    'Sesión cancelada',
+    'No respondiste si seguías jugando, así que no la guardamos.',
   );
   await NotificationsService.instance.cancelSession();
+}
+
+/// WATCHDOG del radar: si el radar dejó de tickear, lo vuelve a programar.
+///
+/// Con el radar de vuelta en `AndroidAlarmManager.periodic` esto es redundancia
+/// (Android mantiene ese schedule solo), pero se conserva a propósito: cubre el
+/// caso de que la alarma del radar no haya quedado registrada — p. ej. porque
+/// falló al programarse durante el arranque de la app, escenario que no deja
+/// ninguna señal (ver [_oneShotAt]).
+@pragma('vm:entry-point')
+Future<void> alarmWatchdogCallback() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  // Token laxo, mismo criterio que el propio radar: un JWT vencido no apaga
+  // la vigilancia, solo el logout real.
+  if (!await hasBgSession(prefs, requireFreshToken: false)) {
+    await cancelWatchdog();
+    return;
+  }
+  final lastTick = prefs.getInt(kLastRadarTickKey) ?? 0;
+  final staleSince = DateTime.now().millisecondsSinceEpoch -
+      _kRadarStaleAfter.inMilliseconds;
+  if (lastTick < staleSince) {
+    // El radar no da señales de vida: re-programarlo. scheduleRadarWatch
+    // cancela cualquier resto antes de registrar, así que es seguro llamarlo
+    // aunque en realidad siguiera vivo.
+    await scheduleRadarWatch();
+  }
 }
 
 /// RADAR de respaldo: re-muestrea el GPS y avanza la detección aunque el proceso
@@ -857,25 +971,26 @@ Future<void> _discardActive(
 /// Las geofences siguen siendo la vía rápida; esto cubre cuando el OEM las
 /// estrangula o mata el servicio (peor caso: [_kRadarEvery] de demora).
 ///
-/// **Reprograma el siguiente eslabón en un `finally`.** El cuerpo tiene muchos
-/// return tempranos y cualquiera que saliera sin reprogramar mataría el radar
-/// para siempre (ver [scheduleRadarWatch]). Por eso el trabajo real vive en
-/// [_radarTick], que solo devuelve `false` cuando la cadena debe terminar de
-/// verdad — hoy, únicamente al no haber sesión.
+/// El trabajo vive en [_radarTick], que sella [kLastRadarTickKey] (la señal que
+/// lee [alarmWatchdogCallback]) y devuelve `false` solo cuando el radar debe
+/// apagarse de verdad — hoy, únicamente al no haber sesión.
+///
+/// Ojo con el `await` acá adentro: el plugin invoca este callback SIN esperar el
+/// `Future` (`closure()` a secas), así que el wakelock del JobIntentService se
+/// suelta apenas retornamos y todo lo que quede pendiente corre con el CPU
+/// pudiendo dormirse. Mantené el tick lo más corto posible.
 @pragma('vm:entry-point')
 Future<void> alarmRadarCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
-  var keepChain = true;
   try {
-    keepChain = await _radarTick();
+    if (!await _radarTick()) await cancelRadarWatch();
   } catch (_) {
-    // Un fallo puntual (GPS, prefs, JSON corrupto) no puede cortar la cadena.
-  } finally {
-    if (keepChain) await _scheduleNextRadar();
+    // Un fallo puntual (GPS, prefs, JSON corrupto) no apaga el radar: la
+    // periódica sigue programada y el próximo tick reintenta.
   }
 }
 
-/// Un tick del radar. Devuelve si la cadena debe seguir viva.
+/// Un tick del radar. Devuelve si el radar debe seguir programado.
 Future<bool> _radarTick() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.reload();
@@ -885,16 +1000,19 @@ Future<bool> _radarTick() async {
   // SyncCoordinator._syncGeofences). El gate va antes de leer el mock: si te
   // deslogueás con el modo prueba activo, el radar también se apaga.
   //
-  // Token LAXO para decidir si la cadena sigue viva: un JWT vencido no es un
-  // logout. Matar la cadena por eso la dejaría muerta hasta reiniciar el
-  // proceso, porque el flag `_radarOn` que la re-arma vive en el isolate
-  // principal y no se entera de lo que hizo el de background.
+  // Token LAXO para decidir si el radar sigue encendido: un JWT vencido no es
+  // un logout. Apagarlo por eso lo dejaría muerto hasta reiniciar el proceso,
+  // porque el flag `_radarOn` que lo re-arma vive en el isolate principal y no
+  // se entera de lo que hizo el de background.
   if (!await hasBgSession(prefs, requireFreshToken: false)) {
-    await cancelRadarWatch();
-    return false; // única salida que MATA la cadena
+    return false; // única salida que APAGA el radar
   }
+  // El tick va a ejecutarse de verdad: sellar ANTES de cualquier return que
+  // siga, para que un fix que tarda o falla no se lea como radar muerto.
+  await prefs.setInt(
+      kLastRadarTickKey, DateTime.now().millisecondsSinceEpoch);
   // Con el token vencido no sembramos detección nueva (mismo criterio que
-  // antes), pero la cadena sigue latiendo hasta que el JWT se renueve.
+  // antes), pero el radar sigue latiendo hasta que el JWT se renueve.
   if (!await hasBgSession(prefs)) return true;
   final uk = prefs.getString(kBgUserKey) ?? '';
 
@@ -1000,9 +1118,13 @@ Future<(double, double)?> _currentLatLng() async {
     }
   } catch (_) {}
   try {
+    // Timeout corto A PROPÓSITO: esto corre en un callback de alarma, cuyo
+    // wakelock ya se soltó (el plugin no espera nuestro Future). Cuanto más
+    // tiempo pasemos acá, más chances de que el CPU se duerma a mitad del tick.
+    // Sin fix, el próximo tick reintenta en [_kRadarEvery].
     final pos = await Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-    ).timeout(const Duration(seconds: 12));
+    ).timeout(const Duration(seconds: 8));
     return (pos.latitude, pos.longitude);
   } catch (_) {
     return null;
@@ -1118,11 +1240,11 @@ Future<void> _closeActiveToPending(
     await NotificationsService.instance.show(
       notifTitle ??
           (lowBattery
-              ? 'Partido terminado por batería baja'
-              : 'Terminó tu partido'),
+              ? 'Sesión terminada por batería baja'
+              : 'Terminó tu sesión de juego'),
       notifBody ??
           (lowBattery
-              ? 'Cerramos tu partido para proteger tu información. Abrí 1of1 '
+              ? 'Cerramos tu sesión para proteger tu información. Abrí 1of1 '
                   'para registrar el resultado.'
               : 'Abrí 1of1 para registrar el resultado.'),
     );

@@ -312,130 +312,44 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  /// Cierre del partido: UN solo sheet con resultado, formato, puntos y
+  /// desglose. Antes eran dos encadenados (resultado → estadísticas), lo que se
+  /// sentía como dos pantallas para una sola pregunta.
   Future<void> _askResult(PlaySession s) async {
     final play = context.read<PlaySessionService>();
 
-    // Fila de resultado a ancho completo: una barra de color a la izquierda y el
-    // label en Anybody mayúsculas. Sin caja ni chip redondeado — la jerarquía la
-    // dan el color y la tipografía, no un rectángulo gris más.
-    Widget option(PlayResult r, IconData icon, Color color) {
-      return PressableWidget(
-        onTap: () => Navigator.pop(context, r),
-        child: Container(
-          color: Colors.transparent, // area de toque completa
-          padding: const EdgeInsets.symmetric(vertical: 15),
-          child: Row(
-            children: [
-              Container(width: 4, height: 26, color: color),
-              const SizedBox(width: 14),
-              Icon(icon, size: 19, color: color),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(r.label.toUpperCase(),
-                    style: AppText.archivo(
-                        size: 16,
-                        weight: FontWeight.w800,
-                        letterSpacing: 0.02)),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // Bottom sheet y no diálogo: lo que sigue (las estadísticas) también es un
-    // sheet, y encadenar diálogo → sheet para un mismo flujo se siente como dos
-    // apps distintas. Descartar sigue devolviendo null ⇒ "Sin información".
-    final chosen = await showModalBottomSheet<PlayResult>(
+    final res = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: const BoxDecoration(
-          color: AppColors.bgElev,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  margin: const EdgeInsets.only(top: 12),
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.white(0.15),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    displayTitle('¿CÓMO TE FUE?', size: 32),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${s.courtName.isEmpty ? 'Cancha' : s.courtName}  ·  ${PlaySessionService.fmt(s.seconds)}  ·  x${PlaySessionService.multiplierFor(s.seconds).toStringAsFixed(2)}',
-                      style: AppText.grotesk(
-                          size: 12, color: AppColors.white(0.5)),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  children: [
-                    for (final o in <(PlayResult, IconData, Color)>[
-                      (PlayResult.win, Icons.emoji_events, AppColors.open),
-                      (PlayResult.loss, Icons.thumb_down_alt_outlined,
-                          AppColors.accentDark),
-                      (PlayResult.tie, Icons.handshake_outlined,
-                          AppColors.white(0.7)),
-                      (PlayResult.training, Icons.fitness_center,
-                          AppColors.accent),
-                      (PlayResult.notCounted, Icons.not_interested,
-                          AppColors.white(0.4)),
-                    ]) ...[
-                      if (o.$1 != PlayResult.win) hairline(),
-                      option(o.$1, o.$2, o.$3),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
+      builder: (_) => _MatchStatsSheet(
+        courtName: s.courtName,
+        duration: PlaySessionService.fmt(s.seconds),
+        multiplier: PlaySessionService.multiplierFor(s.seconds),
+        session: s,
       ),
     );
 
-    // Si el usuario eligió un resultado, preguntar stats (opcional).
+    // Descartar el sheet (swipe o tap afuera) ⇒ null ⇒ "Sin información", igual
+    // que cuando el resultado se elegía en un sheet aparte.
+    final chosen = PlayResultX.fromName(res?['result'] as String?);
     if (chosen != null && mounted) {
-      final stats = await _showMatchStats(s);
       await play.resolvePending(
         chosen,
-        userPoints: stats?['pts'],
-        userTriples: stats?['t3'],
-        userDoubles: stats?['t2'],
-        userFreeThrows: stats?['tl'],
+        userPoints: res?['pts'],
+        userPts3: res?['p3'],
+        userPts2: res?['p2'],
+        userPts1: res?['p1'],
         // Desglose de la sesión: null salvo que haya abierto "Fue más de un
         // partido". Es lo que hace que los contadores y los logros cuenten
         // varios partidos en vez de uno.
-        matchCount: stats?['nMatches'],
-        trainingCount: stats?['nTrainings'],
-        winCount: stats?['nWins'],
-        gamePoints: (stats?['gamePts'] as List?)?.cast<int>(),
+        matchCount: res?['nMatches'],
+        trainingCount: res?['nTrainings'],
+        winCount: res?['nWins'],
+        gamePoints: (res?['gamePts'] as List?)?.cast<int>(),
+        gameFormats: (res?['gameFmt'] as List?)?.cast<int>(),
       );
-      // Si el usuario tocó "Ver resultado", navegar al detalle.
-      if (stats?['viewDetail'] == true && mounted) {
-        // Obtener la sesión actualizada del log.
+      if (res?['viewDetail'] == true && mounted) {
         final updated = play.log.firstWhere(
           (e) => e.endedAtMillis == s.endedAtMillis,
           orElse: () => s,
@@ -450,39 +364,9 @@ class _MainShellState extends State<MainShell> {
         }
       }
     } else {
-      await play.resolvePending(chosen ?? PlayResult.notCounted);
+      await play.resolvePending(PlayResult.notCounted);
     }
     if (mounted) setState(() => _resultPromptOpen = false);
-  }
-
-  /// Muestra un bottom sheet para ingresar stats del partido (opcional).
-  /// Devuelve un map con los valores o null si el usuario omitió.
-  Future<Map<String, dynamic>?> _showMatchStats(PlaySession s) async {
-    final ptsCtrl = TextEditingController();
-    final t3Ctrl = TextEditingController();
-    final t2Ctrl = TextEditingController();
-    final tlCtrl = TextEditingController();
-
-    final result = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _MatchStatsSheet(
-        courtName: s.courtName,
-        duration: PlaySessionService.fmt(s.seconds),
-        session: s,
-        ptsCtrl: ptsCtrl,
-        t3Ctrl: t3Ctrl,
-        t2Ctrl: t2Ctrl,
-        tlCtrl: tlCtrl,
-      ),
-    );
-
-    ptsCtrl.dispose();
-    t3Ctrl.dispose();
-    t2Ctrl.dispose();
-    tlCtrl.dispose();
-    return result;
   }
 
   @override
@@ -694,7 +578,7 @@ class _MainShellState extends State<MainShell> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Sin conexión. Tu partido se registra igual y se sube cuando vuelva el internet.',
+              'Sin conexión. Tu sesión se registra igual y se sube cuando vuelva el internet.',
               style: AppText.grotesk(
                   size: 12, color: AppColors.white(0.75), height: 1.35),
             ),
@@ -705,25 +589,26 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-/// Bottom sheet para ingresar estadísticas del partido (opcional).
-/// Se muestra después de elegir el resultado.
+/// Sheet ÚNICO de cierre de partido: resultado, formato, puntos y desglose.
+///
+/// Antes eran dos sheets encadenados (elegir resultado → cargar estadísticas).
+/// Se unificaron porque son una sola pregunta —"¿qué pasó en la cancha?"— y
+/// encadenar dos hojas para eso se sentía como dos pantallas distintas.
+///
+/// El resultado es lo único OBLIGATORIO: sin él no hay nada que registrar, así
+/// que los botones quedan deshabilitados hasta elegirlo. Descartar el sheet
+/// devuelve null y el partido se guarda como "Sin información".
 class _MatchStatsSheet extends StatefulWidget {
   final String courtName;
   final String duration;
+  final double multiplier;
   final PlaySession session;
-  final TextEditingController ptsCtrl;
-  final TextEditingController t3Ctrl;
-  final TextEditingController t2Ctrl;
-  final TextEditingController tlCtrl;
 
   const _MatchStatsSheet({
     required this.courtName,
     required this.duration,
+    required this.multiplier,
     required this.session,
-    required this.ptsCtrl,
-    required this.t3Ctrl,
-    required this.t2Ctrl,
-    required this.tlCtrl,
   });
 
   @override
@@ -731,6 +616,17 @@ class _MatchStatsSheet extends StatefulWidget {
 }
 
 class _MatchStatsSheetState extends State<_MatchStatsSheet> {
+  /// Resultado elegido. null = todavía no eligió ⇒ no se puede guardar.
+  PlayResult? _result;
+
+  /// Formato cuando NO hay desglose (jugadores por equipo, 1..5).
+  int _format = 3;
+
+  final _ptsCtrl = TextEditingController();
+  final _p3Ctrl = TextEditingController();
+  final _p2Ctrl = TextEditingController();
+  final _p1Ctrl = TextEditingController();
+
   // ── Desglose "Fue más de un partido" ─────────────────────────────────────
   // Cerrado por defecto: el caso común sigue siendo un solo partido y no vale la
   // pena alargarle el formulario a todo el mundo.
@@ -738,27 +634,39 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
   int _matches = 2;
   int _trainings = 0;
   int _wins = 0;
-  /// Cargar los puntos partido por partido (en vez de un total suelto).
   bool _perGame = false;
   final List<TextEditingController> _gameCtrls = [];
 
+  /// Un formato por partido: se puede mezclar 3v3 con 1v1 en la misma tarde.
+  final List<int> _gameFmts = [];
+
   @override
   void dispose() {
+    _ptsCtrl.dispose();
+    _p3Ctrl.dispose();
+    _p2Ctrl.dispose();
+    _p1Ctrl.dispose();
     for (final c in _gameCtrls) {
       c.dispose();
     }
     super.dispose();
   }
 
-  /// Mantiene un controller por partido al cambiar la cantidad. Se conservan los
-  /// valores ya tipeados: bajar y volver a subir la cantidad no debería borrar
-  /// lo que el usuario venía cargando.
-  void _syncGameCtrls() {
+  /// Mantiene un controller y un formato por partido al cambiar la cantidad. Se
+  /// conservan los valores ya cargados: bajar y volver a subir la cantidad no
+  /// debería borrar lo que el usuario venía poniendo.
+  void _syncPerGame() {
     while (_gameCtrls.length < _matches) {
       _gameCtrls.add(TextEditingController());
     }
     while (_gameCtrls.length > _matches) {
       _gameCtrls.removeLast().dispose();
+    }
+    while (_gameFmts.length < _matches) {
+      _gameFmts.add(_format); // arranca con el formato general
+    }
+    while (_gameFmts.length > _matches) {
+      _gameFmts.removeLast();
     }
   }
 
@@ -777,15 +685,17 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
     return any ? total : null;
   }
 
-  /// Lo que se devuelve al cerrar. El total de puntos sale de la suma por
-  /// partido cuando esa carga está activa (una sola fuente de verdad).
   Map<String, dynamic> _payload({required bool viewDetail}) {
     final perGameTotal = _gamePointsTotal;
     return {
-      'pts': perGameTotal ?? int.tryParse(widget.ptsCtrl.text),
-      't3': int.tryParse(widget.t3Ctrl.text),
-      't2': int.tryParse(widget.t2Ctrl.text),
-      'tl': int.tryParse(widget.tlCtrl.text),
+      'result': _result!.name,
+      'pts': perGameTotal ?? int.tryParse(_ptsCtrl.text),
+      'p3': int.tryParse(_p3Ctrl.text),
+      'p2': int.tryParse(_p2Ctrl.text),
+      'p1': int.tryParse(_p1Ctrl.text),
+      // Con desglose va un formato por partido; sin desglose, uno solo. Siempre
+      // lista, para que el modelo no tenga dos caminos.
+      'gameFmt': _multi ? List<int>.from(_gameFmts) : <int>[_format],
       if (_multi) ...{
         'nMatches': _matches,
         'nTrainings': _trainings,
@@ -799,213 +709,122 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
     };
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.of(context).viewInsets.bottom;
+  // ── Piezas de UI ─────────────────────────────────────────────────────────
 
-    // Input numérico compacto (plano: filled sin borde, foco en acento).
-    // Sin caja: hairline abajo que se enciende en acento al enfocar. El relleno
-    // gris de antes convertia cada input en un rectangulo mas.
-    InputDecoration numDecoration(double size) => InputDecoration(
-          hintText: '0',
-          hintStyle: AppText.display(size: size, color: AppColors.white(0.14)),
-          filled: false,
-          isDense: true,
-          contentPadding: const EdgeInsets.only(bottom: 6, top: 2),
-          enabledBorder: UnderlineInputBorder(
-            borderSide: BorderSide(color: AppColors.white(0.12)),
-          ),
-          focusedBorder: const UnderlineInputBorder(
-            borderSide: BorderSide(color: AppColors.accent, width: 2),
-          ),
-        );
-
-    // [isLast] cierra el teclado en vez de seguir avanzando.
-    Widget field(String label, TextEditingController ctrl,
-        {bool isLast = false}) {
-      return Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label.toUpperCase(),
-                style: AppText.grotesk(
-                    size: 9.5,
-                    weight: FontWeight.w700,
-                    color: AppColors.white(0.4),
-                    letterSpacing: 0.08)),
-            const SizedBox(height: 6),
-            TextField(
-              controller: ctrl,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              // El teclado muestra "Siguiente" y salta al input de al lado sin
-              // tener que cerrarlo y tocar cada campo a mano. El orden lo da el
-              // árbol: puntos → 3PT → 2PT → TL.
-              textInputAction:
-                  isLast ? TextInputAction.done : TextInputAction.next,
-              style: AppText.display(size: 26, height: 1.0),
-              cursorColor: AppColors.accent,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(3),
-              ],
-              decoration: numDecoration(16),
-            ),
-          ],
+  InputDecoration _numDeco(double size) => InputDecoration(
+        hintText: '0',
+        hintStyle: AppText.display(size: size, color: AppColors.white(0.14)),
+        filled: false,
+        isDense: true,
+        contentPadding: const EdgeInsets.only(bottom: 6, top: 2),
+        enabledBorder: UnderlineInputBorder(
+          borderSide: BorderSide(color: AppColors.white(0.12)),
+        ),
+        focusedBorder: const UnderlineInputBorder(
+          borderSide: BorderSide(color: AppColors.accent, width: 2),
         ),
       );
-    }
 
-    final screenH = MediaQuery.of(context).size.height;
-    return _sheetBody(screenH, bottom, numDecoration, field);
+  Widget _numField(String label, TextEditingController ctrl,
+      {bool isLast = false}) {
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          microLabel(label),
+          const SizedBox(height: 6),
+          TextField(
+            controller: ctrl,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            textInputAction:
+                isLast ? TextInputAction.done : TextInputAction.next,
+            style: AppText.display(size: 24, height: 1.0),
+            cursorColor: AppColors.accent,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(3),
+            ],
+            decoration: _numDeco(16),
+          ),
+        ],
+      ),
+    );
   }
 
-  /// Desplegable "Fue más de un partido": cantidad de partidos, entrenamientos
-  /// y victorias de la sesión, más los puntos de cada partido si se quieren.
-  Widget _multiSection(InputDecoration Function(double) numDecoration) {
-    // Sin caja contenedora: es una seccion mas del sheet, separada por hairlines.
-    // La caja con borde la hacia competir visualmente con los inputs de arriba.
-    return Column(
-        children: [
-          PressableWidget(
-            onTap: () => setState(() {
-              _multi = !_multi;
-              if (_multi) _syncGameCtrls();
-            }),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              child: Row(
-                children: [
-                  Icon(Icons.groups_2_outlined,
-                      size: 18,
-                      color: _multi ? AppColors.accent : AppColors.white(0.45)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text('FUE MÁS DE UN PARTIDO',
-                        style: AppText.archivo(
-                            size: 13,
-                            weight: FontWeight.w800,
-                            letterSpacing: 0.04,
-                            color: _multi ? Colors.white : AppColors.white(0.7))),
+  /// Fila de resultado: barra de color + label. Al elegir NO cierra el sheet
+  /// (antes sí): queda marcada y el usuario sigue cargando lo demás.
+  Widget _resultRow(PlayResult r, IconData icon, Color color) {
+    final sel = _result == r;
+    return PressableWidget(
+      onTap: () => setState(() => _result = r),
+      child: Container(
+        color: sel ? color.withAlpha(28) : Colors.transparent,
+        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
+        child: Row(
+          children: [
+            Container(width: 4, height: 24, color: color),
+            const SizedBox(width: 14),
+            Icon(icon, size: 18, color: color),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(r.label.toUpperCase(),
+                  style: AppText.archivo(
+                      size: 15,
+                      weight: FontWeight.w800,
+                      letterSpacing: 0.02,
+                      color: sel ? Colors.white : AppColors.white(0.7))),
+            ),
+            if (sel) Icon(Icons.check_rounded, size: 18, color: color),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Selector de formato 1v1..5v5. [compact] para las filas por partido, donde
+  /// no hay ancho para el segmentado grande.
+  Widget _formatPicker(int value, ValueChanged<int> onChanged,
+      {bool compact = false}) {
+    return Row(
+      children: [
+        for (var n = 1; n <= 5; n++) ...[
+          if (n > 1) SizedBox(width: compact ? 4 : 6),
+          Expanded(
+            child: PressableWidget(
+              onTap: () => onChanged(n),
+              child: Container(
+                padding: EdgeInsets.symmetric(vertical: compact ? 6 : 10),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: value == n ? AppColors.accent : Colors.transparent,
+                  border: Border.all(
+                    color:
+                        value == n ? AppColors.accent : AppColors.white(0.12),
                   ),
-                  Icon(_multi ? Icons.expand_less : Icons.expand_more,
-                      size: 20, color: AppColors.white(0.4)),
-                ],
+                  borderRadius: BorderRadius.circular(AppShape.rChip),
+                ),
+                child: Text('${n}v$n',
+                    style: AppText.archivo(
+                        size: compact ? 10.5 : 13,
+                        weight: FontWeight.w800,
+                        color: value == n
+                            ? Colors.white
+                            : AppColors.white(0.6))),
               ),
             ),
           ),
-          if (_multi)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      _counter('Partidos', _matches, 0, 20, (v) {
-                        setState(() {
-                          _matches = v;
-                          // Las victorias no pueden superar a los partidos: en
-                          // vez de dejar un valor inválido y avisar después, el
-                          // tope se ajusta solo al bajar la cantidad.
-                          if (_wins > _matches) _wins = _matches;
-                          _syncGameCtrls();
-                          if (_matches < 2) _perGame = false;
-                        });
-                      }),
-                      const SizedBox(width: 8),
-                      _counter('Entrenam.', _trainings, 0, 20,
-                          (v) => setState(() => _trainings = v)),
-                      const SizedBox(width: 8),
-                      _counter('Victorias', _wins, 0, _matches,
-                          (v) => setState(() => _wins = v)),
-                    ],
-                  ),
-                  if (_matches >= 2) ...[
-                    const SizedBox(height: 12),
-                    PressableWidget(
-                      onTap: () => setState(() => _perGame = !_perGame),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _perGame
-                                ? Icons.check_box_rounded
-                                : Icons.check_box_outline_blank_rounded,
-                            size: 18,
-                            color: _perGame
-                                ? AppColors.accent
-                                : AppColors.white(0.4),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text('Cargar los puntos de cada partido',
-                                style: AppText.grotesk(
-                                    size: 12.5,
-                                    weight: FontWeight.w600,
-                                    color: AppColors.white(0.75))),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  if (_multi && _perGame && _matches >= 2) ...[
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (var i = 0; i < _gameCtrls.length; i++)
-                          SizedBox(
-                            width: 74,
-                            child: Column(
-                              children: [
-                                Text('P${i + 1}',
-                                    style: AppText.grotesk(
-                                        size: 9.5,
-                                        weight: FontWeight.w700,
-                                        color: AppColors.white(0.4),
-                                        letterSpacing: 0.08)),
-                                const SizedBox(height: 4),
-                                TextField(
-                                  controller: _gameCtrls[i],
-                                  keyboardType: TextInputType.number,
-                                  textAlign: TextAlign.center,
-                                  style: AppText.archivo(
-                                      size: 15, weight: FontWeight.w800),
-                                  cursorColor: AppColors.accent,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                    LengthLimitingTextInputFormatter(3),
-                                  ],
-                                  // Refresca el total de arriba, que es la suma.
-                                  onChanged: (_) => setState(() {}),
-                                  decoration: numDecoration(15),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
+        ],
       ],
     );
   }
 
-  /// Contador compacto con -/+. Se usa en vez de un input de texto porque los
-  /// límites (victorias ≤ partidos) quedan garantizados por construcción, sin
-  /// validar ni avisar de nada.
-  Widget _counter(
-    String label,
-    int value,
-    int min,
-    int max,
-    ValueChanged<int> onChanged,
-  ) {
-    Widget btn(IconData icon, bool enabled, VoidCallback onTap) => PressableWidget(
+  /// Contador compacto con -/+. Se usa en vez de un input porque los límites
+  /// (victorias ≤ partidos) quedan garantizados por construcción.
+  Widget _counter(String label, int value, int min, int max,
+      ValueChanged<int> onChanged) {
+    Widget btn(IconData icon, bool enabled, VoidCallback onTap) =>
+        PressableWidget(
           onTap: enabled ? onTap : null,
           child: SizedBox(
             width: 26,
@@ -1027,12 +846,10 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                   color: AppColors.white(0.4),
                   letterSpacing: 0.06)),
           const SizedBox(height: 4),
-          // Sin pildora gris: el valor grande manda y los -/+ quedan a los lados.
           Container(
             padding: const EdgeInsets.only(bottom: 4),
             decoration: BoxDecoration(
-              border: Border(
-                  bottom: BorderSide(color: AppColors.white(0.12))),
+              border: Border(bottom: BorderSide(color: AppColors.white(0.12))),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1048,23 +865,165 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
     );
   }
 
-  Widget _sheetBody(
-    double screenH,
-    double bottom,
-    InputDecoration Function(double) numDecoration,
-    Widget Function(String, TextEditingController, {bool isLast}) field,
-  ) {
+  /// Desglose de la sesión: cuántos partidos/entrenamientos/victorias y, por
+  /// partido, su formato y sus puntos.
+  Widget _multiSection() {
+    return Column(
+      children: [
+        PressableWidget(
+          onTap: () => setState(() {
+            _multi = !_multi;
+            if (_multi) _syncPerGame();
+          }),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Row(
+              children: [
+                Icon(Icons.groups_2_outlined,
+                    size: 18,
+                    color: _multi ? AppColors.accent : AppColors.white(0.45)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('FUE MÁS DE UN PARTIDO',
+                      style: AppText.archivo(
+                          size: 13,
+                          weight: FontWeight.w800,
+                          letterSpacing: 0.04,
+                          color:
+                              _multi ? Colors.white : AppColors.white(0.7))),
+                ),
+                Icon(_multi ? Icons.expand_less : Icons.expand_more,
+                    size: 20, color: AppColors.white(0.4)),
+              ],
+            ),
+          ),
+        ),
+        if (_multi)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _counter('Partidos', _matches, 0, 12, (v) {
+                      setState(() {
+                        _matches = v;
+                        // Las victorias no pueden superar a los partidos: el
+                        // tope se ajusta solo al bajar la cantidad.
+                        if (_wins > _matches) _wins = _matches;
+                        _syncPerGame();
+                        if (_matches < 2) _perGame = false;
+                      });
+                    }),
+                    const SizedBox(width: 8),
+                    _counter('Entrenam.', _trainings, 0, 12,
+                        (v) => setState(() => _trainings = v)),
+                    const SizedBox(width: 8),
+                    _counter('Victorias', _wins, 0, _matches,
+                        (v) => setState(() => _wins = v)),
+                  ],
+                ),
+                if (_matches >= 2) ...[
+                  const SizedBox(height: 14),
+                  PressableWidget(
+                    onTap: () => setState(() => _perGame = !_perGame),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _perGame
+                              ? Icons.check_box_rounded
+                              : Icons.check_box_outline_blank_rounded,
+                          size: 18,
+                          color:
+                              _perGame ? AppColors.accent : AppColors.white(0.4),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text('Cargar los puntos de cada partido',
+                              style: AppText.grotesk(
+                                  size: 12.5,
+                                  weight: FontWeight.w600,
+                                  color: AppColors.white(0.75))),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                // Una fila por partido: su formato y, si se pidió, sus puntos.
+                if (_gameFmts.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  microLabel('Formato de cada partido'),
+                  const SizedBox(height: 8),
+                  for (var i = 0; i < _gameFmts.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 26,
+                            child: Text('P${i + 1}',
+                                style: AppText.grotesk(
+                                    size: 11,
+                                    weight: FontWeight.w700,
+                                    color: AppColors.white(0.45))),
+                          ),
+                          Expanded(
+                            child: _formatPicker(
+                              _gameFmts[i],
+                              (n) => setState(() => _gameFmts[i] = n),
+                              compact: true,
+                            ),
+                          ),
+                          if (_perGame) ...[
+                            const SizedBox(width: 10),
+                            SizedBox(
+                              width: 54,
+                              child: TextField(
+                                controller: _gameCtrls[i],
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                style: AppText.display(size: 18, height: 1.0),
+                                cursorColor: AppColors.accent,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(3),
+                                ],
+                                // Refresca el total de arriba, que es la suma.
+                                onChanged: (_) => setState(() {}),
+                                decoration: _numDeco(14),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final screenH = MediaQuery.of(context).size.height;
+    final puedeGuardar = _result != null;
+
     // El total lo manda la suma por partido mientras esa carga esté activa.
     final perGameTotal = _gamePointsTotal;
-    if (perGameTotal != null && widget.ptsCtrl.text != '$perGameTotal') {
-      widget.ptsCtrl.text = '$perGameTotal';
+    if (perGameTotal != null && _ptsCtrl.text != '$perGameTotal') {
+      _ptsCtrl.text = '$perGameTotal';
     }
+
     return Padding(
       // El padding del teclado va AFUERA del container: así el sheet flota por
       // encima del teclado y el contenido nunca queda tapado.
       padding: EdgeInsets.only(bottom: bottom),
       child: Container(
-        constraints: BoxConstraints(maxHeight: screenH * 0.85),
+        constraints: BoxConstraints(maxHeight: screenH * 0.9),
         decoration: const BoxDecoration(
           color: AppColors.bgElev,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -1072,7 +1031,6 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Drag handle
             Container(
               margin: const EdgeInsets.only(top: 12),
               width: 36,
@@ -1084,84 +1042,90 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        displayTitle('TUS ESTADÍSTICAS', size: 28),
-                        const SizedBox(height: 4),
-                        Text(
-                            '${widget.courtName.isEmpty ? 'Cancha' : widget.courtName} · ${widget.duration}',
-                            style: AppText.grotesk(
-                                size: 12, color: AppColors.white(0.45))),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: Icon(Icons.close_rounded,
-                        color: AppColors.white(0.5), size: 22),
-                    splashRadius: 20,
+                  displayTitle('¿CÓMO TE FUE?', size: 30),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${widget.courtName.isEmpty ? 'Cancha' : widget.courtName}  ·  ${widget.duration}  ·  x${widget.multiplier.toStringAsFixed(2)}',
+                    style:
+                        AppText.grotesk(size: 12, color: AppColors.white(0.5)),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Los inputs van PRIMERO: es lo más importante y así quedan
-                    // visibles apenas se abre (aunque el teclado achique el alto).
-                    Text(
-                        _gamePointsTotal != null
-                            ? 'PUNTOS ANOTADOS (SUMA)'
-                            : 'PUNTOS ANOTADOS',
-                        style: AppText.grotesk(
-                            size: 10,
-                            weight: FontWeight.w700,
-                            color: AppColors.white(0.4),
-                            letterSpacing: 0.08)),
+                    // 1) Resultado (obligatorio)
+                    for (final o in <(PlayResult, IconData, Color)>[
+                      (PlayResult.win, Icons.emoji_events, AppColors.open),
+                      (PlayResult.loss, Icons.thumb_down_alt_outlined,
+                          AppColors.accentDark),
+                      (PlayResult.tie, Icons.handshake_outlined,
+                          AppColors.white(0.7)),
+                      (PlayResult.training, Icons.fitness_center,
+                          AppColors.accent),
+                      (PlayResult.notCounted, Icons.not_interested,
+                          AppColors.white(0.4)),
+                    ]) ...[
+                      if (o.$1 != PlayResult.win) hairline(),
+                      _resultRow(o.$1, o.$2, o.$3),
+                    ],
+                    const SizedBox(height: 20),
+                    // 2) Formato general. Con desglose no va: ahí cada partido
+                    //    tiene el suyo y tener los dos confundiría.
+                    if (!_multi) ...[
+                      microLabel('Formato'),
+                      const SizedBox(height: 8),
+                      _formatPicker(
+                          _format, (n) => setState(() => _format = n)),
+                      const SizedBox(height: 20),
+                    ],
+                    // 3) Puntos
+                    microLabel(perGameTotal != null
+                        ? 'Puntos anotados (suma)'
+                        : 'Puntos anotados'),
                     const SizedBox(height: 6),
                     TextField(
-                      controller: widget.ptsCtrl,
+                      controller: _ptsCtrl,
                       keyboardType: TextInputType.number,
                       textAlign: TextAlign.center,
-                      autofocus: true,
                       textInputAction: TextInputAction.next,
-                      // Con los puntos cargados partido por partido, el total es
-                      // la suma y se bloquea: dos fuentes editables para el mismo
-                      // número solo generan contradicciones.
-                      readOnly: _gamePointsTotal != null,
-                      style: AppText.display(size: 52, height: 1.0),
+                      // Con los puntos cargados partido por partido el total es
+                      // la suma y se bloquea: dos fuentes editables para el
+                      // mismo número solo generan contradicciones.
+                      readOnly: perGameTotal != null,
+                      style: AppText.display(size: 48, height: 1.0),
                       cursorColor: AppColors.accent,
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
                         LengthLimitingTextInputFormatter(3),
                       ],
-                      decoration: numDecoration(22),
+                      decoration: _numDeco(20),
                     ),
                     const SizedBox(height: 16),
-                    // Desglose: 3PT / 2PT / TL en una sola fila.
+                    // Desglose por VALOR del tiro: en 3x3 los tiros valen 1 y 2,
+                    // así que "triple" sería un nombre equivocado.
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        field('3PT', widget.t3Ctrl),
+                        _numField('Pts de 3', _p3Ctrl),
                         const SizedBox(width: 10),
-                        field('2PT', widget.t2Ctrl),
+                        _numField('Pts de 2', _p2Ctrl),
                         const SizedBox(width: 10),
-                        field('TL', widget.tlCtrl, isLast: true),
+                        _numField('Pts de 1', _p1Ctrl, isLast: true),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    // 4) Desglose de la sesión
+                    _multiSection(),
                     const SizedBox(height: 14),
-                    _multiSection(numDecoration),
-                    const SizedBox(height: 18),
-                    // Por qué cargar esto (tono relajado: es para promedios).
-                    // Nota al pie, no caja: antes competia con los inputs.
                     Text(
                       'No importa si no es exacto: con el tiempo se arma tu promedio.',
                       style: AppText.grotesk(
@@ -1174,27 +1138,30 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                 ),
               ),
             ),
-            // Botones de acción
             Container(
-              padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+              // El bottom fijo (24) no alcanza con la barra de gestos/HUD de
+              // Samsung: sin sumar el viewPadding, "VER RESULTADO" queda tapado
+              // por la barra del sistema. El teclado ya se maneja aparte, con el
+              // Padding que envuelve todo el sheet (viewInsets, más arriba).
+              padding: EdgeInsets.fromLTRB(
+                  24, 12, 24, 24 + MediaQuery.of(context).viewPadding.bottom),
               decoration: const BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: AppColors.line, width: 1),
-                ),
+                border: Border(top: BorderSide(color: AppColors.line, width: 1)),
               ),
               child: Row(
                 children: [
                   Expanded(
                     child: TextButton(
-                      onPressed: () =>
-                          Navigator.pop(context, _payload(viewDetail: false)),
+                      onPressed: puedeGuardar
+                          ? () =>
+                              Navigator.pop(context, _payload(viewDetail: false))
+                          : null,
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppShape.rChip),
-                          side: BorderSide(
-                              color: AppColors.white(0.12), width: 1),
+                          borderRadius: BorderRadius.circular(AppShape.rChip),
+                          side:
+                              BorderSide(color: AppColors.white(0.12), width: 1),
                         ),
                       ),
                       child: Text('LISTO',
@@ -1202,31 +1169,39 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                               size: 13,
                               weight: FontWeight.w800,
                               letterSpacing: 0.06,
-                              color: AppColors.white(0.75))),
+                              color: puedeGuardar
+                                  ? AppColors.white(0.75)
+                                  : AppColors.white(0.3))),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     flex: 2,
                     child: TextButton(
-                      onPressed: () =>
-                          Navigator.pop(context, _payload(viewDetail: true)),
+                      onPressed: puedeGuardar
+                          ? () =>
+                              Navigator.pop(context, _payload(viewDetail: true))
+                          : null,
                       style: TextButton.styleFrom(
-                        backgroundColor: AppColors.accent,
+                        backgroundColor: puedeGuardar
+                            ? AppColors.accent
+                            : AppColors.white(0.08),
                         padding: const EdgeInsets.symmetric(vertical: 15),
                         shadowColor: Colors.black,
-                        elevation: 6,
+                        elevation: puedeGuardar ? 6 : 0,
                         shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppShape.rChip),
+                          borderRadius: BorderRadius.circular(AppShape.rChip),
                         ),
                       ),
-                      child: Text('VER RESULTADO',
+                      child: Text(
+                          puedeGuardar ? 'VER RESULTADO' : 'ELEGÍ UN RESULTADO',
                           style: AppText.archivo(
                               size: 13,
                               weight: FontWeight.w800,
                               letterSpacing: 0.06,
-                              color: Colors.white)),
+                              color: puedeGuardar
+                                  ? Colors.white
+                                  : AppColors.white(0.35))),
                     ),
                   ),
                 ],

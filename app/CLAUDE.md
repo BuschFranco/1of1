@@ -1,12 +1,28 @@
 # CLAUDE.md — Guía de trabajo para la app 1of1
 
 Instrucciones para modificar o extender **1of1** (app Flutter de básquet: buscador
-de canchas + detección/registro de partidos + perfil/logros). Leé esto **antes**
+de canchas + detección/registro de sesiones de juego + perfil/logros). Leé esto **antes**
 de tocar código. Está pensado para que cualquier cambio salga sin romper features
 existentes.
 
 > **Idioma:** el código, los comentarios y los textos de UI están en **español**.
 > Mantené ese estilo (comentarios que explican el *porqué*, no el *qué*).
+
+> **Vocabulario (importante para cualquier texto de UI):** lo que la app detecta
+> por GPS es una **sesión de juego** — tu estancia en la cancha, de que llegás a
+> que te vas, con un solo cronómetro. Adentro puede haber **varios partidos** y
+> entrenamientos, que el usuario carga en el desglose al cerrarla.
+>
+> | Se refiere a… | Se dice |
+> | --- | --- |
+> | La estancia detectada, su cronómetro, su entrada en el historial | **sesión de juego** |
+> | Un partido individual dentro de esa sesión (desglose, formatos, logros) | **partido** |
+> | Un **pickup** (partido agendado con otra gente) | **partido** |
+>
+> Ojo con la colisión: "sesión" **también** significa la sesión de cuenta
+> ("Cerrar sesión", "Tu sesión expiró"). Donde pueda confundirse —permisos,
+> legales, avisos sueltos— escribí **"sesión de juego"** completo; "sesión" a
+> secas solo dentro del flujo de juego, donde el contexto desambigua.
 
 ---
 
@@ -144,6 +160,22 @@ completos en `backend/README.md`.
   falta/venció, deja `presence_dirty` y el isolate principal reconcilia.
 - Sin `API_BASE_URL` la app degrada a modo offline (listas vacías, sin red).
 
+### Geocoding: la app NO llama a Google, va por el backend
+
+La `MAPS_API_KEY` del `dart_defines.json` sirve **solo para el mapa**: está
+restringida a la app Android (package + SHA-1), y esa restricción **no aplica a
+los web services** de Google. Una llamada REST a la Geocoding API desde la app
+llega con IP y sin firma → `REQUEST_DENIED`, siempre.
+
+Por eso el reverse geocoding (punto → barrio/ciudad) pasa por
+`GET /geo/reverse` del backend (`backend/src/geo/geo.module.ts`), que tiene su
+**propia** `MAPS_API_KEY` sin restricción de app, cargada como env var en Render.
+`GeocodingService` en la app es solo un wrapper de esa llamada.
+
+> Si agregás cualquier otro servicio web de Google (Places, Directions,
+> Distance Matrix), va por el backend por la misma razón. No reutilices la key
+> del mapa en HTTP directo desde la app: parece que funciona hasta que probás.
+
 ### Hosting (producción)
 
 El backend corre en **Render** (`https://oneofone-backend.onrender.com`, HTTPS),
@@ -218,7 +250,7 @@ tokens + endpoint).
 - Todo vive en [`lib/services/play_session_service.dart`](lib/services/play_session_service.dart).
   Constantes clave arriba del archivo: `radiusMeters`, `dwellThreshold` (6 min para
   arrancar), `exitGrace` (6 min para cerrar), `minMatch` (13 min mínimo para contar),
-  `multiplierCap`/`maxMultiplier` (multiplicador por duración), `pointsTimeCap` (2 h),
+  `multiplierCap`/`maxMultiplier` (multiplicador por duración), `pointsTimeCap` (3 h),
   `gpsJitterGrace` (tolerancia GPS). Cambiá números **acá** y no dupliques la lógica.
 - Cambios en cómo se puntúa → `resolvePending()`. El multiplicador solo afecta los
   **puntos por tiempo**, no los bonus (resultado/racha/cancha nueva).
@@ -263,6 +295,14 @@ tokens + endpoint).
 - **Constantes duplicadas a propósito**: `session_alarms.dart` tiene copias de
   algunas constantes (`_kRadiusMeters`, `_kMinMatchSeconds`, …) porque el isolate no
   puede leer las del servicio. Si cambiás una, **cambiá su gemela**.
+- ⚠️ **El radar de respaldo tiene que seguir siendo `AndroidAlarmManager.periodic`.**
+  Convertirlo en una cadena de one-shots exactas (donde cada callback programa el
+  siguiente) **ya rompió la detección en background una vez**, y el fallo es mudo:
+  el plugin invoca los callbacks sin `await`, así que el wakelock se suelta y el
+  tick puede truncarse antes de reprogramar; y `exact: true` se descarta en
+  silencio cuando falta el permiso. Con `periodic` el schedule lo mantiene
+  Android. El porqué completo, en §8.4 de `docs/deteccion-partidos.md` — leelo
+  antes de tocar esto.
 
 ### Permisos
 

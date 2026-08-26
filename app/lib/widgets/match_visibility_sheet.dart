@@ -52,7 +52,8 @@ class _MatchVisibilitySheetState extends State<_MatchVisibilitySheet> {
   /// (con un aviso) porque el mismo sheet puede guardar el default global, donde
   /// sí importan.
   bool _hasData(MatchSection s) => switch (s) {
-        MatchSection.stats => widget.session.hasUserStats,
+        MatchSection.puntuacion => widget.session.hasUserStats,
+        MatchSection.desglosePuntos => widget.session.hasUserStats,
         MatchSection.salud => widget.session.hasHealth,
         MatchSection.desglose => widget.session.isMultiGame,
         _ => true,
@@ -239,7 +240,7 @@ class _MatchVisibilitySheetState extends State<_MatchVisibilitySheet> {
                         color: visible ? Colors.white : AppColors.white(0.45))),
                 const SizedBox(height: 1),
                 Text(
-                  sinDatos ? 'Sin datos en este partido' : s.hint,
+                  sinDatos ? 'Sin datos en esta sesión' : s.hint,
                   style: AppText.grotesk(
                     size: 11,
                     color: sinDatos
@@ -296,12 +297,12 @@ class _MatchVisibilitySheetState extends State<_MatchVisibilitySheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Usar en todos mis partidos',
+                  Text('Usar en todas mis sesiones',
                       style: AppText.grotesk(
                           size: 13, weight: FontWeight.w700)),
                   const SizedBox(height: 1),
                   Text(
-                    'También en los próximos. Los que configuraste aparte no cambian.',
+                    'También en las próximas. Las que configuraste aparte no cambian.',
                     style: AppText.grotesk(
                         size: 11, color: AppColors.white(0.45), height: 1.3),
                   ),

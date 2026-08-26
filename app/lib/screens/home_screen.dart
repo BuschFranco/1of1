@@ -1033,7 +1033,7 @@ class _HomeScreenState extends State<HomeScreen>
     // del mismo banner (sin swaps bruscos de color/layout).
     final ending = ps.isEndingSoon;
     final paused = ps.isPaused;
-    // Pregunta de partido largo (2h): el banner cambia a modo pregunta con
+    // Pregunta de partido largo (3h): el banner cambia a modo pregunta con
     // SÍ/NO (espejo de la notificación, que al tocarla abre la app acá).
     final awaiting = ps.awaitingConfirm;
     final secs = ps.elapsedSeconds;
@@ -1415,7 +1415,7 @@ class _HomeScreenState extends State<HomeScreen>
                   const SizedBox(height: 2),
                   Text(
                     'Entrá en calor tranquilo: arrancamos y registramos '
-                    'el partido por vos.',
+                    'tu sesión de juego por vos.',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: AppText.grotesk(
@@ -1538,7 +1538,7 @@ class _HomeScreenState extends State<HomeScreen>
                   borderRadius: BorderRadius.circular(AppShape.rBtn),
                 ),
                 child: Text(
-                  'INICIAR PARTIDO',
+                  'EMPEZAR YA',
                   style: AppText.archivo(
                     size: 10,
                     weight: FontWeight.w800,

@@ -13,9 +13,9 @@ import '../widgets/pressable_widget.dart';
 enum _StatPeriod { week, month, season, total, custom }
 
 // Colores del desglose (consistentes con el perfil).
-const _c3 = Color(0xFF3B82F6); // 3PT azul
-const _c2 = Color(0xFFA855F7); // 2PT violeta
-const _cTl = Color(0xFFEAB308); // TL dorado
+const _c3 = Color(0xFF3B82F6); // puntos de 3, azul
+const _c2 = Color(0xFFA855F7); // puntos de 2, violeta
+const _cTl = Color(0xFFEAB308); // puntos de 1, dorado
 
 class GameStatsScreen extends StatefulWidget {
   const GameStatsScreen({super.key});
@@ -273,9 +273,9 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
         0,
         (s, m) =>
             s +
-            (m.userTriples ?? 0) +
-            (m.userDoubles ?? 0) +
-            (m.userFreeThrows ?? 0));
+            (m.userPts3 ?? 0) +
+            (m.userPts2 ?? 0) +
+            (m.userPts1 ?? 0));
     final perShot = madeShots > 0 ? total / madeShots : 0.0;
 
     final cells = <Widget>[
@@ -447,9 +447,9 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
   // ── De dónde vienen los puntos (barra apilada) ────────────────────────────
 
   Widget _breakdownCard(List<PlaySession> matches) {
-    final t3 = matches.fold(0, (s, m) => s + (m.userTriples ?? 0));
-    final t2 = matches.fold(0, (s, m) => s + (m.userDoubles ?? 0));
-    final tl = matches.fold(0, (s, m) => s + (m.userFreeThrows ?? 0));
+    final t3 = matches.fold(0, (s, m) => s + (m.userPts3 ?? 0));
+    final t2 = matches.fold(0, (s, m) => s + (m.userPts2 ?? 0));
+    final tl = matches.fold(0, (s, m) => s + (m.userPts1 ?? 0));
     final pts3 = t3 * 3;
     final pts2 = t2 * 2;
     final ptsTl = tl;
@@ -500,9 +500,9 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
               spacing: 16,
               runSpacing: 6,
               children: [
-                legend(_c3, '3PT', pts3),
-                legend(_c2, '2PT', pts2),
-                legend(_cTl, 'TL', ptsTl),
+                legend(_c3, '3 pts', pts3),
+                legend(_c2, '2 pts', pts2),
+                legend(_cTl, '1 pt', ptsTl),
               ],
             ),
           ],
@@ -511,7 +511,7 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
     );
   }
 
-  // ── Triples / Dobles / TL por partido ─────────────────────────────────────
+  // ── Puntos de 3 / de 2 / de 1 por partido ─────────────────────────────────────
 
   Widget _shotsCard(List<PlaySession> matches) {
     // Últimos partidos (hasta 10) para que las barras se lean bien.
@@ -519,17 +519,17 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
         ? matches.sublist(matches.length - 10)
         : matches;
     final anyBreakdown = shown.any((m) =>
-        (m.userTriples ?? 0) > 0 ||
-        (m.userDoubles ?? 0) > 0 ||
-        (m.userFreeThrows ?? 0) > 0);
+        (m.userPts3 ?? 0) > 0 ||
+        (m.userPts2 ?? 0) > 0 ||
+        (m.userPts1 ?? 0) > 0);
     if (!anyBreakdown) return const SizedBox.shrink();
 
     double maxV = 0;
     for (final m in shown) {
       for (final v in [
-        (m.userTriples ?? 0),
-        (m.userDoubles ?? 0),
-        (m.userFreeThrows ?? 0)
+        (m.userPts3 ?? 0),
+        (m.userPts2 ?? 0),
+        (m.userPts1 ?? 0)
       ]) {
         if (v > maxV) maxV = v.toDouble();
       }
@@ -550,9 +550,9 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
         x: i,
         barsSpace: 2,
         barRods: [
-          rod(m.userTriples ?? 0, _c3),
-          rod(m.userDoubles ?? 0, _c2),
-          rod(m.userFreeThrows ?? 0, _cTl),
+          rod(m.userPts3 ?? 0, _c3),
+          rod(m.userPts2 ?? 0, _c2),
+          rod(m.userPts1 ?? 0, _cTl),
         ],
       ));
     }
@@ -573,13 +573,13 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
           ],
         );
 
-    // Cada barra es una SESIÓN, no un partido: el desglose 3PT/2PT/TL se carga
+    // Cada barra es una SESIÓN, no un partido: el desglose por valor de tiro se carga
     // una vez por sesión, así que no hay forma de repartirlo entre los partidos
     // de una sesión múltiple.
     return _card(
-      header: 'TRIPLES, DOBLES Y TIROS LIBRES',
+      header: 'PUNTOS DE 3, DE 2 Y DE 1',
       subtitle: matches.length > 10
-          ? 'Tus últimas 10 sesiones'
+          ? 'Tus últimas 10 sesiones de juego'
           : 'Por sesión en el período',
       child: Padding(
         padding: const EdgeInsets.fromLTRB(6, 16, 14, 12),
@@ -695,8 +695,8 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
             const SizedBox(height: 8),
             Text(
               period == _StatPeriod.total
-                  ? 'Cargá tu puntuación al terminar un partido y acá vas a ver tu evolución, de dónde vienen tus puntos y mucho más.'
-                  : 'No cargaste puntuaciones en este período. Probá con otro filtro o cargá la puntuación en tu próximo partido.',
+                  ? 'Cargá tu puntuación al terminar una sesión y acá vas a ver tu evolución, de dónde vienen tus puntos y mucho más.'
+                  : 'No cargaste puntuaciones en este período. Probá con otro filtro o cargá la puntuación en tu próxima sesión.',
               textAlign: TextAlign.center,
               style: AppText.grotesk(
                   size: 12.5, color: AppColors.white(0.5), height: 1.4),

@@ -64,6 +64,10 @@ class SyncCoordinator {
   // Si el radar periódico de background está programado (evita re-programarlo
   // en cada sync, lo que reiniciaría su fase).
   bool _radarOn = false;
+  // Si el watchdog del radar está programado. Va de la mano con `_radarOn`:
+  // vive/muere con las mismas condiciones (sesión + background + permiso
+  // "Siempre"), pero es su propia alarma.
+  bool _watchdogOn = false;
 
   void _wire() {
     // Presencia "Jugando" → Notion (best-effort, con reintento vía batch).
@@ -76,7 +80,7 @@ class SyncCoordinator {
       if (playing) {
         final name = _courtNameById(courtId);
         NotificationsService.instance.show(
-          '¡Arrancó tu partido!',
+          '¡Arrancó tu sesión de juego!',
           name == null
               ? 'Estamos contando tu tiempo en la cancha.'
               : 'Contando tu tiempo en $name.',
@@ -89,13 +93,13 @@ class SyncCoordinator {
     _play.onMatchEnded = (courtId, endedAt, lowBattery) {
       if (lowBattery) {
         NotificationsService.instance.show(
-          'Partido terminado por batería baja',
-          'Cerramos tu partido para proteger tu información. Abrí 1of1 para '
+          'Sesión terminada por batería baja',
+          'Cerramos tu sesión para proteger tu información. Abrí 1of1 para '
               'registrar el resultado.',
         );
       } else {
         NotificationsService.instance.show(
-          'Terminó tu partido',
+          'Terminó tu sesión de juego',
           'Abrí 1of1 para registrar el resultado.',
         );
       }
@@ -107,8 +111,8 @@ class SyncCoordinator {
       final mins = seconds ~/ 60;
       final dur = mins > 0 ? '$mins min' : '$seconds s';
       NotificationsService.instance.show(
-        'Partido no registrado',
-        'Duró solo $dur, muy poco para contar como partido. '
+        'Sesión no registrada',
+        'Duró solo $dur, muy poco para contar como sesión. '
             'No suma puntos ni queda en el historial.',
       );
     };
@@ -144,7 +148,7 @@ class SyncCoordinator {
         NotificationsService.instance.showPaused(court, elapsed);
     _play.onClearSessionNotif = () =>
         NotificationsService.instance.cancelSession();
-    // Pregunta de partido largo (2h): mostrar/quitar la notif y avisos de sus
+    // Pregunta de partido largo (3h): mostrar/quitar la notif y avisos de sus
     // desenlaces (tiempo límite / cancelado por no responder).
     _play.onConfirmNotif = (court) =>
         NotificationsService.instance.showContinueCheck(court);
@@ -263,11 +267,23 @@ class SyncCoordinator {
         _radarOn = false;
         unawaited(cancelRadarWatch());
       }
+      if (_watchdogOn) {
+        _watchdogOn = false;
+        unawaited(cancelWatchdog());
+      }
       return;
     }
+    // El flag se marca DESPUÉS de que la programación haya terminado, no antes:
+    // si falla, tiene que quedar en false para que el próximo sync reintente.
+    // Marcarlo antes (como estaba) dejaba el radar apagado para toda la vida
+    // del proceso ante un solo fallo, sin ninguna señal.
     if (!_radarOn) {
       _radarOn = true;
-      unawaited(scheduleRadarWatch());
+      unawaited(scheduleRadarWatch().onError((_, _) => _radarOn = false));
+    }
+    if (!_watchdogOn) {
+      _watchdogOn = true;
+      unawaited(scheduleWatchdog().onError((_, _) => _watchdogOn = false));
     }
     if (_geofencedCount == courts.length) return; // sin cambios relevantes
     _geofencedCount = courts.length;
@@ -321,6 +337,7 @@ class SyncCoordinator {
         _alarmsCleared = true;
         _geofencedCount = -1;
         _radarOn = false;
+        _watchdogOn = false;
         GeofenceService.instance.clear();
         unawaited(cancelAllPlayAlarms());
         // Notificaciones ya posteadas que sobrevivirían al logout.

@@ -419,7 +419,7 @@ class _RankingScreenState extends State<RankingScreen> {
         child: Text(
           clans
               ? 'Sin clanes con EXP en este período'
-              : 'Sin partidos en este período',
+              : 'Sin sesiones en este período',
           style: AppText.grotesk(size: 13, color: AppColors.white(0.4)),
         ),
       );
@@ -616,7 +616,7 @@ class _RankingScreenState extends State<RankingScreen> {
             cell(
               'Tu posición',
               playerRank != null ? '#$playerRank' : '—',
-              playerRank != null ? '$playerPoints EXP' : 'Sin partidos',
+              playerRank != null ? '$playerPoints EXP' : 'Sin sesiones',
             ),
             Container(width: 1, color: AppColors.white(0.06)),
             cell(

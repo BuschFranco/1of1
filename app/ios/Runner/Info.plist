@@ -11,9 +11,9 @@
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>Con permiso "Siempre" detectamos si estás jugando en una cancha aunque la app esté en segundo plano.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Leemos calorías, pulso, pasos y distancia de tus partidos para medir tu desempeño. Estos datos quedan solo en tu dispositivo.</string>
+	<string>Leemos calorías, pulso, pasos y distancia de tus sesiones de juego para medir tu desempeño. Estos datos quedan solo en tu dispositivo.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>1of1 no escribe datos en Salud; solo los lee para mostrar tu desempeño durante los partidos.</string>
+	<string>1of1 no escribe datos en Salud; solo los lee para mostrar tu desempeño durante tus sesiones de juego.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

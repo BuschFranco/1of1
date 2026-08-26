@@ -164,9 +164,17 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                         ],
                         // Lo que anotó el usuario (total + desglose 3PT/2PT/TL).
                         if (s.hasUserStats &&
-                            !hidden.contains(MatchSection.stats)) ...[
+                            !(hidden.contains(MatchSection.puntuacion) &&
+                                hidden.contains(
+                                    MatchSection.desglosePuntos))) ...[
                           const SizedBox(height: 22),
-                          _userStatsSection(s),
+                          _userStatsSection(
+                            s,
+                            verTotal:
+                                !hidden.contains(MatchSection.puntuacion),
+                            verDesglose:
+                                !hidden.contains(MatchSection.desglosePuntos),
+                          ),
                         ],
                         // Salud (todas las métricas disponibles). Mientras
                         // se procesa NO se muestra nada: media franja de datos
@@ -362,7 +370,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                         )),
                     const SizedBox(height: 7),
                     Text(
-                      'Sincroniza sus datos unos minutos después del partido. '
+                      'Sincroniza sus datos unos minutos después de la sesión. '
                       'Volvé a entrar y van a estar acá.',
                       style: AppText.grotesk(
                           size: 11.5,
@@ -498,7 +506,8 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                       borderRadius: BorderRadius.circular(AppShape.rChip),
                     ),
                     child: Text(
-                      'P${i + 1}  ${s.gamePoints![i]}',
+                      'P${i + 1}  ${s.gamePoints![i]}'
+                      '${(s.gameFormats?.length ?? 0) > i ? '  ·  ${s.gameFormats![i]}v${s.gameFormats![i]}' : ''}',
                       style: AppText.grotesk(
                           size: 12,
                           weight: FontWeight.w700,
@@ -545,6 +554,9 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     final items = <Widget>[
       if (!hidden.contains(MatchSection.duracion))
         _inlineStat('DURACIÓN', PlaySessionService.fmt(s.seconds)),
+      // El formato acompaña a la duración: las dos describen "cómo se jugó".
+      if (s.hasFormats && !hidden.contains(MatchSection.duracion))
+        _inlineStat('FORMATO', s.formatLabel),
       if (!hidden.contains(MatchSection.horario)) ...[
         _inlineStat('FECHA', _fmtDate(ended)),
         _inlineStat('HORA',
@@ -572,12 +584,16 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
   Widget _vDivider() =>
       Container(width: 1, height: 30, color: AppColors.white(0.1));
 
-  /// Lo que anotó el usuario en "¿Cómo te fue?": total de puntos + desglose
-  /// 3PT/2PT/TL. Distinto de los "PUNTOS GANADOS" que otorga la app.
-  Widget _userStatsSection(PlaySession s) {
-    final pts = s.userPoints ?? 0;
+  /// Lo que anotó el usuario en "¿Cómo te fue?": total de puntos + desglose por
+  /// valor de tiro. Distinto de los "PUNTOS GANADOS" que otorga la app.
+  ///
+  /// [verTotal] y [verDesglose] son toggles independientes (el usuario puede
+  /// querer publicar cuánto metió sin abrir de dónde vino).
+  Widget _userStatsSection(PlaySession s,
+      {bool verTotal = true, bool verDesglose = true}) {
+    final pts = verTotal ? (s.userPoints ?? 0) : 0;
     // Métricas desde la fuente única (compartida con la imagen, no se desincroniza).
-    final items = _userStatItems(s);
+    final items = verDesglose ? _userStatItems(s) : const [];
 
     // Filas de "planilla": etiqueta a la izquierda, valor a la derecha, con una
     // línea fina entre cada una. Texto plano, sin cajas ni divisores verticales.
@@ -709,9 +725,6 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       if (s.calories > 0 && s.seconds > 0)
         _healthMetric(Icons.whatshot, const Color(0xFFF97316),
             (s.calories / (s.seconds / 60)).toStringAsFixed(1), 'kcal/min'),
-      if (s.steps > 0 && s.seconds > 0)
-        _healthMetric(Icons.speed, const Color(0xFF10B981),
-            '${(s.steps / (s.seconds / 60)).round()}', 'pasos/min'),
       // Métricas esporádicas: solo si el reloj las midió. Null ≠ 0 — mostrar
       // "0% de oxígeno" cuando simplemente no hubo muestra sería alarmante.
       if (s.spo2 != null)
@@ -1139,30 +1152,38 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 }
 
-/// Métricas derivadas de lo que anotó el usuario (desglose 3PT/2PT/TL + canastas
-/// de campo + puntos por minuto). FUENTE ÚNICA: la usan tanto el registro en
-/// pantalla como la imagen de compartir, así las dos SIEMPRE muestran lo mismo.
+/// Métricas derivadas de lo que anotó el usuario. FUENTE ÚNICA: la usan tanto el
+/// registro en pantalla como la imagen de compartir, así las dos SIEMPRE muestran
+/// lo mismo.
+///
+/// El desglose se cuenta por VALOR del tiro (puntos de 1, de 2 y de 3) y no por
+/// "tiro libre / doble / triple", porque los tiros valen distinto según la
+/// modalidad: en 3x3 un tiro de larga distancia vale 2, no 3.
+///
+/// Por eso ya no existe "Canastas" (canastas de campo = todo menos tiros libres):
+/// con esta semántica un tiro de 1 punto puede ser perfectamente una canasta de
+/// campo, así que la distinción era falsa.
 List<({String label, String value})> _userStatItems(PlaySession s) {
   final pts = s.userPoints ?? 0;
-  final t3 = s.userTriples ?? 0;
-  final t2 = s.userDoubles ?? 0;
-  final tl = s.userFreeThrows ?? 0;
-  final fieldGoals = t3 + t2;
-  final madeShots = t3 + t2 + tl;
+  final p3 = s.userPts3 ?? 0;
+  final p2 = s.userPts2 ?? 0;
+  final p1 = s.userPts1 ?? 0;
+  final madeShots = p3 + p2 + p1;
   final ppm = (pts > 0 && s.seconds > 0) ? pts / (s.seconds / 60) : null;
-  // Puntos por tiro anotado (eficiencia) y qué parte del puntaje vino de triples.
+  // Puntos por tiro anotado (eficiencia) y qué parte del puntaje salió de los
+  // tiros de 3.
   final perShot = (pts > 0 && madeShots > 0) ? pts / madeShots : null;
-  final threeShare = (pts > 0 && t3 > 0) ? (t3 * 3 / pts * 100).round() : null;
+  final threeShare = (pts > 0 && p3 > 0) ? (p3 * 3 / pts * 100).round() : null;
   return [
-    if (t3 > 0) (label: 'Triples', value: '$t3'),
-    if (t2 > 0) (label: 'Dobles', value: '$t2'),
-    if (tl > 0) (label: 'Tiros libres', value: '$tl'),
-    if (fieldGoals > 0) (label: 'Canastas', value: '$fieldGoals'),
+    if (p3 > 0) (label: 'Puntos de 3', value: '$p3'),
+    if (p2 > 0) (label: 'Puntos de 2', value: '$p2'),
+    if (p1 > 0) (label: 'Puntos de 1', value: '$p1'),
     if (madeShots > 0) (label: 'Tiros anotados', value: '$madeShots'),
     if (ppm != null) (label: 'Puntos por minuto', value: ppm.toStringAsFixed(1)),
     if (perShot != null)
       (label: 'Puntos por tiro', value: perShot.toStringAsFixed(1)),
-    if (threeShare != null) (label: 'Puntaje en triples', value: '$threeShare%'),
+    if (threeShare != null)
+      (label: '% de puntos de 3', value: '$threeShare%'),
   ];
 }
 
@@ -1260,6 +1281,10 @@ class _ShareCard extends StatelessWidget {
               if (!hidden.contains(MatchSection.duracion)) ...[
                 _shareStat('DURACIÓN', PlaySessionService.fmt(s.seconds)),
                 _shareDivider(),
+                if (s.hasFormats) ...[
+                  _shareStat('FORMATO', s.formatLabel),
+                  _shareDivider(),
+                ],
               ],
               _shareStat('EXP', s.points > 0 ? '+${s.points}' : '—',
                   color: s.points > 0 ? AppColors.accent : null),
@@ -1315,9 +1340,13 @@ class _ShareCard extends StatelessWidget {
               ),
             ],
           ],
-          if (s.hasUserStats && !hidden.contains(MatchSection.stats)) ...[
+          // Total y desglose son toggles independientes, igual que en pantalla.
+          if (s.hasUserStats &&
+              !(hidden.contains(MatchSection.puntuacion) &&
+                  hidden.contains(MatchSection.desglosePuntos))) ...[
             const SizedBox(height: 56),
-            if ((s.userPoints ?? 0) > 0) ...[
+            if ((s.userPoints ?? 0) > 0 &&
+                !hidden.contains(MatchSection.puntuacion)) ...[
               Text('${s.userPoints}',
                   style: AppText.display(
                       size: 128,
@@ -1332,15 +1361,16 @@ class _ShareCard extends StatelessWidget {
                       letterSpacing: 0.14)),
               const SizedBox(height: 40),
             ],
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 620),
-              child: Column(
-                children: [
-                  for (final it in _userStatItems(s))
-                    _shareStatLine(it.label, it.value),
-                ],
+            if (!hidden.contains(MatchSection.desglosePuntos))
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 620),
+                child: Column(
+                  children: [
+                    for (final it in _userStatItems(s))
+                      _shareStatLine(it.label, it.value),
+                  ],
+                ),
               ),
-            ),
           ],
           // Salud: todas las métricas disponibles.
           if (s.hasHealth &&
@@ -1372,9 +1402,6 @@ class _ShareCard extends StatelessWidget {
                 if (s.calories > 0 && s.seconds > 0)
                   _shareMiniStat(Icons.whatshot,
                       '${(s.calories / (s.seconds / 60)).toStringAsFixed(1)} kcal/min'),
-                if (s.steps > 0 && s.seconds > 0)
-                  _shareMiniStat(Icons.speed,
-                      '${(s.steps / (s.seconds / 60)).round()} pasos/min'),
                 // Solo las que el reloj llegó a medir (ver la franja del detalle).
                 if (s.spo2 != null)
                   _shareMiniStat(Icons.bloodtype, '${s.spo2}% O₂'),
@@ -1398,7 +1425,7 @@ class _ShareCard extends StatelessWidget {
           ],
           const Spacer(),
           // Disclaimer de origen de datos.
-          Text('Estadísticas del partido provistas por 1of1',
+          Text('Estadísticas de la sesión provistas por 1of1',
               textAlign: TextAlign.center,
               style: AppText.grotesk(
                   size: 20,

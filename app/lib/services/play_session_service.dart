@@ -58,11 +58,16 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   // lineal desde x1.0 al empezar hasta [maxMultiplier] al llegar a [multiplierCap].
   static const Duration multiplierCap = Duration(minutes: 90);
   static const double maxMultiplier = 1.8;
-  // El tiempo deja de sumar puntos a partir de acá (~2h, un partido
-  // profesional). Cap silencioso: no se muestra en la UI. Es TAMBIÉN el
-  // umbral de la pregunta de partido largo ("¿Seguís jugando?"): mismo
-  // trigger, un solo número.
-  static const Duration pointsTimeCap = Duration(hours: 2);
+  // El tiempo deja de sumar puntos a partir de acá. Cap silencioso: no se
+  // muestra en la UI. Es TAMBIÉN el umbral de la pregunta de partido largo
+  // ("¿Seguís jugando?") y la base del cierre duro (+ [overtimeMax]): un solo
+  // número gobierna las tres cosas, a propósito.
+  //
+  // Subido de 2 h a 3 h (ago-2026, decisión de producto): los partidos largos
+  // ahora acreditan hasta 3 h de EXP, así que valen más que los guardados antes
+  // del cambio. El ranking sigue siendo acumulativo, pero no estrictamente
+  // comparable con el historial previo.
+  static const Duration pointsTimeCap = Duration(hours: 3);
   // Pregunta de partido largo: al llegar a [pointsTimeCap] de juego neto se
   // pausa el cronómetro y se pregunta si el partido sigue. Sin respuesta en
   // [confirmTimeout] se cancela POR COMPLETO (sin puntos ni historial); con
@@ -167,7 +172,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// Se descartó un partido por durar menos de [minMatch]: no se registró nada.
   void Function(String courtName, int seconds)? onMatchDiscarded;
 
-  /// Mostrar la pregunta "¿Seguís jugando?" del partido largo (2h). La cablea
+  /// Mostrar la pregunta "¿Seguís jugando?" del partido largo (3h). La cablea
   /// SyncCoordinator a NotificationsService.showContinueCheck.
   void Function(String courtName)? onConfirmNotif;
 
@@ -282,7 +287,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   // Pausa del cronómetro (como play/pause de YouTube/Spotify).
   DateTime? _pausedAt; // != null mientras está pausado
   int _pausedSeconds = 0; // total de segundos pausados (se excluyen del elapsed)
-  // Pregunta de partido largo (2h): desde cuándo esperamos la respuesta de
+  // Pregunta de partido largo (3h): desde cuándo esperamos la respuesta de
   // "¿Seguís jugando?" (mientras esté seteado, _pausedAt apunta al mismo
   // momento: congela cronómetro y detección) y si el usuario ya confirmó su
   // hora extra (no se re-pregunta; el próximo tope es el cierre duro a 3h).
@@ -292,10 +297,14 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   // Tiempo jugado acumulado por cancha (persistido local).
   final Map<String, _CourtPlay> _totals = {};
 
-  // Cantidad total de veces que el usuario pasó al estado "Jugando".
+  // Partidos + entrenamientos jugados en total, sin discriminar cancha. NO es
+  // la cantidad de sesiones: desde el desglose multi-partido, una sesión suma
+  // todo lo que se jugó adentro (ver el `+=` en resolvePending). Sin desglose
+  // cargado suma 1, que es el comportamiento histórico.
   int _totalPlays = 0;
 
-  /// Jugadas totales (todas las veces que jugó, sin discriminar cancha).
+  /// Partidos y entrenamientos jugados en total. Es la métrica que alimenta los
+  /// logros "Jugá N partidos", por eso cuenta partidos y no sesiones.
   int get totalPlays => _totalPlays;
 
   // Puntos acumulados (más tiempo + bonus por resultado/racha/cancha nueva).
@@ -626,11 +635,6 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     return secs > 0 ? totalCalories / (secs / 60) : 0;
   }
 
-  /// Cadencia promedio: pasos por minuto sobre partidos con datos.
-  int get avgStepsPerMinute {
-    final secs = totalHealthSeconds;
-    return secs > 0 ? (totalSteps / (secs / 60)).round() : 0;
-  }
 
   /// True si hay stats de salud para mostrar (health activo + al menos un partido con datos).
   bool get hasHealthStats => _healthEnabled && healthMatches > 0;
@@ -694,16 +698,16 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       _log.fold(0, (sum, s) => sum + (s.userPoints ?? 0));
 
   /// Suma total de triples.
-  int get totalUserTriples =>
-      _log.fold(0, (sum, s) => sum + (s.userTriples ?? 0));
+  int get totalUserPts3 =>
+      _log.fold(0, (sum, s) => sum + (s.userPts3 ?? 0));
 
   /// Suma total de dobles.
-  int get totalUserDoubles =>
-      _log.fold(0, (sum, s) => sum + (s.userDoubles ?? 0));
+  int get totalUserPts2 =>
+      _log.fold(0, (sum, s) => sum + (s.userPts2 ?? 0));
 
   /// Suma total de tiros libres.
-  int get totalUserFreeThrows =>
-      _log.fold(0, (sum, s) => sum + (s.userFreeThrows ?? 0));
+  int get totalUserPts1 =>
+      _log.fold(0, (sum, s) => sum + (s.userPts1 ?? 0));
 
   /// Promedio de puntos por partido (solo partidos con stats).
   double get avgUserPoints =>
@@ -714,12 +718,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       .where((s) => s.userPoints != null)
       .fold(0, (m, s) => (s.userPoints ?? 0) > m ? (s.userPoints ?? 0) : m);
 
-  /// Total de canastas de campo (triples + dobles, sin tiros libres).
-  int get totalUserBaskets => totalUserTriples + totalUserDoubles;
 
   /// Total de tiros anotados (triples + dobles + tiros libres).
   int get totalUserMadeShots =>
-      totalUserTriples + totalUserDoubles + totalUserFreeThrows;
+      totalUserPts3 + totalUserPts2 + totalUserPts1;
 
   /// Promedio de puntos por minuto (partidos con stats y duración > 0).
   double get avgUserPointsPerMinute {
@@ -816,7 +818,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     if (at.isAfter(DateTime.now())) unawaited(scheduleConfirmAlarm(at: at));
   }
 
-  /// Corre en cada tick con partido en curso: dispara la pregunta a las 2h,
+  /// Corre en cada tick con partido en curso: dispara la pregunta a las 3h,
   /// vigila su timeout y aplica el tope duro de la hora extra.
   void _checkLongMatch() {
     if (awaitingConfirm) {
@@ -841,7 +843,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       final id = _courtId;
       if (id != null) unawaited(_setSnooze(id));
       onNoticeNotif?.call('Llegaste al tiempo límite',
-          'Guardamos tu partido de 3 horas. Registrá el resultado.');
+          'Guardamos tu sesión de 4 horas. Registrá el resultado.');
       _endSession();
     }
   }
@@ -909,8 +911,8 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     onCancelConfirmNotif?.call();
     final id = _courtId;
     if (id != null) unawaited(_setSnooze(id));
-    onNoticeNotif?.call('Partido cancelado',
-        'No respondiste si seguías jugando, así que no lo guardamos.');
+    onNoticeNotif?.call('Sesión cancelada',
+        'No respondiste si seguías jugando, así que no la guardamos.');
     _resetLiveSession();
   }
 
@@ -2065,13 +2067,14 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> resolvePending(
     PlayResult result, {
     int? userPoints,
-    int? userTriples,
-    int? userDoubles,
-    int? userFreeThrows,
+    int? userPts3,
+    int? userPts2,
+    int? userPts1,
     int? matchCount,
     int? trainingCount,
     int? winCount,
     List<int>? gamePoints,
+    List<int>? gameFormats,
   }) async {
     final p = _pendingSession;
     if (p == null) return;
@@ -2191,15 +2194,16 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         distance: hm?.distance ?? 0,
         hrZones: hm?.hrZones,
         userPoints: userPoints,
-        userTriples: userTriples,
-        userDoubles: userDoubles,
-        userFreeThrows: userFreeThrows,
+        userPts3: userPts3,
+        userPts2: userPts2,
+        userPts1: userPts1,
         calorieRecord: newCalorieRecord,
         fromWorkout: hm?.fromWorkout ?? false,
         matchCount: matchCount,
         trainingCount: trainingCount,
         winCount: winCount,
         gamePoints: gamePoints,
+        gameFormats: gameFormats,
         spo2: hm?.spo2,
         restingHr: hm?.restingHr,
         hrv: hm?.hrv,
@@ -2851,7 +2855,8 @@ enum MatchSection {
   horario,
   duracion,
   desglose,
-  stats,
+  puntuacion,
+  desglosePuntos,
   salud,
 }
 
@@ -2862,7 +2867,8 @@ extension MatchSectionX on MatchSection {
         MatchSection.horario => 'Fecha y hora',
         MatchSection.duracion => 'Duración',
         MatchSection.desglose => 'Desglose de la sesión',
-        MatchSection.stats => 'Tus estadísticas',
+        MatchSection.puntuacion => 'Puntuación total',
+        MatchSection.desglosePuntos => 'Desglose de la puntuación',
         MatchSection.salud => 'Datos de salud',
       };
 
@@ -2871,9 +2877,11 @@ extension MatchSectionX on MatchSection {
         MatchSection.resultado => 'Si ganaste, perdiste o entrenaste',
         MatchSection.ubicacion => 'Nombre, zona y foto de la cancha',
         MatchSection.horario => 'El día y la hora que jugaste',
-        MatchSection.duracion => 'Cuánto duró el partido',
+        MatchSection.duracion => 'Cuánto duró la sesión',
         MatchSection.desglose => 'Cuántos partidos, victorias y entrenamientos',
-        MatchSection.stats => 'Tus puntos y el desglose 3PT/2PT/TL',
+        MatchSection.puntuacion => 'Cuántos puntos anotaste en total',
+        MatchSection.desglosePuntos =>
+          'De dónde vinieron: puntos de 1, de 2 y de 3',
         MatchSection.salud => 'Calorías, pulso, pasos y distancia',
       };
 
@@ -2889,7 +2897,16 @@ extension MatchSectionX on MatchSection {
   static Set<MatchSection> parseAll(List<dynamic>? raw) {
     final out = <MatchSection>{};
     for (final e in raw ?? const []) {
-      final s = fromName(e is String ? e : null);
+      final n = e is String ? e : null;
+      // MIGRACIÓN: 'stats' era una sola opción ("Tus estadísticas") y se partió
+      // en total + desglose. Sin este mapeo, quien la había ocultado vería
+      // reaparecer sus puntos, porque `fromName` no reconoce la clave vieja.
+      if (n == 'stats') {
+        out.add(MatchSection.puntuacion);
+        out.add(MatchSection.desglosePuntos);
+        continue;
+      }
+      final s = fromName(n);
       if (s != null) out.add(s);
     }
     return out;
@@ -2972,11 +2989,11 @@ class PlaySession {
   /// Puntos anotados por el usuario en este partido.
   final int? userPoints;
   /// Triples anotados (tiros de 3 puntos).
-  final int? userTriples;
+  final int? userPts3;
   /// Dobles anotados (tiros de 2 puntos).
-  final int? userDoubles;
+  final int? userPts2;
   /// Tiros libres anotados (tiros de 1 punto).
-  final int? userFreeThrows;
+  final int? userPts1;
 
   /// ¿Este partido marcó un récord personal de calorías? (para destacarlo).
   final bool calorieRecord;
@@ -3007,6 +3024,11 @@ class PlaySession {
   /// total ([userPoints]).
   final List<int>? gamePoints;
 
+  /// Formato de cada partido: jugadores por equipo (1..5). Una entrada por
+  /// PARTIDO — los entrenamientos no llevan formato. Longitud 1 cuando no se
+  /// cargó desglose, para no tener dos caminos (escalar vs lista).
+  final List<int>? gameFormats;
+
   const PlaySession({
     required this.courtId,
     required this.courtName,
@@ -3021,9 +3043,9 @@ class PlaySession {
     this.distance = 0,
     this.hrZones,
     this.userPoints,
-    this.userTriples,
-    this.userDoubles,
-    this.userFreeThrows,
+    this.userPts3,
+    this.userPts2,
+    this.userPts1,
     this.calorieRecord = false,
     this.fromWorkout = false,
     this.hiddenSections,
@@ -3031,6 +3053,7 @@ class PlaySession {
     this.trainingCount,
     this.winCount,
     this.gamePoints,
+    this.gameFormats,
     this.spo2,
     this.restingHr,
     this.hrv,
@@ -3063,6 +3086,18 @@ class PlaySession {
 
   /// Puntos por partido, solo si hay algo cargado.
   bool get hasGamePoints => (gamePoints?.isNotEmpty ?? false);
+
+  /// Formatos cargados (al menos uno).
+  bool get hasFormats => (gameFormats?.isNotEmpty ?? false);
+
+  /// Etiqueta de formato para mostrar: "3v3" si todos los partidos fueron
+  /// iguales, "3v3, 1v1" si fueron distintos. Vacío si no se cargó.
+  String get formatLabel {
+    final f = gameFormats;
+    if (f == null || f.isEmpty) return '';
+    final unicos = f.toSet().toList()..sort();
+    return unicos.map((n) => '${n}v$n').join(', ');
+  }
 
   /// Señal de que hubo un WEARABLE: el celular no mide pulso, solo un reloj lo
   /// hace. Ya no gatea la franja de salud (ver [hasHealth]), pero sirve para
@@ -3107,9 +3142,9 @@ class PlaySession {
   /// Si el usuario anotó stats propias (puntos totales o desglose 3PT/2PT/TL).
   bool get hasUserStats =>
       (userPoints ?? 0) > 0 ||
-      (userTriples ?? 0) > 0 ||
-      (userDoubles ?? 0) > 0 ||
-      (userFreeThrows ?? 0) > 0;
+      (userPts3 ?? 0) > 0 ||
+      (userPts2 ?? 0) > 0 ||
+      (userPts1 ?? 0) > 0;
 
   PlaySession withResult(
     PlayResult r, {
@@ -3121,15 +3156,16 @@ class PlaySession {
     double distance = 0,
     List<int>? hrZones,
     int? userPoints,
-    int? userTriples,
-    int? userDoubles,
-    int? userFreeThrows,
+    int? userPts3,
+    int? userPts2,
+    int? userPts1,
     bool calorieRecord = false,
     bool fromWorkout = false,
     int? matchCount,
     int? trainingCount,
     int? winCount,
     List<int>? gamePoints,
+    List<int>? gameFormats,
     int? spo2,
     int? restingHr,
     int? hrv,
@@ -3152,9 +3188,9 @@ class PlaySession {
         distance: distance,
         hrZones: hrZones,
         userPoints: userPoints,
-        userTriples: userTriples,
-        userDoubles: userDoubles,
-        userFreeThrows: userFreeThrows,
+        userPts3: userPts3,
+        userPts2: userPts2,
+        userPts1: userPts1,
         calorieRecord: calorieRecord,
         fromWorkout: fromWorkout,
         hiddenSections: hiddenSections,
@@ -3162,6 +3198,7 @@ class PlaySession {
         trainingCount: trainingCount,
         winCount: winCount,
         gamePoints: gamePoints,
+        gameFormats: gameFormats,
         spo2: spo2,
         restingHr: restingHr,
         hrv: hrv,
@@ -3197,9 +3234,9 @@ class PlaySession {
             : (hm.distance > 0 ? hm.distance : distance),
         hrZones: hrZones ?? hm.hrZones,
         userPoints: userPoints,
-        userTriples: userTriples,
-        userDoubles: userDoubles,
-        userFreeThrows: userFreeThrows,
+        userPts3: userPts3,
+        userPts2: userPts2,
+        userPts1: userPts1,
         calorieRecord: calorieRecord,
         fromWorkout: fromWorkout || hm.fromWorkout,
         // Arrastrar el override: los datos del reloj llegan DESPUÉS de que el
@@ -3241,9 +3278,9 @@ class PlaySession {
         distance: distance ?? this.distance,
         hrZones: hrZones,
         userPoints: userPoints,
-        userTriples: userTriples,
-        userDoubles: userDoubles,
-        userFreeThrows: userFreeThrows,
+        userPts3: userPts3,
+        userPts2: userPts2,
+        userPts1: userPts1,
         calorieRecord: calorieRecord,
         fromWorkout: fromWorkout,
         hiddenSections: hiddenSections,
@@ -3251,6 +3288,7 @@ class PlaySession {
         trainingCount: trainingCount,
         winCount: winCount,
         gamePoints: gamePoints,
+        gameFormats: gameFormats,
         spo2: spo2,
         restingHr: restingHr,
         hrv: hrv,
@@ -3277,9 +3315,9 @@ class PlaySession {
         distance: distance,
         hrZones: hrZones,
         userPoints: userPoints,
-        userTriples: userTriples,
-        userDoubles: userDoubles,
-        userFreeThrows: userFreeThrows,
+        userPts3: userPts3,
+        userPts2: userPts2,
+        userPts1: userPts1,
         calorieRecord: calorieRecord,
         fromWorkout: fromWorkout,
         hiddenSections: sections,
@@ -3287,6 +3325,7 @@ class PlaySession {
         trainingCount: trainingCount,
         winCount: winCount,
         gamePoints: gamePoints,
+        gameFormats: gameFormats,
         spo2: spo2,
         restingHr: restingHr,
         hrv: hrv,
@@ -3310,9 +3349,9 @@ class PlaySession {
         'distance': distance,
         'hrZones': hrZones,
         'uPts': userPoints,
-        'u3': userTriples,
-        'u2': userDoubles,
-        'uFT': userFreeThrows,
+        'u3': userPts3,
+        'u2': userPts2,
+        'uFT': userPts1,
         'calorieRecord': calorieRecord,
         'fromWorkout': fromWorkout,
         // Se OMITE la clave cuando no hay override: "sin configurar" (seguir el
@@ -3326,6 +3365,7 @@ class PlaySession {
         if (trainingCount != null) 'nTrainings': trainingCount,
         if (winCount != null) 'nWins': winCount,
         if (gamePoints != null) 'gamePts': gamePoints,
+        if (gameFormats != null) 'gameFmt': gameFormats,
         if (spo2 != null) 'spo2': spo2,
         if (restingHr != null) 'restHr': restingHr,
         if (hrv != null) 'hrv': hrv,
@@ -3351,9 +3391,9 @@ class PlaySession {
             ?.map((e) => (e as num).toInt())
             .toList(),
         userPoints: (j['uPts'] as num?)?.toInt(),
-        userTriples: (j['u3'] as num?)?.toInt(),
-        userDoubles: (j['u2'] as num?)?.toInt(),
-        userFreeThrows: (j['uFT'] as num?)?.toInt(),
+        userPts3: (j['u3'] as num?)?.toInt(),
+        userPts2: (j['u2'] as num?)?.toInt(),
+        userPts1: (j['uFT'] as num?)?.toInt(),
         calorieRecord: (j['calorieRecord'] as bool?) ?? false,
         fromWorkout: (j['fromWorkout'] as bool?) ?? false,
         // Ausente (historial viejo) ⇒ null ⇒ sigue el default del usuario.
@@ -3364,6 +3404,9 @@ class PlaySession {
         trainingCount: (j['nTrainings'] as num?)?.toInt(),
         winCount: (j['nWins'] as num?)?.toInt(),
         gamePoints: (j['gamePts'] as List<dynamic>?)
+            ?.map((e) => (e as num).toInt())
+            .toList(),
+        gameFormats: (j['gameFmt'] as List<dynamic>?)
             ?.map((e) => (e as num).toInt())
             .toList(),
         spo2: (j['spo2'] as num?)?.toInt(),
