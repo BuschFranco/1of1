@@ -24,7 +24,7 @@ class AuthScreen extends StatefulWidget {
   /// Mensaje a mostrar apenas se abre (ej. la verificación de arranque falló).
   final String? initialError;
   const AuthScreen(
-      {super.key, this.initialMode = AuthMode.signup, this.initialError});
+      {super.key, this.initialMode = AuthMode.login, this.initialError});
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();

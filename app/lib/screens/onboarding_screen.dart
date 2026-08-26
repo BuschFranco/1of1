@@ -60,7 +60,7 @@ class OnboardingScreen extends StatelessWidget {
                 const Spacer(),
                 _headline(),
                 const SizedBox(height: 20),
-                _stats(),
+                _slogan(),
                 const SizedBox(height: 24),
                 _cta(onStart, onLogin),
                 const SizedBox(height: 28),
@@ -152,52 +152,55 @@ class OnboardingScreen extends StatelessWidget {
     );
   }
 
-  Widget _stats() {
-    final items = [
-      ('340+', 'Canchas'),
-      ('12k', 'Jugadores'),
-      ('4.8★', 'Rating'),
-    ];
+  /// Slogan de cierre del hero. Reemplaza a los tres contadores que había acá
+  /// (canchas / jugadores / rating): eran valores inventados de maqueta y
+  /// publicarlos sería mentirle al usuario en la primera pantalla que ve.
+  ///
+  /// A propósito NO se reemplazaron por los números reales: con un catálogo
+  /// todavía chico, mostrarlos juega en contra. Cuando la comunidad crezca y
+  /// los datos hablen a favor, este es el lugar donde van.
+  Widget _slogan() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Row(
-        children: [
-          for (var i = 0; i < items.length; i++) ...[
+      // IntrinsicHeight para que la barra de acento tome la altura real del
+      // texto: con `height` fijo quedaba corta al pasar a dos bloques, y a
+      // distintos tamaños de fuente del sistema el desfasaje empeora.
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Barra de acento: el mismo recurso que marca las secciones fuertes
+            // en el resto de la app (resultado del partido, aviso del reloj).
+            Container(width: 3, color: AppColors.accent),
+            const SizedBox(width: 14),
             Expanded(
-              // Cajita sólida con borde franco (sin blur "glass").
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(AppShape.rCard),
-                  border: Border.all(color: AppColors.line, width: 1),
-                ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      items[i].$1,
-                      style: AppText.archivo(
-                        size: 20,
-                        weight: FontWeight.w800,
-                      ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Vos jugá. Del resto nos encargamos.',
+                    style: AppText.archivo(
+                      size: 14.5,
+                      weight: FontWeight.w800,
+                      height: 1.2,
+                      letterSpacing: -0.01,
                     ),
-                    Text(
-                      items[i].$2.toUpperCase(),
-                      style: AppText.grotesk(
-                        size: 10,
-                        color: AppColors.white(0.5),
-                        letterSpacing: 0.08,
-                      ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'La ventaja táctica definitiva para el jugador moderno.',
+                    style: AppText.grotesk(
+                      size: 12,
+                      color: AppColors.white(0.5),
+                      height: 1.3,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-            if (i < items.length - 1) const SizedBox(width: 8),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -223,9 +226,9 @@ class OnboardingScreen extends StatelessWidget {
                   color: AppColors.white(0.5),
                 ),
                 children: [
-                  const TextSpan(text: '¿Ya tenés cuenta? '),
+                  const TextSpan(text: '¿No tenés cuenta? '),
                   TextSpan(
-                    text: 'Ingresar',
+                    text: 'Registrate',
                     style: AppText.grotesk(
                       size: 12,
                       weight: FontWeight.w600,

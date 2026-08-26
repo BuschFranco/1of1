@@ -152,7 +152,11 @@ class _RootState extends State<_Root> {
   bool _onboardingSeen = false;
   bool _goAuth = false;
   bool _splashTimeout = false;
-  AuthMode _authMode = AuthMode.signup;
+  // Login y no registro: acá se llega con el onboarding YA visto, o sea que el
+  // usuario abrió la app antes. Lo mas probable es que ya tenga cuenta y venga
+  // a entrar, no a crearse otra. Los dos botones del onboarding siguen mandando
+  // el modo explicito, asi que "Empezar" sigue abriendo el registro.
+  AuthMode _authMode = AuthMode.login;
   Timer? _splashTimer;
 
   @override
@@ -232,9 +236,13 @@ class _RootState extends State<_Root> {
 
     // Si no se pudo establecer sesión (timeout o sin cache/token), ir al login.
     if (!_onboardingSeen && !_goAuth) {
+      // El CTA principal abre el LOGIN y el link secundario el registro, no al
+      // revés. Es a propósito: decisión de producto, aunque el onboarding se
+      // muestre solo la primera vez. Los dos caminos siguen existiendo — si
+      // ambos fueran al login, no habría forma de crearse una cuenta.
       return OnboardingScreen(
-        onStart: () => _leaveOnboarding(AuthMode.signup),
-        onLogin: () => _leaveOnboarding(AuthMode.login),
+        onStart: () => _leaveOnboarding(AuthMode.login),
+        onLogin: () => _leaveOnboarding(AuthMode.signup),
       );
     }
     return AuthScreen(initialMode: _authMode);
