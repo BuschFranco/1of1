@@ -32,3 +32,8 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_IDS
         sync: false
+      # Key de Google SIN restricción de app (la del mapa no sirve: está atada
+      # al package Android y Google rechaza las llamadas REST). Necesita la
+      # "Geocoding API" habilitada. Se usa en GeoModule.
+      - key: MAPS_API_KEY
+        sync: false

@@ -5,6 +5,7 @@ import { ClansModule } from './clans/clans.module';
 import { CourtsModule } from './courts/courts.module';
 import { HealthModule } from './health/health.module';
 import { FriendsModule } from './friends/friends.module';
+import { GeoModule } from './geo/geo.module';
 import { MatchesModule } from './matches/matches.module';
 import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -23,6 +24,7 @@ import { UploadsModule } from './uploads/uploads.module';
     PostsModule,
     PickupsModule,
     FriendsModule,
+    GeoModule,
     MatchesModule,
     ClansModule,
     RankingsModule,
