@@ -20,32 +20,59 @@ const String kGeofencePortName = 'oneofone_geofence_port';
 @pragma('vm:entry-point')
 Future<void> geofenceTriggered(GeofenceCallbackParams params) async {
   final ids = params.geofences.map((g) => g.id).toList();
-  final send = IsolateNameServer.lookupPortByName(kGeofencePortName);
-  if (send != null) {
-    // App viva: que el isolate principal maneje enter/exit.
-    send.send(<String, dynamic>{'event': params.event.name, 'ids': ids});
-    return;
+  // Avisar al isolate principal si está vivo, para que reconcilie su estado.
+  //
+  // OJO: acá NO se puede hacer `return`. `IsolateNameServer` es un registro a
+  // nivel de PROCESO: si Android destruyó el engine pero mantuvo el proceso
+  // (habitual en Samsung), el mapping sigue apuntando a un ReceivePort muerto y
+  // `send` no falla ni avisa — el evento se perdía entero. Por eso el trabajo
+  // de background corre igual: es idempotente, y si el principal está vivo
+  // adopta la permanencia sembrada en vez de reiniciarla.
+  try {
+    IsolateNameServer.lookupPortByName(kGeofencePortName)
+        ?.send(<String, dynamic>{'event': params.event.name, 'ids': ids});
+  } catch (_) {/* puerto muerto: seguimos por el camino de background */}
+
+  if (params.event != GeofenceEvent.enter) return;
+
+  // Sin sesión no hacemos nada: el usuario tocaría la notificación, la app lo
+  // mandaría al login y quedaría sin saber dónde se registró su partido.
+  // Token laxo: un JWT vencido no debe impedir cancelar el cierre de un
+  // partido que sigue en curso.
+  final prefs = await SharedPreferences.getInstance();
+  if (!await hasBgSession(prefs, requireFreshToken: false)) return;
+
+  // Si volviste a la cancha durante la gracia de salida, cancelamos el cierre
+  // automático (el isolate principal puede no estar vivo para hacerlo). Así no
+  // se cierra el partido en falso por haberte alejado un momento.
+  await cancelEndAlarmOnReenter();
+
+  // ARRANCAR LA DETECCIÓN, no solo avisar. Esta es la vía rápida: el SO nos
+  // despierta al cruzar el radio, así que la permanencia empieza a contar ya
+  // mismo en vez de esperar hasta 15 min al próximo tick del radar.
+  final sembrada = await seedDwellForCourt(ids.isEmpty ? '' : ids.first);
+  if (!sembrada) {
+    // No se pudo sembrar (partido ya en curso, permanencia ya contando, "No
+    // juego" vigente o catálogo sin cachear). En los tres primeros casos ya hay
+    // algo andando y otra notificación sería ruido; el último es el único que
+    // deja al usuario sin nada, así que ahí avisamos.
+    if (await _courtsCacheVacio(prefs)) {
+      await NotificationsService.instance.show(
+        'Estás en una cancha',
+        'Abrí 1of1 para registrar tu sesión de juego.',
+      );
+    }
   }
-  // App cerrada (isolate de background).
-  if (params.event == GeofenceEvent.enter) {
-    // Sin sesión no notificamos: el usuario tocaría la notificación, la app lo
-    // mandaría al login y quedaría sin saber dónde se registró su partido.
-    // Token laxo: un JWT vencido no debe impedir cancelar el cierre de un
-    // partido que sigue en curso.
-    final prefs = await SharedPreferences.getInstance();
-    if (!await hasBgSession(prefs, requireFreshToken: false)) return;
-    // Si volviste a la cancha durante la gracia de salida, cancelamos el cierre
-    // automático (el isolate principal no está vivo para hacerlo). Así no se
-    // cierra el partido en falso por haberte alejado un momento.
-    await cancelEndAlarmOnReenter();
-    await NotificationsService.instance.show(
-      'Estás en una cancha',
-      'Abrí 1of1 para registrar tu sesión de juego.',
-    );
-    // Llegaste a una cancha: si el ahorro de energía está activo, la detección
-    // puede no llegar a arrancar. Avisar ahora, que todavía se está a tiempo.
-    await maybeNotifyPowerSave(prefs, playing: false);
-  }
+  // Llegaste a una cancha: si el ahorro de energía está activo, la detección
+  // puede no llegar a arrancar. Avisar ahora, que todavía se está a tiempo.
+  await maybeNotifyPowerSave(prefs, playing: false);
+}
+
+/// Si el catálogo de canchas para background no está cacheado todavía. Sin él
+/// no se puede sembrar nada y conviene caer al aviso de "abrí la app".
+Future<bool> _courtsCacheVacio(SharedPreferences prefs) async {
+  final raw = prefs.getString(kCourtsGeoCacheKey);
+  return raw == null || raw.isEmpty || raw == '[]';
 }
 
 /// Registra/quita geofences de las canchas en el SO (Google Play Services /

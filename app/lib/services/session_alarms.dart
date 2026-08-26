@@ -1104,6 +1104,65 @@ Future<bool> _radarTick() async {
   return true;
 }
 
+/// Siembra la permanencia para [courtId] desde un evento de GEOFENCE con la app
+/// cerrada. Es el espejo de lo que hace el radar al encontrarte dentro del
+/// radio, pero disparado por el SO al instante en vez de esperar al próximo
+/// tick (hasta [_kRadarEvery] de demora).
+///
+/// Sin esto la geofence solo mostraba un aviso de "abrí la app": la detección
+/// automática con la app cerrada quedaba en manos del radar, y llegar a la
+/// cancha no arrancaba nada hasta 15 minutos después.
+///
+/// Devuelve si sembró. Es idempotente y respeta los MISMOS gates que el radar:
+/// no pisa un partido en curso, ni una permanencia ya sembrada, ni una cancha
+/// silenciada con "No juego".
+Future<bool> seedDwellForCourt(String courtId) async {
+  if (!_isAndroid || courtId.isEmpty) return false;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  if (!await hasBgSession(prefs)) return false;
+  final uk = prefs.getString(kBgUserKey) ?? '';
+
+  // Partido en curso: no hay nada que sembrar (y si volviste durante la gracia
+  // de salida, de eso se encarga cancelEndAlarmOnReenter).
+  if (prefs.getString(bgNsKey(kActiveSessionBase, uk)) != null) return false;
+  // Permanencia ya sembrada (por el radar o por una geofence anterior).
+  if (prefs.getString(_kAlarmStart) != null) return false;
+
+  final court = await _courtFromCache(prefs, courtId);
+  if (court == null) return false; // catálogo no cacheado todavía
+
+  // "No juego" vigente en ESTA cancha: el usuario ya dijo que no. Si venció, se
+  // limpia de paso (mismo criterio que el radar).
+  final snoozeRaw = prefs.getString(bgNsKey(_kDwellSnoozeBase, uk));
+  if (snoozeRaw != null) {
+    try {
+      final sn = jsonDecode(snoozeRaw) as Map<String, dynamic>;
+      final until = (sn['untilMillis'] as num?)?.toInt() ?? 0;
+      if (until > DateTime.now().millisecondsSinceEpoch) {
+        if (sn['courtId'] == courtId) return false;
+      } else {
+        await prefs.remove(bgNsKey(_kDwellSnoozeBase, uk));
+      }
+    } catch (_) {}
+  }
+
+  final at = DateTime.now().add(_kDwellThreshold);
+  await scheduleStartAlarm(
+    userKey: uk,
+    courtId: courtId,
+    courtName: court.$1,
+    lat: court.$2,
+    lng: court.$3,
+    at: at,
+  );
+  await NotificationsService.instance.init();
+  await NotificationsService.instance
+      .showDwellCountdown(court.$1, _kDwellThreshold.inSeconds);
+  _pingMain();
+  return true;
+}
+
 /// Posición actual (lat, lng) respetando la ubicación simulada del modo
 /// prueba. null si no hay fix.
 Future<(double, double)?> _currentLatLng() async {

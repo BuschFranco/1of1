@@ -422,6 +422,55 @@ que `session_alarms.dart` tiene **copias deliberadas**: `_kRadiusMeters`,
 Y `geofence_service.dart` tiene `kCourtGeofenceRadius` (= `radiusMeters`).
 **Si cambiás una, cambiá su gemela.**
 
+### 8.1.1 Los plugins de background NO aportan sus componentes (ago-2026)
+
+**Ni `android_alarm_manager_plus` ni `native_geofence` traen receivers/services
+por manifest-merge: sus manifests están VACÍOS.** Hay que declararlos a mano en
+`android/app/src/main/AndroidManifest.xml` o el SO no tiene a quién entregarle el
+evento, y el callback Dart **nunca corre con la app cerrada**.
+
+Los de las alarmas se declararon en `887eeee`. **Los de las geofences se
+olvidaron**, y por eso la detección instantánea al llegar a la cancha no
+funcionó nunca con la app muerta — lo único que la cubría era el radar, con su
+demora de hasta 15 min. Se agregaron en ago-2026:
+
+- `NativeGeofenceBroadcastReceiver` — recibe el evento del SO. **Sin esto no
+  pasa nada de nada.**
+- `NativeGeofenceRebootBroadcastReceiver` (+ `BOOT_COMPLETED`) — Android no
+  retiene las geofences al reiniciar; este las vuelve a registrar.
+- `NativeGeofenceForegroundService`.
+
+**Por qué el fallo es 100% mudo, y por eso tan difícil de encontrar:** el plugin
+arma un `PendingIntent` explícito hacia el receiver, y crear un PendingIntent
+hacia un componente que no existe **no falla** — no se resuelve en ese momento.
+`createGeofence()` devuelve éxito, el plugin loguea "Successfully added
+Geofence", `getGeofences()` las lista. Google Play Services dispara el broadcast
+al cruzar el radio y nadie lo recibe. Sin excepción, sin log, sin crash. Ningún
+try/catch podía atraparlo porque no había nada que atrapar.
+
+> Si algún día agregás otro plugin que dependa de que el SO despierte a la app,
+> **abrí su README y verificá qué hay que declarar**. Es el tercer caso.
+
+### 8.1.2 La geofence SIEMBRA la detección, no solo avisa
+
+Antes, con la app cerrada, el callback solo mostraba "Estás en una cancha, abrí
+1of1": la detección seguía dependiendo del radar. Ahora llama a
+`seedDwellForCourt()` (`session_alarms.dart`), que programa la alarma de arranque
+a +6 min y muestra la cuenta regresiva — el espejo de lo que hace el radar, pero
+al instante.
+
+Respeta los mismos gates que el radar (no pisa un partido en curso, ni una
+permanencia ya sembrada, ni una cancha con "No juego" vigente) y es idempotente:
+si el isolate principal está vivo, adopta la permanencia sembrada vía
+`readPendingStartTarget()` en vez de reiniciar la cuenta.
+
+**El callback ya no hace `return` temprano cuando encuentra el puerto del
+isolate principal.** `IsolateNameServer` es un registro a nivel de PROCESO: si
+Android destruye el engine pero mantiene el proceso (habitual en Samsung), el
+mapping queda apuntando a un `ReceivePort` muerto, y `send` no falla ni avisa —
+el evento se perdía entero. Ahora se avisa al principal *y* se hace el trabajo
+de background igual.
+
 ### 8.2 Fabricantes agresivos (Samsung y cía.)
 
 Samsung mata el proceso Y el foreground service con la app en background

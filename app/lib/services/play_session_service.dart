@@ -1896,6 +1896,11 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       _dwellOutsideSince = null;
       unawaited(cancelStartAlarm());
       _renderSessionNotif();
+      // Avisar SÍ O SÍ: el ticker solo notifica mientras hay partido o dwell
+      // (ver _tick), así que al apagarse el dwell nadie más lo haría y la cuenta
+      // regresiva quedaba congelada en pantalla hasta que el usuario cambiaba de
+      // pestaña y volvía (ahí el rebuild leía el estado ya limpio).
+      notifyListeners();
       // Sigue abajo: si esta lectura cae en otra cancha, arranca dwell nuevo.
     }
 

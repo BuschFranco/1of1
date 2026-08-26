@@ -7,6 +7,7 @@ import '../data/courts.dart';
 import 'api/api_client.dart';
 import 'cache/api_cache.dart';
 import 'courts_provider.dart';
+import 'app_permissions.dart';
 import 'blocked_provider.dart';
 import 'favorites_provider.dart';
 import 'geofence_service.dart';
@@ -258,6 +259,12 @@ class SyncCoordinator {
     try {
       always = await Geolocator.checkPermission() == LocationPermission.always;
     } catch (_) {}
+    // Refrescar el permiso de alarmas exactas persistido para los isolates de
+    // background (`can_schedule_exact`). Lo escribe checkPermissions(), que
+    // hasta acá SOLO se llamaba al abrir el modal de permisos: quien nunca lo
+    // abría —o lo revocaba después— dejaba la clave ausente o vieja, y
+    // `_oneShotAt` programaba alarmas exactas que el SO descarta en silencio.
+    unawaited(checkPermissions());
     if (!loggedIn || !_play.backgroundEnabled || courts.isEmpty || !always) {
       if (_geofencedCount != 0) {
         _geofencedCount = 0;

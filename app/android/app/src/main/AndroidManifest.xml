@@ -66,6 +66,31 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
             </intent-filter>
         </receiver>
+        <!-- native_geofence: MISMO caso que android_alarm_manager_plus — el
+             manifest del plugin esta VACIO, asi que estos componentes hay que
+             declararlos a mano (lo pide su README). Sin el BroadcastReceiver,
+             Android no tiene a quien entregar el evento de geofence: la
+             geofence se registra sin error pero el callback NUNCA corre con la
+             app cerrada, que era justo el caso que las geofences venian a
+             cubrir. Faltaban desde el principio; la deteccion instantanea al
+             llegar a la cancha nunca habia funcionado con la app muerta. -->
+        <receiver
+            android:name="com.chunkytofustudios.native_geofence.receivers.NativeGeofenceBroadcastReceiver"
+            android:exported="true"/>
+        <!-- Android NO retiene las geofences tras un reinicio: este receiver las
+             vuelve a registrar. Gemelo del RebootBroadcastReceiver de las
+             alarmas, y por el mismo motivo. -->
+        <receiver
+            android:name="com.chunkytofustudios.native_geofence.receivers.NativeGeofenceRebootBroadcastReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+        </receiver>
+        <service
+            android:name="com.chunkytofustudios.native_geofence.NativeGeofenceForegroundService"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="true"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"
