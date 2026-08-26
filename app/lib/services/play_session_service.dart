@@ -2418,8 +2418,16 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   static const _healthEstimateAfter = Duration(hours: 3);
 
   /// Cuánto se espera a que el reloj sincronice antes de dar los datos por
-  /// perdidos. El vuelco real es de minutos: si en 30 no llegó, no llega.
-  static const healthSyncWindow = Duration(minutes: 30);
+  /// perdidos.
+  ///
+  /// Subido de 30 min a 1 h (ago-2026): el vuelco a Health Connect no siempre
+  /// es de minutos — bastantes relojes lo hacen recién al ponerlos a cargar o
+  /// al abrir su app. Con media hora dábamos por perdidos datos que después
+  /// llegaban, y el partido quedaba marcado como "sin datos" para siempre.
+  ///
+  /// Es el umbral de [PlaySession.healthPending] (el aviso "esperando al reloj"
+  /// y el ⏳ del historial) y, por lo tanto, también de `healthMissing`.
+  static const healthSyncWindow = Duration(hours: 1);
 
   /// Último intento de re-lectura por partido (clave: `endedAtMillis`). Sin esto
   /// se consultaba a Health Connect en CADA apertura del detalle, para siempre,

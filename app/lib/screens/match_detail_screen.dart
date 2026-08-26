@@ -370,11 +370,24 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                         )),
                     const SizedBox(height: 7),
                     Text(
-                      'Sincroniza sus datos unos minutos después de la sesión. '
+                      'Sincroniza sus datos después de la sesión. '
                       'Volvé a entrar y van a estar acá.',
                       style: AppText.grotesk(
                           size: 11.5,
                           color: AppColors.white(0.45),
+                          height: 1.4),
+                    ),
+                    const SizedBox(height: 5),
+                    // Expectativa explícita: sin esto, el usuario vuelve a los
+                    // dos minutos, no ve nada y cree que está roto. Cuándo llega
+                    // depende del reloj (muchos vuelcan recién al cargarlos o al
+                    // abrir su app), así que no prometemos un número.
+                    Text(
+                      'Puede tardar un rato: algunos relojes vuelcan los datos '
+                      'recién al cargarlos o al abrir su app.',
+                      style: AppText.grotesk(
+                          size: 11,
+                          color: AppColors.white(0.32),
                           height: 1.4),
                     ),
                   ],
