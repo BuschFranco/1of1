@@ -3107,6 +3107,36 @@ class PlaySession {
   /// Si el usuario cargó el desglose de la sesión.
   bool get isMultiGame => matchCount != null || trainingCount != null;
 
+  /// Resultado que se MUESTRA (detalle, historial e imagen para compartir).
+  /// FUENTE ÚNICA: si cada pantalla lo resolviera por su cuenta, terminarían
+  /// contradiciéndose entre sí — que es justo lo que pasaba antes.
+  ///
+  /// Con desglose de varios partidos manda el MARCADOR, no el resultado suelto
+  /// que eligió el usuario: marcar "Victoria" habiendo ganado 1 de 5 mostraba un
+  /// VICTORIA que el propio desglose desmiente. Es VICTORIA solo si las ganadas
+  /// empatan o superan a las perdidas.
+  ///
+  /// Los empates no se registran por partido (el desglose lleva partidos,
+  /// victorias y entrenamientos), así que las perdidas se infieren como
+  /// `gamesPlayed - winsCount`. Por eso "misma cantidad" cae en victoria: no hay
+  /// dato con el que distinguir empates reales de una sesión pareja.
+  ///
+  /// OJO: esto es solo para MOSTRAR. Los puntos, la racha y los logros siguen
+  /// usando `result` / `winsCount` — no se recalcula nada de lo ya otorgado.
+  PlayResult? get displayResult {
+    // Sin desglose no hay marcador que contrastar: manda lo que eligió.
+    if (!isMultiGame || gamesPlayed == 0) return result;
+    // Entrenamiento / sin info no son un marcador: no se reinterpretan.
+    if (result == null ||
+        result == PlayResult.training ||
+        result == PlayResult.notCounted) {
+      return result;
+    }
+    return winsCount >= (gamesPlayed - winsCount)
+        ? PlayResult.win
+        : PlayResult.loss;
+  }
+
   /// Puntos por partido, solo si hay algo cargado.
   bool get hasGamePoints => (gamePoints?.isNotEmpty ?? false);
 

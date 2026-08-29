@@ -1671,7 +1671,7 @@ class _MyCourtHistory extends StatelessWidget {
   }
 
   Widget _row(PlaySession s) {
-    final (color, label) = _resultStyle(s.result);
+    final (color, label) = _resultStyle(s.displayResult);
     // Fila plana: dot+etiqueta de color, duración · fecha y puntos a la
     // derecha (sin nombre de cancha: ya estamos en su detalle).
     return Padding(

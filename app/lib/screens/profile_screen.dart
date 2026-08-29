@@ -863,14 +863,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _recentPointsRow(PlaySession s, double height) {
-    final (color, label) = _resultStyle(s.result);
+    final (color, label) = _resultStyle(s.displayResult);
     // Carta plana del mazo: tinte de resultado + hairline sutil para definir el
     // solape; el resultado es un dot+etiqueta, sin chip con borde.
     return Container(
       height: height,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: _resultBg(s.result),
+        color: _resultBg(s.displayResult),
         border: Border.all(color: AppColors.white(0.08), width: 1),
         borderRadius: BorderRadius.circular(AppShape.rCard),
       ),
@@ -1947,7 +1947,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _historyRow(PlaySession s) {
-    final (color, label) = _resultStyle(s.result);
+    final (color, label) = _resultStyle(s.displayResult);
     final healthOn = context.read<PlaySessionService>().healthEnabled;
     final hasUserStats = s.userPts3 != null || s.userPts2 != null || s.userPts1 != null;
     // Fila plana: el resultado es un dot+etiqueta de color, sin card tintada

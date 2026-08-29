@@ -67,7 +67,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
         break;
       }
     }
-    final (color, label) = _resultStyle(s.result);
+    final (color, label) = _resultStyle(s.displayResult);
     final ended = DateTime.fromMillisecondsSinceEpoch(s.endedAtMillis);
     // Qué ocultó el usuario (el override de este partido, o su default). La
     // precedencia la resuelve el servicio: acá solo se consulta.
@@ -1073,7 +1073,9 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
         break;
       }
     }
-    final (color, label) = _resultStyle(s.result);
+    // Mismo criterio que la pantalla y el historial: con varios partidos
+    // cargados manda el marcador (ver PlaySession.displayResult).
+    final (color, label) = _resultStyle(s.displayResult);
     final ended = DateTime.fromMillisecondsSinceEpoch(s.endedAtMillis);
     // La tarjeta respeta lo mismo que la pantalla: lo que el usuario ve es
     // exactamente lo que publica.
@@ -1270,7 +1272,10 @@ class _ShareCard extends StatelessWidget {
             if (court != null && court!.area.isNotEmpty) ...[
               const SizedBox(height: 10),
               Text(court!.area,
-                  style: AppText.grotesk(size: 28, color: AppColors.white(0.5))),
+                  style: AppText.grotesk(
+                      size: 32,
+                      weight: FontWeight.w600,
+                      color: AppColors.white(0.72))),
             ],
             // Exterior/Interior: mismo dato que ya se muestra en el detalle de
             // cancha (court.type), acá como chip con ícono para la imagen.
@@ -1283,9 +1288,12 @@ class _ShareCard extends StatelessWidget {
           if (!hidden.contains(MatchSection.horario))
             Text(
               '${_fmtDate(ended)} · ${ended.hour.toString().padLeft(2, '0')}:${ended.minute.toString().padLeft(2, '0')}',
-              style: AppText.grotesk(size: 26, color: AppColors.white(0.4)),
+              style: AppText.grotesk(
+                  size: 30,
+                  weight: FontWeight.w600,
+                  color: AppColors.white(0.62)),
             ),
-          const SizedBox(height: 80),
+          const SizedBox(height: 64),
           // Stats principales. El EXP va siempre, así que el divisor nunca queda
           // colgado de un borde.
           Row(
@@ -1390,7 +1398,7 @@ class _ShareCard extends StatelessWidget {
           if (s.hasHealth &&
               !s.healthPending &&
               !hidden.contains(MatchSection.salud)) ...[
-            const SizedBox(height: 72),
+            const SizedBox(height: 60),
             Wrap(
               alignment: WrapAlignment.center,
               spacing: 52,
@@ -1524,9 +1532,9 @@ class _ShareCard extends StatelessWidget {
           Expanded(
             child: Text(label,
                 style: AppText.grotesk(
-                    size: 30,
-                    weight: FontWeight.w600,
-                    color: AppColors.white(0.6))),
+                    size: 35,
+                    weight: FontWeight.w700,
+                    color: AppColors.white(0.85))),
           ),
           Text(value,
               style: AppText.display(
@@ -1540,11 +1548,11 @@ class _ShareCard extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 36, color: AppColors.accent),
+        Icon(icon, size: 40, color: AppColors.accent),
         const SizedBox(width: 14),
         Text(text,
             style: AppText.display(
-                size: 34, weight: FontWeight.w800, color: Colors.white)),
+                size: 39, weight: FontWeight.w800, color: Colors.white)),
       ],
     );
   }
