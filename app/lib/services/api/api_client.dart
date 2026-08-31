@@ -368,6 +368,24 @@ class ApiClient {
       _map(_send('GET', '/geo/reverse',
           query: {'lat': '$lat', 'lng': '$lng'}));
 
+  /// Ruta caminando/en auto entre dos puntos: `points` (polyline codificada
+  /// de Google, vacía si no se pudo resolver), `durationText`, `distText`.
+  /// La llamada a Google la hace el backend — ver RouteService para el porqué.
+  Future<Map<String, dynamic>> directions({
+    required double originLat,
+    required double originLng,
+    required double destLat,
+    required double destLng,
+    required String mode,
+  }) =>
+      _map(_send('GET', '/geo/directions', query: {
+        'originLat': '$originLat',
+        'originLng': '$originLng',
+        'destLat': '$destLat',
+        'destLng': '$destLng',
+        'mode': mode,
+      }));
+
   /// Sube una imagen de cancha (ya comprimida) a Storage vía multipart.
   /// Devuelve la URL pública. Timeout propio más largo que el de JSON.
   ///

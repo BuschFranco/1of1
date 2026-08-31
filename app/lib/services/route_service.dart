@@ -1,9 +1,6 @@
-import 'dart:convert';
-
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:http/http.dart' as http;
 
-const _kApiKey = String.fromEnvironment('MAPS_API_KEY');
+import 'api/api_client.dart';
 
 /// Ruta calculada hacia una cancha: puntos para dibujar la polyline y los
 /// textos de duración/distancia que devuelve Google ("12 min", "1,3 km").
@@ -23,38 +20,34 @@ class RouteResult {
 }
 
 class RouteService {
-  /// Pide la ruta a la Directions API ([mode] = 'walking' | 'driving').
-  /// Nunca lanza: ante cualquier falla devuelve la línea recta origin→dest.
+  /// Pide la ruta al backend ([mode] = 'walking' | 'driving'), que a su vez
+  /// consulta la Directions API — la app no puede llamar a Google
+  /// directamente (mismo motivo que GeocodingService: la MAPS_API_KEY de acá
+  /// está restringida al Maps SDK, no sirve para web services). Nunca lanza:
+  /// ante cualquier falla (red, backend abajo, Directions sin resultado)
+  /// devuelve la línea recta origin→dest.
   static Future<RouteResult> fetchRoute({
     required LatLng origin,
     required LatLng dest,
     required String mode,
   }) async {
     final fallback = RouteResult(points: [origin, dest], straightLine: true);
-    if (_kApiKey.isEmpty) return fallback;
     try {
-      final uri = Uri.https('maps.googleapis.com', '/maps/api/directions/json', {
-        'origin': '${origin.latitude},${origin.longitude}',
-        'destination': '${dest.latitude},${dest.longitude}',
-        'mode': mode,
-        'language': 'es',
-        'key': _kApiKey,
-      });
-      final res = await http.get(uri).timeout(const Duration(seconds: 8));
-      if (res.statusCode != 200) return fallback;
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      final routes = data['routes'] as List? ?? [];
-      if (data['status'] != 'OK' || routes.isEmpty) return fallback;
-      final route = routes.first as Map<String, dynamic>;
-      final points =
-          _decodePolyline(route['overview_polyline']?['points'] as String? ?? '');
+      final data = await ApiClient().directions(
+        originLat: origin.latitude,
+        originLng: origin.longitude,
+        destLat: dest.latitude,
+        destLng: dest.longitude,
+        mode: mode,
+      );
+      final encoded = (data['points'] ?? '').toString();
+      if (encoded.isEmpty) return fallback;
+      final points = _decodePolyline(encoded);
       if (points.length < 2) return fallback;
-      final legs = route['legs'] as List? ?? [];
-      final leg = legs.isNotEmpty ? legs.first as Map<String, dynamic> : null;
       return RouteResult(
         points: points,
-        durationText: leg?['duration']?['text'] as String? ?? '',
-        distText: leg?['distance']?['text'] as String? ?? '',
+        durationText: (data['durationText'] ?? '').toString(),
+        distText: (data['distText'] ?? '').toString(),
       );
     } catch (_) {
       return fallback;

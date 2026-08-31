@@ -116,6 +116,66 @@ class GeoService {
     this.cache.set(cacheKey, { at: Date.now(), value });
     return value;
   }
+
+  /// Ruta caminando/en auto entre dos puntos, vía la Directions API. Misma
+  /// razón que `reverse`: la key de la app está restringida al Maps SDK, no
+  /// sirve para web services. Sin caché: la clave incluiría el origen, que
+  /// cambia todo el tiempo mientras el usuario camina o maneja — el hit rate
+  /// sería ~0. El cliente ya throttlea el refetch cada ~35 m de movimiento.
+  async directions(
+    originLat: number,
+    originLng: number,
+    destLat: number,
+    destLng: number,
+    mode: 'walking' | 'driving',
+  ): Promise<{ points: string; durationText: string; distText: string }> {
+    const empty = { points: '', durationText: '', distText: '' };
+    if (!this.isConfigured) return empty;
+    try {
+      const res = await axios.get(
+        'https://maps.googleapis.com/maps/api/directions/json',
+        {
+          params: {
+            origin: `${originLat},${originLng}`,
+            destination: `${destLat},${destLng}`,
+            mode,
+            language: 'es',
+            key: this.key,
+          },
+          timeout: 8000,
+        },
+      );
+      const data = res.data as {
+        status?: string;
+        error_message?: string;
+        routes?: {
+          overview_polyline?: { points?: string };
+          legs?: {
+            duration?: { text?: string };
+            distance?: { text?: string };
+          }[];
+        }[];
+      };
+      if (data.status !== 'OK' || !data.routes?.length) {
+        if (data.status !== 'ZERO_RESULTS') {
+          this.log.warn(
+            `directions ${data.status}: ${data.error_message ?? 'sin detalle'}`,
+          );
+        }
+        return empty;
+      }
+      const route = data.routes[0];
+      const leg = route.legs?.[0];
+      return {
+        points: route.overview_polyline?.points ?? '',
+        durationText: leg?.duration?.text ?? '',
+        distText: leg?.distance?.text ?? '',
+      };
+    } catch (e) {
+      this.log.error(`directions falló: ${(e as Error)?.message ?? e}`);
+      return empty;
+    }
+  }
 }
 
 @Controller('geo')
@@ -133,6 +193,27 @@ class GeoController {
       return { city: '', area: '' };
     }
     return this.geo.reverse(nLat, nLng);
+  }
+
+  /// Ruta caminando/en auto: polyline codificada + duración/distancia.
+  /// Objeto vacío si no se pudo resolver: quien llama cae a línea recta.
+  @Get('directions')
+  directions(
+    @Query('originLat') originLat: string,
+    @Query('originLng') originLng: string,
+    @Query('destLat') destLat: string,
+    @Query('destLng') destLng: string,
+    @Query('mode') mode: string,
+  ) {
+    const oLat = Number(originLat);
+    const oLng = Number(originLng);
+    const dLat = Number(destLat);
+    const dLng = Number(destLng);
+    const m = mode === 'walking' || mode === 'driving' ? mode : null;
+    if (![oLat, oLng, dLat, dLng].every(Number.isFinite) || !m) {
+      return { points: '', durationText: '', distText: '' };
+    }
+    return this.geo.directions(oLat, oLng, dLat, dLng, m);
   }
 }
 
