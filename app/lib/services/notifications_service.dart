@@ -62,6 +62,10 @@ class NotificationsService {
   /// poder cancelarla al responder / al vencer el timeout.
   static const int _confirmId = 100001;
 
+  /// Id fijo del aviso de llegada a la cancha. Separado del de sesión porque
+  /// conviven: el aviso interrumpe una vez y el cronómetro queda persistente.
+  static const int _arrivalId = 100002;
+
   /// Lo invoca el handler de la acción "EMPEZAR YA" (con el proceso vivo). Lo
   /// cablea SyncCoordinator para llamar a `PlaySessionService.startNow()`.
   VoidCallback? onStartNowAction;
@@ -137,6 +141,25 @@ class NotificationsService {
     importance: Importance.low,
   );
 
+  // Aviso de llegada a la cancha: el ÚNICO momento de la detección que tiene
+  // que interrumpir. Va en su propio canal de importancia alta porque el de
+  // sesión es deliberadamente silencioso (es persistente y se refresca solo),
+  // y durante meses la llegada viajó por ahí: se detectaba bien con la app
+  // cerrada pero sin sonido, sin vibración y sin banner, así que el usuario se
+  // enteraba recién al abrir la app.
+  //
+  // OJO AL ID: Android IGNORA los cambios de importancia sobre un canal ya
+  // creado. Si algún día hay que subirle o bajarle la prioridad a este aviso,
+  // NO alcanza con editar `importance` acá — hay que estrenar un id nuevo
+  // ('arrival_v2'…) o el cambio no se aplica en los equipos que ya lo tienen.
+  static const AndroidNotificationChannel _arrivalChannel =
+      AndroidNotificationChannel(
+    'arrival',
+    'Llegaste a una cancha',
+    description: 'Aviso al detectar que llegaste a una cancha',
+    importance: Importance.high,
+  );
+
   void _onResponse(NotificationResponse response) {
     if (response.actionId == kStartNowAction) onStartNowAction?.call();
     if (response.actionId == kStopAction) onStopAction?.call();
@@ -194,6 +217,7 @@ class NotificationsService {
           AndroidFlutterLocalNotificationsPlugin>();
       await android?.createNotificationChannel(_channel);
       await android?.createNotificationChannel(_sessionChannel);
+      await android?.createNotificationChannel(_arrivalChannel);
       _ready = true;
       // App abierta desde una notificación de pickup (proceso estaba muerto):
       // capturamos el id para enrutar al chat en cuanto se cablee el listener.
@@ -321,6 +345,55 @@ class NotificationsService {
   /// Notificación de sesión en estado "cuenta regresiva": muestra cuánto falta
   /// para que arranque el partido (cronómetro nativo que baja solo hasta
   /// [endsAt]) y un botón "EMPEZAR YA". Persistente (ongoing).
+  /// Aviso PUNTUAL de que llegaste a una cancha y la detección arrancó.
+  ///
+  /// Es el gemelo ruidoso de [showDwellCountdown]: mismo momento, misma
+  /// información, pero en el canal de importancia alta para que suene, vibre y
+  /// aparezca como banner. El cronómetro persistente sigue yendo por el canal
+  /// silencioso — si los dos alertaran, el aviso se repetiría en cada refresco.
+  ///
+  /// [minutes] son los minutos hasta que la sesión arranque sola.
+  Future<void> showArrivalAlert(String court, int minutes) async {
+    if (!_ready) await init();
+    if (!_ready) return;
+    try {
+      final details = NotificationDetails(
+        android: AndroidNotificationDetails(
+          'arrival',
+          'Llegaste a una cancha',
+          channelDescription: 'Aviso al detectar que llegaste a una cancha',
+          importance: Importance.high,
+          priority: Priority.high,
+          autoCancel: true,
+          // Mismo criterio de privacidad que el cronómetro: el nombre de la
+          // cancha revela dónde estás, así que no va en la pantalla bloqueada.
+          visibility: NotificationVisibility.private,
+          actions: const <AndroidNotificationAction>[
+            AndroidNotificationAction(kStartNowAction, 'EMPEZAR YA',
+                showsUserInterface: true, cancelNotification: true),
+            AndroidNotificationAction(kDeclineAction, 'NO JUEGO',
+                showsUserInterface: true, cancelNotification: true),
+          ],
+        ),
+      );
+      await _plugin.show(
+        _arrivalId,
+        court.isEmpty ? 'Llegaste a una cancha' : 'Llegaste a $court',
+        'Tu sesión arranca sola en $minutes min',
+        details,
+      );
+    } catch (_) {/* ignorar */}
+  }
+
+  /// Quita el aviso de llegada. Se llama al arrancar el partido o al cortar la
+  /// permanencia: a esa altura ya cumplió y quedaría colgado.
+  Future<void> cancelArrival() async {
+    if (!_ready) return;
+    try {
+      await _plugin.cancel(_arrivalId);
+    } catch (_) {/* ignorar */}
+  }
+
   Future<void> showDwellCountdown(String court, int remainingSeconds) async {
     if (!_ready) await init();
     if (!_ready) return;
@@ -365,6 +438,8 @@ class NotificationsService {
   Future<void> showPlaying(String court, DateTime startedAt) async {
     if (!_ready) await init();
     if (!_ready) return;
+    // El partido arrancó: el aviso de llegada ya no aplica.
+    await cancelArrival();
     try {
       final details = NotificationDetails(
         android: AndroidNotificationDetails(
@@ -526,6 +601,9 @@ class NotificationsService {
     if (!_ready) return;
     try {
       await _plugin.cancel(_sessionId);
+      // El aviso de llegada muere con la sesión: si no, queda colgado en la
+      // bandeja después de que el partido arrancó o se descartó.
+      await _plugin.cancel(_arrivalId);
     } catch (_) {/* ignorar */}
   }
 }

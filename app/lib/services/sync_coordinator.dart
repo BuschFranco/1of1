@@ -141,6 +141,8 @@ class SyncCoordinator {
     // Notificación de sesión (cronómetro persistente con la app minimizada).
     _play.onDwellNotif = (court, remainingSeconds) =>
         NotificationsService.instance.showDwellCountdown(court, remainingSeconds);
+    _play.onArrivalNotif = (court, minutes) =>
+        NotificationsService.instance.showArrivalAlert(court, minutes);
     _play.onPlayingNotif = (court, startedAt) =>
         NotificationsService.instance.showPlaying(court, startedAt);
     _play.onEndingNotif = (court, endsAt) =>
@@ -293,11 +295,28 @@ class SyncCoordinator {
       unawaited(scheduleWatchdog().onError((_, _) => _watchdogOn = false));
     }
     if (_geofencedCount == courts.length) return; // sin cambios relevantes
-    _geofencedCount = courts.length;
     // Cache global de canchas para que el radar (isolate sin memoria
     // compartida) pueda medir cercanía.
     unawaited(_writeCourtsGeoCache(courts));
-    GeofenceService.instance.syncCourts(courts);
+    // El contador se marca DESPUÉS de que el registro haya terminado bien —
+    // mismo criterio que `_radarOn` acá arriba. Marcarlo antes (como estaba)
+    // daba las geofences por puestas aunque el registro fallara, y como
+    // `syncCourts` se tragaba toda excepción, el equipo se quedaba sin
+    // detección instantánea para toda la vida del proceso, sin ninguna señal.
+    final ok = await GeofenceService.instance
+        .syncCourts(courts, origin: await _lastKnownLatLng());
+    _geofencedCount = ok ? courts.length : 0;
+  }
+
+  /// Última posición conocida, para priorizar qué canchas vigilar cuando hay
+  /// más de las que Android permite. Best-effort: si no hay fix reciente
+  /// devuelve null y el recorte cae al orden del catálogo.
+  Future<(double, double)?> _lastKnownLatLng() async {
+    try {
+      final p = await Geolocator.getLastKnownPosition();
+      if (p != null) return (p.latitude, p.longitude);
+    } catch (_) {/* sin permiso o sin fix: no es crítico */}
+    return null;
   }
 
   Future<void> _writeCourtsGeoCache(List<Court> courts) async {

@@ -190,6 +190,12 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// Mostrar la cuenta regresiva (cancha, momento en que arranca el partido).
   void Function(String courtName, int remainingSeconds)? onDwellNotif;
 
+  /// Aviso PUNTUAL de llegada a la cancha. Va aparte de [onDwellNotif] porque
+  /// ese se re-dispara en cada refresco del cronómetro: si el aviso ruidoso
+  /// colgara de ahí, sonaría una vez por segundo. Este se llama una sola vez,
+  /// al empezar la permanencia.
+  void Function(String courtName, int minutes)? onArrivalNotif;
+
   /// Mostrar el partido en curso (cancha, momento de inicio).
   void Function(String courtName, DateTime startedAt)? onPlayingNotif;
 
@@ -1920,6 +1926,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _dwellCourtId = c.id;
     _dwellSince = DateTime.now();
     _dwellOutsideSince = null;
+    // Una sola vez, acá: con la app minimizada el cronómetro es silencioso a
+    // propósito, así que sin este aviso la llegada pasa desapercibida igual
+    // que pasaba con la app cerrada.
+    onArrivalNotif?.call(c.name, dwellThreshold.inMinutes);
     // Programamos el arranque automático a los [dwellThreshold] min con una
     // alarma exacta del sistema: dispara aunque la app esté cerrada/dormida.
     unawaited(scheduleStartAlarm(

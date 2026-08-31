@@ -1,4 +1,5 @@
 import 'dart:isolate';
+import 'dart:math';
 import 'dart:ui';
 import 'package:native_geofence/native_geofence.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +9,20 @@ import 'session_alarms.dart';
 
 /// Radio (m) de cada geofence de cancha. Igual al de la detección por dwell.
 const double kCourtGeofenceRadius = 110;
+
+/// Tope de geofences a registrar. Android permite 100 por app; dejamos margen.
+const int _kMaxGeofences = 95;
+
+/// Distancia al cuadrado entre [origin] y la cancha. Alcanza para ORDENAR por
+/// cercanía: no hace falta la haversine ni la raíz, que costarían CPU sin
+/// cambiar el orden. El delta de longitud sí se escala por `cos(lat)`, porque
+/// sin eso un grado de longitud se contaría como uno de latitud y en Buenos
+/// Aires (~-34°) mide un 17% menos.
+double _dist2((double, double) origin, Court c) {
+  final dLat = c.lat - origin.$1;
+  final dLng = (c.lng - origin.$2) * cos(origin.$1 * pi / 180);
+  return dLat * dLat + dLng * dLng;
+}
 
 /// Nombre del puerto con el que el isolate principal recibe los eventos de
 /// geofence desde el isolate de background.
@@ -112,14 +127,41 @@ class GeofenceService {
 
   /// Registra geofences para las canchas con coordenadas (máx 95, margen del
   /// límite de 100 de Android). Reemplaza las anteriores.
-  Future<void> syncCourts(List<Court> courts) async {
+  ///
+  /// Devuelve `true` si el registro se completó. El llamador **tiene que**
+  /// mirar el resultado antes de anotar que las geofences quedaron puestas: si
+  /// esto falla y se da por hecho, no se reintenta nunca más en la vida del
+  /// proceso y el equipo se queda sin detección instantánea, en silencio.
+  ///
+  /// [origin] es la posición del usuario, si se conoce: con más de 95 canchas
+  /// con coordenadas hay que elegir cuáles vigilar, y las de al lado son las
+  /// únicas que pueden dispararse. Sin ella se toman las primeras 95 del
+  /// catálogo, que es un criterio arbitrario.
+  Future<bool> syncCourts(List<Court> courts, {(double, double)? origin}) async {
     if (!_ready) await init();
-    if (!_ready) return;
+    if (!_ready) return false;
     final withCoords =
-        courts.where((c) => !(c.lat == 0 && c.lng == 0)).take(95).toList();
+        courts.where((c) => !(c.lat == 0 && c.lng == 0)).toList();
+    // Recortar por CERCANÍA, no por orden de catálogo. Antes era un `take(95)`
+    // a secas: pasadas las 95 canchas, cuáles quedaban vigiladas dependía del
+    // orden en que las devolvía el backend, así que la cancha de al lado de tu
+    // casa podía no tener geofence sin que nada lo indicara.
+    if (withCoords.length > _kMaxGeofences && origin != null) {
+      withCoords.sort((a, b) => _dist2(origin, a).compareTo(_dist2(origin, b)));
+    }
+    if (withCoords.length > _kMaxGeofences) {
+      withCoords.removeRange(_kMaxGeofences, withCoords.length);
+    }
     try {
       await NativeGeofenceManager.instance.removeAllGeofences();
-      for (final c in withCoords) {
+    } catch (_) {
+      return false; // no pudimos limpiar: mejor reintentar que quedar a medias
+    }
+    // El try va POR CANCHA: envolviendo el loop entero, una sola cancha con
+    // datos malos abortaba el registro de todas las siguientes.
+    var ok = true;
+    for (final c in withCoords) {
+      try {
         await NativeGeofenceManager.instance.createGeofence(
           Geofence(
             id: c.id,
@@ -135,8 +177,11 @@ class GeofenceService {
           ),
           geofenceTriggered,
         );
+      } catch (_) {
+        ok = false; // seguimos con el resto: una cancha menos, no ninguna
       }
-    } catch (_) {/* ignorar: best-effort */}
+    }
+    return ok;
   }
 
   /// Quita todas las geofences (al desactivar la detección en background).

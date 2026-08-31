@@ -1095,6 +1095,11 @@ Future<bool> _radarTick() async {
   );
   // Cuenta regresiva visible: mismo formato que el camino con la app viva.
   await NotificationsService.instance.init();
+  // Primero el aviso RUIDOSO (canal de importancia alta) y después el
+  // cronómetro persistente, que es silencioso a propósito. Sin el primero la
+  // detección funciona pero es invisible: el usuario se entera al abrir la app.
+  await NotificationsService.instance
+      .showArrivalAlert(near.$2, _kDwellThreshold.inMinutes);
   await NotificationsService.instance
       .showDwellCountdown(near.$2, _kDwellThreshold.inSeconds);
   _pingMain();
@@ -1157,6 +1162,9 @@ Future<bool> seedDwellForCourt(String courtId) async {
     at: at,
   );
   await NotificationsService.instance.init();
+  // Mismo par que en el radar: aviso ruidoso + cronómetro silencioso.
+  await NotificationsService.instance
+      .showArrivalAlert(court.$1, _kDwellThreshold.inMinutes);
   await NotificationsService.instance
       .showDwellCountdown(court.$1, _kDwellThreshold.inSeconds);
   _pingMain();

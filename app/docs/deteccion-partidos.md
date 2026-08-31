@@ -471,6 +471,57 @@ mapping queda apuntando a un `ReceivePort` muerto, y `send` no falla ni avisa �
 el evento se perdía entero. Ahora se avisa al principal *y* se hace el trabajo
 de background igual.
 
+### 8.1.3 Detectar no es avisar: el canal silencioso (ago-2026)
+
+**Síntoma reportado:** "pasé por una cancha y solo me la detectó cuando abrí la
+app". **La detección había funcionado perfecto.** Lo que no funcionó fue el
+aviso.
+
+Reconstrucción con `adb logcat` de un caso real (Galaxy S24 FE, Android 16):
+
+| Hora | Evento |
+| --- | --- |
+| 08:41:46 | Alarma del radar. `Start proc` — **el proceso estaba muerto** y Android lo levantó |
+| 08:41:47 | La app publica la cuenta regresiva |
+| 08:42:21 | `NativeGeofenceBroadcastReceiver` recibe el evento **desde uid 10267 (Play Services)** |
+| 08:56:25 | El usuario abre la app con `act=SELECT_NOTIFICATION` |
+
+O sea: el radar despertó un proceso muerto y sembró la permanencia, y la
+geofence confirmó 35 s después (y correctamente no hizo nada, porque
+`seedDwellForCourt` rechaza sembrar sobre una permanencia ya en curso).
+
+**El problema era el canal.** `showDwellCountdown` publicaba en el canal
+`session`, que es `Importance.low` **a propósito**: es una notificación
+persistente que se refresca sola, y con importancia alta sonaría en cada
+actualización. Pero `IMPORTANCE_LOW` significa **sin sonido, sin vibración y sin
+banner** — solo aparece en la bandeja desplegable. Encima con
+`visibility: private`, que tapa el contenido en la pantalla bloqueada. El
+momento que más necesita la atención del usuario viajaba por el canal más
+silencioso de la app.
+
+**Arreglo:** se separaron los dos roles que compartían canal.
+
+- **`arrival`** (`Importance.high`) — aviso PUNTUAL de llegada, con sonido y
+  banner. Se dispara una sola vez por permanencia, desde los tres caminos que
+  la siembran: el radar (`_radarTick`), la geofence (`seedDwellForCourt`) y el
+  foreground (`_beginDwell` → `onArrivalNotif`).
+- **`session`** (`Importance.low`) — el cronómetro persistente, sin cambios.
+
+> **Trampa al tocar importancias:** Android **IGNORA** los cambios de
+> importancia sobre un canal que ya existe en el equipo. Subirle la importancia
+> a `session` no habría hecho absolutamente nada en los teléfonos que ya lo
+> tenían creado — de ahí que el arreglo estrene un id nuevo. Si mañana hay que
+> cambiarle la prioridad a `arrival`, tampoco alcanza con editar la constante:
+> hay que estrenar `arrival_v2`, o desinstalar y reinstalar.
+
+**Moraleja para el próximo reporte de "no detectó":** antes de tocar la
+detección, verificar si detectó y no avisó. `adb logcat` y
+`adb shell dumpsys notification --noredact | grep -A3 'AppSettings: <pkg>'`
+(mirar `mImportance` de cada canal) responden eso en dos minutos. En este caso
+el entorno estaba impecable —permiso Siempre, whitelist de Doze, standby bucket
+5 (EXEMPTED), ahorro apagado, alarmas periódicas vivas— y la búsqueda arrancó
+apuntando al lugar equivocado.
+
 ### 8.2 Fabricantes agresivos (Samsung y cía.)
 
 Samsung mata el proceso Y el foreground service con la app en background
