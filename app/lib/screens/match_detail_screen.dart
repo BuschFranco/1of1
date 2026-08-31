@@ -1362,16 +1362,17 @@ class _ShareCard extends StatelessWidget {
                 !hidden.contains(MatchSection.puntuacion)) ...[
               Text('${s.userPoints}',
                   style: AppText.display(
-                      size: 128,
+                      size: 112,
                       weight: FontWeight.w900,
                       color: AppColors.accent,
                       height: 0.95)),
+              const SizedBox(height: 16),
               Text('PUNTOS ANOTADOS',
-                  style: AppText.grotesk(
-                      size: 24,
-                      weight: FontWeight.w700,
-                      color: AppColors.white(0.4),
-                      letterSpacing: 0.14)),
+                  style: AppText.archivo(
+                      size: 32,
+                      weight: FontWeight.w900,
+                      color: AppColors.white(0.78),
+                      letterSpacing: 0.1)),
               const SizedBox(height: 40),
             ],
             if (!hidden.contains(MatchSection.desglosePuntos))
@@ -1487,19 +1488,25 @@ class _ShareCard extends StatelessWidget {
         color: AppColors.white(0.15),
       );
 
+  /// Número + etiqueta para la imagen de compartir. La etiqueta va en
+  /// `archivo` (Anybody, el rol de la tipografía para etiquetas — ver
+  /// app/CLAUDE.md §5.1) y no en `grotesk`: a tamaño de miniatura (la imagen
+  /// se comparte a WhatsApp/Instagram, que la reducen antes de mostrarla) el
+  /// trazo más fino de Archivo Narrow con 40% de opacidad se volvía ilegible,
+  /// mientras el número al lado quedaba desproporcionadamente grande.
   Widget _shareStat(String label, String value, {Color? color}) {
     return Column(
       children: [
         Text(value,
             style: AppText.display(
-                size: 78, weight: FontWeight.w900, color: color ?? Colors.white)),
-        const SizedBox(height: 10),
+                size: 68, weight: FontWeight.w900, color: color ?? Colors.white)),
+        const SizedBox(height: 14),
         Text(label,
-            style: AppText.grotesk(
-                size: 22,
-                weight: FontWeight.w700,
-                color: AppColors.white(0.4),
-                letterSpacing: 0.1)),
+            style: AppText.archivo(
+                size: 30,
+                weight: FontWeight.w900,
+                color: AppColors.white(0.78),
+                letterSpacing: 0.08)),
       ],
     );
   }
