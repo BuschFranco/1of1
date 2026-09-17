@@ -22,7 +22,8 @@ class NewsScreen extends StatefulWidget {
 }
 
 class _NewsScreenState extends State<NewsScreen> {
-  String _league = NewsService.nba;
+  // Liga Nacional primero: es la que no se consigue en ningún otro lado.
+  String _league = NewsService.lnb;
   bool _loading = false;
 
   String get _cacheKey => 'news::$_league';
@@ -51,6 +52,22 @@ class _NewsScreenState extends State<NewsScreen> {
     _load();
   }
 
+  /// `DD/MM/AAAA` — mismo formato que el resto de la app (ver `_fmtDate` en
+  /// `match_detail_screen.dart`). Vacío si no se pudo parsear (ESPN manda ISO
+  /// 8601, NewsData manda "AAAA-MM-DD HH:mm:ss" — los dos entran en
+  /// `DateTime.parse`, pero por las dudas no rompemos la card si alguno
+  /// cambia de formato).
+  String _fmtDate(String iso) {
+    if (iso.isEmpty) return '';
+    try {
+      final d = DateTime.parse(iso).toLocal();
+      return '${d.day.toString().padLeft(2, '0')}/'
+          '${d.month.toString().padLeft(2, '0')}/${d.year}';
+    } catch (_) {
+      return '';
+    }
+  }
+
   Future<void> _openArticle(String url) async {
     if (url.isEmpty) return;
     final uri = Uri.tryParse(url);
@@ -75,6 +92,11 @@ class _NewsScreenState extends State<NewsScreen> {
             runSpacing: 8,
             children: [
               AppChip(
+                label: 'Liga Nacional',
+                active: _league == NewsService.lnb,
+                onTap: () => _selectLeague(NewsService.lnb),
+              ),
+              AppChip(
                 label: 'NBA',
                 active: _league == NewsService.nba,
                 onTap: () => _selectLeague(NewsService.nba),
@@ -83,11 +105,6 @@ class _NewsScreenState extends State<NewsScreen> {
                 label: 'WNBA',
                 active: _league == NewsService.wnba,
                 onTap: () => _selectLeague(NewsService.wnba),
-              ),
-              AppChip(
-                label: 'Liga Nacional',
-                active: _league == NewsService.lnb,
-                onTap: () => _selectLeague(NewsService.lnb),
               ),
             ],
           ),
@@ -171,14 +188,34 @@ class _NewsScreenState extends State<NewsScreen> {
                             weight: FontWeight.w700,
                             color: AppColors.ink),
                       ),
-                      if (a.source.isNotEmpty) ...[
+                      if (_fmtDate(a.publishedAt).isNotEmpty) ...[
                         const SizedBox(height: 6),
                         Text(
-                          a.source,
+                          _fmtDate(a.publishedAt),
                           style: AppText.grotesk(
-                              size: 11,
+                              size: 10,
                               weight: FontWeight.w600,
-                              color: AppColors.white(0.5)),
+                              color: AppColors.white(0.4)),
+                        ),
+                      ],
+                      if (a.source.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                a.source,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppText.grotesk(
+                                    size: 11,
+                                    weight: FontWeight.w600,
+                                    color: AppColors.white(0.5)),
+                              ),
+                            ),
+                            // Avisa que el tap abre el navegador, no la app.
+                            Icon(Icons.open_in_new,
+                                size: 13, color: AppColors.white(0.4)),
+                          ],
                         ),
                       ],
                     ],

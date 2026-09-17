@@ -73,7 +73,7 @@ class NewsService {
         images?: { url?: string }[];
         published?: string;
       }[];
-      return articles.map((a) => ({
+      const base = articles.map((a) => ({
         title: a.headline ?? '',
         summary: a.description ?? '',
         url: a.links?.web?.href ?? '',
@@ -81,9 +81,43 @@ class NewsService {
         source: 'ESPN',
         publishedAt: a.published ?? '',
       }));
+      // ESPN viene en inglés: traducimos título y resumen. Por artículo (no
+      // en batch) para que una traducción fallida no tire abajo las demás.
+      return Promise.all(
+        base.map(async (a) => ({
+          ...a,
+          title: await this.translateToEs(a.title),
+          summary: await this.translateToEs(a.summary),
+        })),
+      );
     } catch (e) {
       this.log.error(`espn news (${league}) falló: ${(e as Error)?.message ?? e}`);
       return [];
+    }
+  }
+
+  /// Traduce un texto EN→ES vía el endpoint no oficial de Google Translate
+  /// (sin key, sin límite documentado — mismo criterio que ESPN: no es un
+  /// contrato soportado, pero es lo que usa medio internet gratis). Nunca
+  /// lanza: si falla, devuelve el texto original en inglés antes que romper
+  /// el feed. El costo es bajo a propósito: esto corre una vez cada 30 min
+  /// (el TTL del caché de la liga), no por cada request de cada usuario.
+  private async translateToEs(text: string): Promise<string> {
+    if (!text) return text;
+    try {
+      const res = await axios.get(
+        'https://translate.googleapis.com/translate_a/single',
+        {
+          params: { client: 'gtx', sl: 'en', tl: 'es', dt: 't', q: text },
+          timeout: 6000,
+        },
+      );
+      const segments = (res.data?.[0] ?? []) as unknown[][];
+      const joined = segments.map((s) => (s?.[0] as string) ?? '').join('');
+      return joined || text;
+    } catch (e) {
+      this.log.warn(`traducción falló, queda en inglés: ${(e as Error)?.message ?? e}`);
+      return text;
     }
   }
 
