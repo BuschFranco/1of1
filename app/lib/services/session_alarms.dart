@@ -49,6 +49,10 @@ const int kAlarmWatchdogId = 100019;
 // Aviso de reenganche: alarma PERIÓDICA inexacta que chequea si pasaron varios
 // días sin una sesión de juego. Ver [scheduleNudge].
 const int kAlarmNudgeId = 100020;
+// CONFIRMACIÓN de salida durante la permanencia: al salir del radio con el
+// dwell sembrado esperamos [_kDwellExitGrace] antes de cancelarlo, para que un
+// salto aislado de GPS no mate una detección legítima.
+const int kAlarmDwellExitId = 100021;
 
 /// Puerto para avisarle al isolate principal que reconcilie desde prefs.
 const String kPlayPortName = 'oneofone_play_port';
@@ -89,6 +93,7 @@ const String _kAlarmStart = 'play_alarm_start';
 const String _kAlarmEnd = 'play_alarm_end';
 const String _kAlarmWarn = 'play_alarm_warn';
 const String _kAlarmHardEnd = 'play_alarm_hardend';
+const String _kAlarmDwellExit = 'play_alarm_dwellexit';
 
 // Claves base de PlaySessionService (deben coincidir EXACTO). Públicas porque
 // Session también las lee al arrancar: para decidir si, sin red, entra con el
@@ -109,6 +114,14 @@ const Duration _kEndNotifLead = Duration(minutes: 3);
 // Gemelas de PlaySessionService.dwellThreshold / exitGrace.
 const Duration _kDwellThreshold = Duration(minutes: 6);
 const Duration _kExitGrace = Duration(minutes: 6);
+// Confirmación de salida DURANTE la permanencia (no durante el partido: esa es
+// _kExitGrace). Va SIN gemela en PlaySessionService a propósito: con la app
+// viva, _evaluate (Caso 2) ya confirma la salida con `gpsJitterGrace` de
+// muestras CONTINUAS afuera, que es evidencia más fuerte que un único evento de
+// geofence. Este minuto es la confirmación equivalente para el camino de
+// background, donde no hay muestreo continuo. No "arregles" la asimetría
+// agregando una gemela: ver §8.1.4 de docs/deteccion-partidos.md.
+const Duration _kDwellExitGrace = Duration(minutes: 1);
 // Cadencia del radar de respaldo (peor caso de detección sin geofence/FGS).
 const Duration _kRadarEvery = Duration(minutes: 15);
 // Cada cuánto despierta el watchdog a chequear que el radar siga tickeando.
@@ -257,6 +270,10 @@ Future<void> scheduleStartAlarm({
       'atMillis': at.millisecondsSinceEpoch,
     }),
   );
+  // Permanencia NUEVA: una confirmación de salida de la anterior ya no aplica.
+  // Va acá y no en los call-sites porque los tres caminos que siembran (radar,
+  // geofence y foreground) pasan todos por esta función.
+  await cancelDwellExitCheck();
   await AndroidAlarmManager.cancel(kAlarmStartId);
   await _oneShotAt(at, kAlarmStartId, alarmStartCallback);
 }
@@ -264,8 +281,62 @@ Future<void> scheduleStartAlarm({
 Future<void> cancelStartAlarm() async {
   if (!_isAndroid) return;
   await AndroidAlarmManager.cancel(kAlarmStartId);
+  // La permanencia se está resolviendo (arrancó, se descartó o se limpió): una
+  // confirmación de salida pendiente no debe sobrevivirla. Acá adentro y no en
+  // los ~8 call-sites, que son todos contextos de "el dwell terminó".
+  await cancelDwellExitCheck();
   final prefs = await SharedPreferences.getInstance();
   await prefs.remove(_kAlarmStart);
+}
+
+/// Programa la CONFIRMACIÓN de salida de la permanencia a [_kDwellExitGrace].
+///
+/// La dispara el geofence EXIT: no cancelamos el dwell en el acto porque un
+/// salto aislado de GPS mataría una detección legítima. Si al cumplirse el
+/// minuto el GPS confirma que seguís afuera, ahí sí se cancela todo.
+///
+/// Persiste su **propio** objetivo en vez de releer `_kAlarmStart` al disparar.
+/// Motivo: `_oneShotAt` degrada a alarma inexacta en silencio cuando falta el
+/// permiso de alarmas exactas, así que un "1 min" puede aterrizar a los 8 —
+/// cuando `alarmStartCallback` ya consumió el dwell y quizá se sembró otro en
+/// otra cancha. Guardando el `courtId` propio, el callback puede detectar ese
+/// desfasaje y no cancelar la permanencia equivocada.
+Future<void> scheduleDwellExitCheck(String courtId) async {
+  if (!_isAndroid || courtId.isEmpty) return;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  final t = await readPendingStartTarget();
+  if (t == null) return; // no hay permanencia que confirmar
+  if ((t['courtId'] ?? '') != courtId) return; // salida de OTRA cancha
+  // El userKey sale del objetivo de la permanencia, no de kBgUserKey: es LA
+  // MISMA permanencia que estamos por confirmar, y tras un cambio de cuenta los
+  // dos valores pueden no coincidir.
+  final uk = (t['userKey'] ?? '') as String;
+  // Con partido en curso la salida la maneja la gracia del partido
+  // (_kExitGrace), no esto.
+  if (prefs.getString(bgNsKey(kActiveSessionBase, uk)) != null) return;
+  final at = DateTime.now().add(_kDwellExitGrace);
+  await prefs.setString(
+    _kAlarmDwellExit,
+    jsonEncode({
+      'userKey': uk,
+      'courtId': courtId,
+      'lat': (t['lat'] as num?)?.toDouble() ?? 0,
+      'lng': (t['lng'] as num?)?.toDouble() ?? 0,
+      'atMillis': at.millisecondsSinceEpoch,
+    }),
+  );
+  await AndroidAlarmManager.cancel(kAlarmDwellExitId);
+  await _oneShotAt(at, kAlarmDwellExitId, alarmDwellExitCallback);
+}
+
+/// Cancela la confirmación de salida (volviste a la cancha, o la permanencia se
+/// resolvió por otro lado).
+Future<void> cancelDwellExitCheck() async {
+  if (!_isAndroid) return;
+  await AndroidAlarmManager.cancel(kAlarmDwellExitId);
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.remove(_kAlarmDwellExit);
 }
 
 /// Programa el cierre automático del partido para [at] (gracia de salida).
@@ -338,6 +409,68 @@ Future<void> cancelEndAlarmOnReenter() async {
   await prefs.remove(_kAlarmWarn);
   final uk = prefs.getString(kBgUserKey) ?? '';
   await _clearExitStateInActive(prefs, uk);
+}
+
+/// Quita las DOS notificaciones de la permanencia: el aviso de llegada (id
+/// 100002) y el cronómetro (id 100000, que es `ongoing` y el usuario **no
+/// puede descartar deslizando**).
+///
+/// Dos detalles que la hacen correcta y no son obvios:
+///
+///  - **`init()` es obligatorio.** `cancelSession()` arranca con
+///    `if (!_ready) return;` y NO inicializa por su cuenta (a diferencia de
+///    `showArrivalAlert`/`showDwellCountdown`). En un isolate de background
+///    recién nacido sería un no-op **mudo**: sin excepción y sin log, las
+///    notificaciones simplemente se quedarían.
+///  - **No toca nada si hay partido en curso.** Cuando el partido arranca, el
+///    id 100000 pasa a ser su cronómetro persistente; cancelarlo acá le borraría
+///    la notificación a un partido vivo.
+Future<void> clearDwellNotifs(SharedPreferences prefs, String uk) async {
+  if (prefs.getString(bgNsKey(kActiveSessionBase, uk)) != null) return;
+  await NotificationsService.instance.init();
+  await NotificationsService.instance.cancelSession();
+}
+
+/// True si hay una permanencia sembrada y **vigente**. Si el objetivo quedó
+/// huérfano lo limpia (alarma + prefs + notificaciones) y devuelve false, para
+/// que el llamador siga de largo y pueda sembrar de nuevo.
+///
+/// **Por qué hace falta.** `_kAlarmStart` normalmente lo consume
+/// `alarmStartCallback` al dispararse. Pero la alarma puede no dispararse nunca:
+/// el equipo apagado cuando le tocaba, un reset del alarm manager, el OEM
+/// matando el proceso, o el permiso de alarmas exactas revocado (que hace que
+/// el plugin la descarte **en silencio**, §8.4). En esos casos el objetivo
+/// queda en prefs para siempre, y como tanto el radar como la siembra por
+/// geofence se van temprano cuando `_kAlarmStart != null`, **la detección en
+/// background se muere del todo hasta reinstalar** — sin un solo síntoma.
+///
+/// Dos formas de quedar huérfano:
+///  - **Vencido**: `atMillis` pasó hace más de [_kDwellThreshold]. El margen es
+///    generoso a propósito: una alarma inexacta puede llegar tarde, y si la
+///    limpiamos justo antes de que dispare, perdemos una detección legítima.
+///  - **De otra cuenta**: tras cambiar de usuario, un objetivo con otro
+///    `userKey` no lo va a adoptar nadie nunca. Ese se limpia sin esperar.
+Future<bool> pendingDwellIsLive(SharedPreferences prefs, String uk) async {
+  final raw = prefs.getString(_kAlarmStart);
+  if (raw == null) return false;
+  Map<String, dynamic> t;
+  try {
+    t = jsonDecode(raw) as Map<String, dynamic>;
+  } catch (_) {
+    await cancelStartAlarm(); // ilegible: nadie lo va a poder usar
+    await clearDwellNotifs(prefs, uk);
+    return false;
+  }
+  final foreign = (t['userKey'] ?? '') != uk;
+  final atMillis = (t['atMillis'] as num?)?.toInt();
+  final stale = atMillis == null ||
+      DateTime.now()
+          .difference(DateTime.fromMillisecondsSinceEpoch(atMillis)) >
+          _kDwellThreshold;
+  if (!foreign && !stale) return true;
+  await cancelStartAlarm();
+  await clearDwellNotifs(prefs, foreign ? (t['userKey'] ?? '') as String : uk);
+  return false;
 }
 
 /// Borra el `endsAtMillis` de la sesión activa persistida (la gracia de salida
@@ -607,14 +740,20 @@ Future<void> alarmStartCallback() async {
   final raw = prefs.getString(_kAlarmStart);
   if (raw == null) return;
   await prefs.remove(_kAlarmStart);
-  // Es el que notifica "¡Arrancó tu partido!": sin sesión no arrancamos nada
-  // (el target ya quedó consumido arriba, así que no vuelve a dispararse).
-  if (!await hasBgSession(prefs)) return;
 
+  // ESTA ES LA RED DE SEGURIDAD de las notificaciones de la permanencia: todo
+  // aborto de acá para abajo tiene que limpiarlas. El target ya quedó consumido
+  // arriba, así que si nos vamos sin limpiar, el aviso de llegada y el
+  // cronómetro `ongoing` quedan pegados HASTA QUE EL USUARIO ABRA LA APP (y el
+  // cronómetro ni siquiera se puede descartar deslizando).
+  //
+  // El decode va ANTES del gate de sesión: sin él no tenemos `uk`, y sin `uk`
+  // no se puede chequear si hay partido en curso antes de cancelar.
   Map<String, dynamic> t;
   try {
     t = jsonDecode(raw) as Map<String, dynamic>;
   } catch (_) {
+    await clearDwellNotifs(prefs, prefs.getString(kBgUserKey) ?? '');
     return;
   }
   final uk = (t['userKey'] ?? '') as String;
@@ -625,8 +764,27 @@ Future<void> alarmStartCallback() async {
   final atMillis =
       (t['atMillis'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
 
+  // Es el que notifica "¡Arrancó tu partido!": sin sesión no arrancamos nada.
+  // OJO: `hasBgSession` exige token FRESCO por default, así que un JWT que
+  // venció durante los 6 min de permanencia cae acá — con el usuario logueado.
+  // Sin la limpieza, ese caso dejaba las dos notificaciones colgadas.
+  if (!await hasBgSession(prefs)) {
+    await clearDwellNotifs(prefs, uk);
+    return;
+  }
+
   // ¿Seguís en la cancha? Best-effort: si no hay fix, arrancamos igual.
-  if (await _leftArea(lat, lng, defaultWhenNoFix: false)) return;
+  if (await _leftArea(lat, lng, defaultWhenNoFix: false)) {
+    // Te fuiste y el geofence EXIT nunca llegó (geofences sin registrar,
+    // permiso degradado, el OEM mató Play Services, o saliste por un camino que
+    // no cruzó ninguna zona registrada). Este es el peor caso que cubre la red.
+    await clearDwellNotifs(prefs, uk);
+    return;
+  }
+
+  // Arrancamos: una confirmación de salida demorada no debe sobrevivir al
+  // partido que le ganó de mano.
+  await cancelDwellExitCheck();
 
   final startIso = DateTime.fromMillisecondsSinceEpoch(atMillis).toIso8601String();
   // OJO: a propósito SIN 'lastSeenMillis'. Su ausencia le indica a _restore()
@@ -663,6 +821,59 @@ Future<void> alarmStartCallback() async {
   await scheduleConfirmAlarm(
       at: DateTime.fromMillisecondsSinceEpoch(atMillis).add(_kConfirmAfter));
 
+  _pingMain();
+}
+
+/// Confirma (o descarta) la salida de la cancha DURANTE la permanencia, un
+/// minuto después del geofence EXIT. Si el GPS ratifica que seguís afuera,
+/// cancela el arranque pendiente y limpia las dos notificaciones.
+///
+/// Es una OPTIMIZACIÓN, no la garantía: quien garantiza que las notificaciones
+/// nunca queden colgadas es `alarmStartCallback` (a los 6 min). Por eso acá se
+/// puede ser conservador y, ante la duda, no cancelar nada.
+@pragma('vm:entry-point')
+Future<void> alarmDwellExitCallback() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  final raw = prefs.getString(_kAlarmDwellExit);
+  if (raw == null) return;
+  await prefs.remove(_kAlarmDwellExit);
+
+  Map<String, dynamic> t;
+  try {
+    t = jsonDecode(raw) as Map<String, dynamic>;
+  } catch (_) {
+    return;
+  }
+  final uk = (t['userKey'] ?? '') as String;
+  // El partido ya arrancó (a mano con EMPEZAR YA, o por la alarma si esta
+  // confirmación se demoró): ganó él, no hay permanencia que cancelar.
+  if (prefs.getString(bgNsKey(kActiveSessionBase, uk)) != null) return;
+
+  // La permanencia tiene que seguir siendo LA MISMA que la de la salida. Si no
+  // hay ninguna, ya se resolvió; si es otra cancha, esta confirmación llegó
+  // tarde (alarma degradada a inexacta) y cancelaría la permanencia equivocada.
+  final pending = await readPendingStartTarget();
+  if (pending == null) return;
+  if ((pending['courtId'] ?? '') != (t['courtId'] ?? '')) return;
+
+  final lat = (t['lat'] as num?)?.toDouble() ?? 0;
+  final lng = (t['lng'] as num?)?.toDouble() ?? 0;
+  // `defaultWhenNoFix: false` = sin fix asumimos que seguís adentro y NO
+  // cancelamos. El no-fix es el caso común, no el borde: son 12 s de
+  // getCurrentPosition dentro de un callback de alarma que ya soltó el wakelock,
+  // y en canchas techadas falla seguido. Además `alarmStartCallback` usa el
+  // mismo default para ARRANCAR el partido: sería incoherente cancelar acá por
+  // la misma incertidumbre con la que allá se hubiera arrancado.
+  if (!await _leftArea(lat, lng, defaultWhenNoFix: false)) return;
+
+  // Salida confirmada: se cae el arranque pendiente y se van las dos notifs.
+  // Sin gate de sesión a propósito — este camino solo BORRA estado, y exigir
+  // token fresco recrearía el leak justo en el caso que más molesta (JWT
+  // vencido a mitad de la permanencia).
+  await cancelStartAlarm();
+  await clearDwellNotifs(prefs, uk);
   _pingMain();
 }
 
@@ -1069,7 +1280,10 @@ Future<bool> _radarTick() async {
   }
 
   // Sin partido en curso: detectar la LLEGADA si no hay permanencia armada.
-  if (prefs.getString(_kAlarmStart) != null) return true; // dwell ya sembrado
+  // Si la que hay quedó huérfana (alarma que nunca disparó, o de otra cuenta),
+  // `pendingDwellIsLive` la limpia y seguimos de largo a sembrar de nuevo. Sin
+  // eso, un solo objetivo vencido dejaba el radar inútil para siempre.
+  if (await pendingDwellIsLive(prefs, uk)) return true; // dwell ya sembrado
   final near = await _nearestCourtInRadius(prefs, pos.$1, pos.$2);
   if (near == null) return true;
 
@@ -1135,8 +1349,10 @@ Future<bool> seedDwellForCourt(String courtId) async {
   // Partido en curso: no hay nada que sembrar (y si volviste durante la gracia
   // de salida, de eso se encarga cancelEndAlarmOnReenter).
   if (prefs.getString(bgNsKey(kActiveSessionBase, uk)) != null) return false;
-  // Permanencia ya sembrada (por el radar o por una geofence anterior).
-  if (prefs.getString(_kAlarmStart) != null) return false;
+  // Permanencia ya sembrada (por el radar o por una geofence anterior). Si
+  // quedó huérfana se limpia acá adentro y seguimos: mismo criterio que el
+  // radar, para que un objetivo vencido no bloquee la siembra para siempre.
+  if (await pendingDwellIsLive(prefs, uk)) return false;
 
   final court = await _courtFromCache(prefs, courtId);
   if (court == null) return false; // catálogo no cacheado todavía

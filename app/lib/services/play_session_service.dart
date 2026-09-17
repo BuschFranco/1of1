@@ -1095,7 +1095,52 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         unawaited(_startStream());
         _renderSessionNotif();
         notifyListeners();
+      } else if (t != null) {
+        // Hay objetivo pero NO es adoptable: o venció hace rato (la alarma
+        // nunca disparó: equipo apagado, reset del alarm manager, OEM, o
+        // permiso de alarmas exactas revocado — que el plugin descarta en
+        // silencio), o es de otra cuenta tras cambiar de usuario.
+        //
+        // Antes se lo salteaba y quedaba en prefs PARA SIEMPRE, bloqueando
+        // tanto al radar como a la siembra por geofence (los dos se van
+        // temprano cuando `_kAlarmStart != null`): la detección en background
+        // se moría del todo hasta reinstalar, sin ningún síntoma visible.
+        //
+        // El margen sobre `atMillis` es generoso a propósito: una alarma
+        // inexacta puede llegar tarde, y limpiarla justo antes de que dispare
+        // costaría una detección legítima. El objetivo de otra cuenta, en
+        // cambio, no lo va a adoptar nadie nunca: ese se limpia sin esperar.
+        final ajeno = (t['userKey'] ?? '') != _userKey;
+        final vencido = atMillis == null ||
+            DateTime.now()
+                    .difference(DateTime.fromMillisecondsSinceEpoch(atMillis)) >
+                dwellThreshold;
+        if (ajeno || vencido) {
+          unawaited(cancelStartAlarm());
+          _renderSessionNotif(); // se lleva las notifs que hayan quedado
+        }
       }
+    }
+
+    // 4.b) Al revés: teníamos permanencia en memoria y ya NO está en prefs, así
+    // que el background la resolvió (confirmó la salida, o el arranque abortó).
+    // El paso 4 solo ADOPTA, nunca limpia: sin esto el ticker seguiría contando
+    // y arrancaría un partido fantasma a los 6 min, y _renderSessionNotif
+    // volvería a publicar la notificación que el background acaba de sacar.
+    //
+    // El margen de 10 s cubre la carrera con _beginDwell, que programa la
+    // alarma con `unawaited`: un ping que caiga en ese hueco no debe matar una
+    // permanencia recién nacida. Y si en realidad seguís en la cancha, la
+    // próxima muestra de _evaluate (≤10 s) la vuelve a sembrar por Caso 3:
+    // perder la cuenta es el fallo seguro, arrancar un partido fantasma no.
+    if (isDwelling &&
+        DateTime.now().difference(_dwellSince!) > const Duration(seconds: 10) &&
+        await readPendingStartTarget() == null) {
+      _dwellCourtId = null;
+      _dwellSince = null;
+      _dwellOutsideSince = null;
+      _renderSessionNotif();
+      notifyListeners();
     }
   }
 
@@ -1481,6 +1526,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// sin proceso vivo, la gracia nunca cerraba hasta reabrir la app). Además
   /// arrancamos la gracia + alarma desde acá porque el evento de geofence es
   /// confiable aunque el muestreo GPS no llegue a correr.
+  ///
+  /// Con PERMANENCIA en curso tampoco cortamos el stream: quien confirma esa
+  /// salida es [_evaluate] (Caso 2), con [gpsJitterGrace] de muestras continuas
+  /// afuera, y necesita el stream vivo para correr.
   void leaveCourtArea() {
     // Ídem enterCourtArea: los geofences (GPS real) no deben re-armar la gracia
     // de salida mientras el mock está adentro de la cancha simulada.
@@ -1489,6 +1538,11 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       _beginExitGrace();
       return;
     }
+    // PARTIDO FANTASMA: cortar el stream acá dejaba el dwell vivo en memoria y
+    // sin nadie evaluándolo, pero el ticker seguía corriendo — y a los 6 min
+    // _tick() llama a _startSession() desde el estado en memoria, SIN chequear
+    // GPS. Resultado: arrancaba un partido real en una cancha que ya dejaste.
+    if (isDwelling) return;
     _stopStream();
   }
 

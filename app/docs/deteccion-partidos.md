@@ -243,10 +243,13 @@ El callback tiene dos caminos:
 - **App viva**: reenvía el evento por `IsolateNameServer` al isolate
   principal → `enterCourtArea()` / `leaveCourtArea()` (prende el FGS o
   arranca la gracia).
-- **App muerta**: en ENTER, notifica "Estás en una cancha — abrí 1of1 para
-  registrar tu partido" y **cancela la alarma de cierre** si estabas en
-  gracia de salida (volviste a tiempo y no hay isolate principal que la
-  cancele). El resto lo cubre el radar (§5.5).
+- **App muerta, ENTER**: siembra la permanencia (§8.1.2), **cancela la alarma
+  de cierre** si estabas en gracia de salida (volviste a tiempo y no hay
+  isolate principal que la cancele) y **cancela la confirmación de salida** si
+  habías salido hace menos de un minuto (§8.1.4).
+- **App muerta, EXIT**: si la salida es de la cancha con permanencia sembrada,
+  programa la **confirmación de salida** a 1 min (§8.1.4). El EXIT durante un
+  partido en curso lo sigue cubriendo el radar (§5.5).
 
 ### 5.4 Alarmas exactas del SO (los momentos críticos, app en cualquier estado)
 
@@ -268,6 +271,7 @@ SharedPreferences para que el callback sepa qué hacer sin memoria compartida.
 | **Timeout pregunta** | 100017 | Al preguntar, a +20 min | Si nadie respondió (el flag sigue en la sesión activa): descarta el partido POR COMPLETO (sin pendiente), snooze 2 h 30 min de la cancha, notifica "Partido cancelado". |
 | **Reenganche** | 100020 | Al loguear y al tocar el switch, **periódica 4 h** | Ver §5.6. **No toma GPS ni red**: solo lee prefs. |
 | **Cierre duro 4h** | 100018 | Al responder "Sí", a +1 h de juego neto | Cierra y GUARDA el partido (pendiente de resultado) con el tope como fin, snooze 2 h 30 min, notifica "Llegaste al tiempo límite". |
+| **Salida del dwell** | 100020 | Al salir del radio con permanencia sembrada, a +1 min | Confirma con GPS que seguís afuera (sin fix NO cancela) → cancela el arranque pendiente y las dos notificaciones de la permanencia. Ver §8.1.4. |
 
 Detalle importante del arranque en background: la sesión que escribe la
 alarma va **sin** `lastSeenMillis` a propósito. Su ausencia le dice a
@@ -350,6 +354,10 @@ hecho mientras tanto:
 3. **Quedó un pendiente de resultado** → adoptarlo (dispara "¿Cómo te fue?").
 4. **El radar sembró un dwell** → adoptar la cuenta regresiva donde iba (no
    reiniciarla) y prender el FGS.
+5. **El background MATÓ un dwell que teníamos en memoria** (confirmó la salida,
+   o el arranque abortó) → limpiarlo. El paso 4 solo adopta, nunca limpia: sin
+   este, el ticker seguía contando y arrancaba un **partido fantasma** a los
+   6 min, y la notificación resucitaba apenas se re-renderizaba. Ver §8.1.4.
 
 En sentido inverso, con la app viva el partido persiste un **latido**
 (`_persistActive`) en cada evaluación y cada 30 s del ticker. Al reabrir, si
@@ -364,6 +372,7 @@ latido** (no infla la duración con el tiempo que el celu pasó en el bolsillo).
 | `play_active_session` | sí | servicio + alarmas | Partido en curso: `courtId`, `courtName`, `startMillis`, `endsAtMillis` (si hay gracia), `lastSeenMillis` (latido). |
 | `play_pending_result` | sí | servicio + alarmas | Partido cerrado esperando "¿Cómo te fue?". |
 | `play_alarm_start/end/warn` | no | session_alarms | Objetivo de cada alarma (cancha, coordenadas, hora). |
+| `play_alarm_dwellexit` | no | session_alarms | Objetivo de la confirmación de salida del dwell (§8.1.4). Guarda su **propio** `courtId` para detectar una confirmación que llegó tarde contra una permanencia más nueva. |
 | `play_background_enabled` | sí | setBackground | Preferencia "Detección automática" (default **true**). |
 | `play_dwell_snooze` | sí | "No juego"/DETENER | `{courtId, untilMillis}`. |
 | `play_bg_userkey` | no | SyncCoordinator | userKey activo, para que los isolates armen las claves namespaced. |
@@ -462,6 +471,12 @@ que `session_alarms.dart` tiene **copias deliberadas**: `_kRadiusMeters`,
 `_kConfirmTimeout` (= `confirmTimeout`) y `_kDwellSnooze` (= `dwellSnooze`).
 Y `geofence_service.dart` tiene `kCourtGeofenceRadius` (= `radiusMeters`).
 **Si cambiás una, cambiá su gemela.**
+
+> **`_kDwellExitGrace` es la excepción: NO tiene gemela, y es a propósito.**
+> Con la app viva, `_evaluate` (Caso 2) ya confirma la salida del dwell con
+> `gpsJitterGrace` de muestras **continuas** afuera, que es evidencia más
+> fuerte que el único evento de geofence del que dispone el background. No
+> "arregles" la asimetría agregando una constante gemela. Ver §8.1.4.
 
 ### 8.1.1 Los plugins de background NO aportan sus componentes (ago-2026)
 
@@ -562,6 +577,113 @@ detección, verificar si detectó y no avisó. `adb logcat` y
 el entorno estaba impecable —permiso Siempre, whitelist de Doze, standby bucket
 5 (EXEMPTED), ahorro apagado, alarmas periódicas vivas— y la búsqueda arrancó
 apuntando al lugar equivocado.
+
+### 8.1.4 La permanencia también tiene que morir sola (ago-2026)
+
+**Síntoma reportado:** "entro a la cancha, salen las dos notificaciones, sigo de
+largo y quedan ahí". Y la del cronómetro es `ongoing: true`, así que el usuario
+**ni siquiera puede descartarla deslizando**.
+
+**Causa raíz.** `alarmStartCallback` consume `_kAlarmStart` y después aborta con
+`return` pelado en tres lugares —sin sesión, JSON inválido y **saliste del
+radio**— sin tocar las notificaciones. Solo el camino feliz limpiaba, de rebote,
+porque `showPlaying()` llama a `cancelArrival()` y reemplaza el id 100000. Y el
+evento de geofence EXIT llegaba pero se descartaba (`if (params.event != enter)
+return;`), mientras el radar se va temprano cuando hay permanencia sembrada
+(`if (prefs.getString(_kAlarmStart) != null) return true;`). Nadie reconciliaba
+una salida durante el dwell.
+
+**El bug grande que apareció tirando del hilo: el PARTIDO FANTASMA.** Con la app
+viva pero en segundo plano, el geofence EXIT llamaba a `leaveCourtArea()`, que
+con el dwell en curso hacía `_stopStream()` — matando el stream de GPS que
+`_evaluate` necesitaba para confirmar la salida. Pero el ticker de 1 s sigue
+corriendo, y `_tick()` arranca el partido desde el estado **en memoria, sin
+ningún chequeo de GPS**:
+
+```dart
+} else if (isDwelling) {
+  final ready = dwellRemainingSeconds <= 0 ? _dwellCourt : null;
+  if (ready != null) { _startSession(ready); }
+```
+
+Resultado: **arrancaba un partido real en una cancha que ya habías dejado.** Eso
+era bastante peor que el síntoma reportado.
+
+**Arreglo: dos capas, igual que el resto del sistema.**
+
+- **Vía rápida (~1 min).** El geofence EXIT programa `alarmDwellExitCallback`
+  (id 100020) a `_kDwellExitGrace`. Al minuto, si el GPS confirma que seguís
+  afuera, cancela el arranque pendiente y las dos notificaciones. El minuto no
+  es cosmético: es la confirmación de que no fue un salto aislado de GPS. Si
+  volvés antes, el ENTER cancela la confirmación.
+- **Red de seguridad (6 min).** `alarmStartCallback` limpia en **todos** sus
+  caminos de aborto. Esto es lo que garantiza que las notificaciones nunca
+  queden colgadas aunque el EXIT no llegue nunca: geofences sin registrar,
+  permiso degradado a "solo mientras se usa", el OEM matando Play Services, o
+  una salida por un camino que no cruzó ninguna zona registrada.
+
+**La red de seguridad no es opcional: es lo que habilita que la vía rápida sea
+conservadora.** Por eso `alarmDwellExitCallback` usa
+`_leftArea(defaultWhenNoFix: false)` — sin fix asume que seguís adentro y **no**
+cancela. El no-fix es el caso *común*, no el borde: son 12 s de
+`getCurrentPosition` dentro de un callback de alarma que ya soltó el wakelock, y
+en canchas techadas falla seguido. Cancelar ante la duda mataría detecciones
+legítimas. Además `alarmStartCallback` usa el mismo default para **arrancar** el
+partido: sería incoherente cancelar al minuto por la misma incertidumbre con la
+que a los 6 se hubiera arrancado.
+
+**Tres decisiones que parecen detalles y no lo son:**
+
+1. **La confirmación persiste su PROPIO objetivo** (`play_alarm_dwellexit`) en
+   vez de releer `_kAlarmStart` al disparar. `_oneShotAt` degrada a alarma
+   inexacta **en silencio** cuando falta el permiso de alarmas exactas, así que
+   un "1 min" puede aterrizar a los 8 — cuando `alarmStartCallback` ya consumió
+   el dwell y quizá se sembró otro en otra cancha. Con su propio `courtId`, el
+   callback detecta el desfasaje y no cancela la permanencia equivocada.
+2. **EXIT y ENTER se comparan contra el `courtId` de la permanencia en curso**,
+   no contra cualquier cancha. Con radios de 110 m dos canchas vecinas se
+   solapan: un `cancelDwellExitCheck()` a ciegas en cualquier ENTER rompía el
+   caso de caminar de una cancha a la otra.
+3. **`clearDwellNotifs()` llama a `init()` antes de `cancelSession()`.**
+   `cancelSession()` arranca con `if (!_ready) return;` y no inicializa por su
+   cuenta (a diferencia de `showArrivalAlert`/`showDwellCountdown`): en un
+   isolate recién nacido sería un **no-op mudo**, sin excepción y sin log. Es
+   exactamente la misma clase de fallo silencioso que §8.1.1 y §8.1.3.
+
+**Y el paso 5 de la reconciliación** (§6) es el que cierra el círculo del lado
+del isolate principal: si el background mató la permanencia, hay que limpiarla
+también en memoria. El paso 4 solo **adopta**, nunca limpia — sin el paso 5, el
+ping llegaba, no hacía nada, y el ticker arrancaba el partido fantasma igual
+mientras `_renderSessionNotif` volvía a publicar la notificación que el
+background acababa de sacar.
+
+### 8.1.5 Un objetivo de arranque huérfano MATA la detección en background
+
+`_kAlarmStart` normalmente lo consume `alarmStartCallback` al dispararse. Pero
+la alarma puede no dispararse **nunca**: el equipo apagado justo cuando le
+tocaba, un reset del alarm manager, el OEM matando el proceso, o el permiso de
+alarmas exactas revocado — que el plugin descarta en silencio (§8.4).
+
+El objetivo queda entonces en prefs para siempre. Y como **tanto el radar como
+la siembra por geofence se van temprano cuando `_kAlarmStart != null`**
+(`_radarTick` y `seedDwellForCourt` lo usan como "ya hay algo andando"), un solo
+objetivo huérfano deja la detección en background **muerta hasta reinstalar la
+app**. Sin excepción, sin log, sin síntoma: la app simplemente deja de detectar
+canchas y nadie sabe por qué.
+
+Mismo caso con un objetivo de **otra cuenta**: tras cambiar de usuario, un
+`userKey` distinto no lo va a adoptar nadie, pero sigue bloqueando igual.
+
+**Arreglo:** `pendingDwellIsLive(prefs, uk)` reemplaza al chequeo pelado de
+`!= null` en los dos caminos de background, y `reconcileFromPrefs` (paso 4) hace
+lo propio en el isolate principal. Si el objetivo está huérfano, lo limpia
+—alarma, prefs y notificaciones colgadas— y devuelve false, así el llamador
+sigue de largo y puede sembrar de nuevo.
+
+**El margen para declararlo vencido es generoso a propósito** (`_kDwellThreshold`
+pasado el `atMillis`): una alarma inexacta puede llegar tarde, y limpiarla justo
+antes de que dispare costaría una detección legítima. El objetivo de otra
+cuenta, en cambio, se limpia sin esperar: ese no lo va a adoptar nadie nunca.
 
 ### 8.2 Fabricantes agresivos (Samsung y cía.)
 

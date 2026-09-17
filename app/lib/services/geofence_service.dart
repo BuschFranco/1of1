@@ -48,19 +48,50 @@ Future<void> geofenceTriggered(GeofenceCallbackParams params) async {
         ?.send(<String, dynamic>{'event': params.event.name, 'ids': ids});
   } catch (_) {/* puerto muerto: seguimos por el camino de background */}
 
+  final prefs = await SharedPreferences.getInstance();
+
+  // SALIDA. Va ANTES del gate de sesión a propósito: esta rama solo programa
+  // una limpieza, y exigir token fresco recrearía el bug de las notificaciones
+  // colgadas justo cuando el JWT vence a mitad de la permanencia.
+  if (params.event == GeofenceEvent.exit) {
+    // No cancelamos la permanencia en el acto: un salto aislado de GPS mataría
+    // una detección legítima. Programamos la confirmación a un minuto; si
+    // volvés antes, el ENTER de abajo la da de baja.
+    //
+    // Solo si la salida es de LA CANCHA de la permanencia en curso: con radios
+    // de 110 m dos canchas vecinas se solapan, y salir de una no dice nada de
+    // la otra. `scheduleDwellExitCheck` revalida esto y también que no haya un
+    // partido en curso (esa salida la maneja la gracia del partido, no esto).
+    final t = await readPendingStartTarget();
+    final pendingId = (t?['courtId'] ?? '') as String;
+    if (pendingId.isNotEmpty && ids.contains(pendingId)) {
+      await scheduleDwellExitCheck(pendingId);
+    }
+    return;
+  }
+
   if (params.event != GeofenceEvent.enter) return;
 
   // Sin sesión no hacemos nada: el usuario tocaría la notificación, la app lo
   // mandaría al login y quedaría sin saber dónde se registró su partido.
   // Token laxo: un JWT vencido no debe impedir cancelar el cierre de un
   // partido que sigue en curso.
-  final prefs = await SharedPreferences.getInstance();
   if (!await hasBgSession(prefs, requireFreshToken: false)) return;
 
   // Si volviste a la cancha durante la gracia de salida, cancelamos el cierre
   // automático (el isolate principal puede no estar vivo para hacerlo). Así no
   // se cierra el partido en falso por haberte alejado un momento.
   await cancelEndAlarmOnReenter();
+
+  // Volviste dentro del minuto de confirmación: la salida no se confirma y la
+  // permanencia sigue contando donde iba. Igual que en el EXIT, solo si es LA
+  // MISMA cancha — cancelar a ciegas en cualquier ENTER rompería el caso de
+  // caminar de una cancha a otra vecina.
+  final pending = await readPendingStartTarget();
+  final pendingId = (pending?['courtId'] ?? '') as String;
+  if (pendingId.isNotEmpty && ids.contains(pendingId)) {
+    await cancelDwellExitCheck();
+  }
 
   // ARRANCAR LA DETECCIÓN, no solo avisar. Esta es la vía rápida: el SO nos
   // despierta al cruzar el radio, así que la permanencia empieza a contar ya
