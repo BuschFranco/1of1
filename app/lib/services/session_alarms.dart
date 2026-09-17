@@ -46,6 +46,9 @@ const int kAlarmHardEndId = 100018;
 // [scheduleRadarWatch] si dejó de tickear. Ver el comentario de
 // [scheduleWatchdog] para el porqué.
 const int kAlarmWatchdogId = 100019;
+// Aviso de reenganche: alarma PERIÓDICA inexacta que chequea si pasaron varios
+// días sin una sesión de juego. Ver [scheduleNudge].
+const int kAlarmNudgeId = 100020;
 
 /// Puerto para avisarle al isolate principal que reconcilie desde prefs.
 const String kPlayPortName = 'oneofone_play_port';
@@ -571,6 +574,7 @@ Future<void> cancelAllPlayAlarms() async {
   await cancelHardEndAlarm();
   await cancelRadarWatch();
   await cancelWatchdog();
+  await cancelNudge();
   try {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(kBgUserKey);
@@ -1406,4 +1410,233 @@ void _pingMain() {
     IsolateNameServer.lookupPortByName(kPlayPortName)
         ?.send(<String, dynamic>{'action': 'reconcile'});
   } catch (_) {}
+}
+
+// ── Aviso de vuelta a la cancha (reenganche) ────────────────────────────────
+// La ÚNICA notificación que sale sin que haya pasado nada en la cancha: si el
+// usuario deja de jugar, a los 2 días le avisamos. No es detección — no toma
+// GPS ni red, solo lee prefs — pero vive acá porque necesita una alarma del SO:
+// `notifications_service.dart` solo sabe mostrar notificaciones inmediatas, no
+// programarlas (no hay `zonedSchedule` ni el paquete `timezone`).
+
+/// Cada cuántos días se avisa, una vez por etapa. Después de la última, SILENCIO
+/// hasta que vuelva a jugar: seguir insistiendo cada 2 días es la forma más
+/// rápida de que apague las notificaciones de la app entera.
+const List<int> kNudgeDaysSteps = [2, 5, 10];
+
+/// Ventana horaria en que puede mostrarse (hora local, fin exclusivo). Existe
+/// para que el aviso no suene de madrugada cuando la última sesión terminó
+/// tarde.
+const int kNudgeHourFrom = 18;
+const int kNudgeHourTo = 22;
+
+/// Cadencia de la alarma. **Tiene que ser ≤ el largo de la ventana**: una
+/// grilla de período `s` cae siempre dentro de una ventana de largo ≥ `s`, así
+/// que con 4 h de período y 4 h de ventana hay garantía de un tick por día
+/// caiga donde caiga la grilla. Con 6 h, una grilla 17/23/05/11 se saltearía el
+/// día entero.
+const Duration _kNudgeEvery = Duration(hours: 4);
+
+/// Epoch ms de la última sesión REGISTRADA (no de la última vez que abrió la
+/// app: quien entra todos los días sin ir a jugar es justo a quien hay que
+/// avisarle). Namespaced; la escribe `PlaySessionService.resolvePending`.
+const String kLastSessionBase = 'play_last_session';
+
+/// Etapa de [kNudgeDaysSteps] ya avisada (0..3). Vuelve a 0 al jugar.
+const String kNudgeStageBase = 'play_nudge_stage';
+
+/// Cuándo se avisó por última vez: dos ticks caen dentro de la misma ventana de
+/// 4 h, y sin esto el segundo mostraría el aviso de la etapa siguiente el mismo
+/// día.
+const String kNudgeLastBase = 'play_nudge_last';
+
+/// `{"court": "...", "streak": n}` para personalizar el texto. Lo deja armado
+/// el isolate principal: parsear `play_log` (hasta 100 sesiones de JSON) dentro
+/// de un callback sin wakelock es justo lo que no hay que hacer acá.
+const String kNudgeCtxBase = 'play_nudge_ctx';
+
+/// Preferencia del usuario (default ON). Namespaced como el resto.
+const String kNudgeEnabledBase = 'play_nudge_enabled';
+
+/// Programa el aviso de reenganche. Lo llama SyncCoordinator al loguear y cada
+/// vez que el usuario toca el switch.
+///
+/// **Periódica e INEXACTA, a propósito.** Un aviso de reenganche no tiene
+/// deadline: `exact: true` se descarta en silencio si falta el permiso (ver
+/// [_oneShotAt]) y encima gastaría el presupuesto de alarmas exactas que sí
+/// necesitan las del ciclo de juego. Y periódica —no una cadena de one-shots—
+/// porque el schedule lo mantiene Android; la cadena ya rompió la detección una
+/// vez (ver [scheduleRadarWatch]).
+Future<void> scheduleNudge() async {
+  if (!_isAndroid) return;
+  await AndroidAlarmManager.cancel(kAlarmNudgeId);
+  await AndroidAlarmManager.periodic(
+    _kNudgeEvery,
+    kAlarmNudgeId,
+    alarmNudgeCallback,
+    // `allowWhileIdle` aunque no sea crítica: en Doze profundo una alarma sin
+    // esto se difiere hasta la próxima ventana de mantenimiento, que puede caer
+    // fuera de [kNudgeHourFrom, kNudgeHourTo) y hacer que el aviso no salga
+    // nunca. A una cada 4 h el costo es nulo — Android igual las estrangula a
+    // uno cada ~9 min.
+    wakeup: true,
+    allowWhileIdle: true,
+    rescheduleOnReboot: true,
+  );
+}
+
+Future<void> cancelNudge() async {
+  if (!_isAndroid) return;
+  await AndroidAlarmManager.cancel(kAlarmNudgeId);
+}
+
+/// Título y cuerpo del aviso según la etapa y lo que sepamos del usuario.
+///
+/// Dos familias por etapa: personalizada cuando hay cancha habitual o racha,
+/// genérica cuando no (cuenta nueva, o historial sin nada que destacar). Dentro
+/// de cada una rota con [seed] —el timestamp de la última sesión— así dos
+/// rachas de inactividad seguidas no repiten el mismo texto.
+///
+/// El de la última etapa DICE que es el último. Es deliberado: es lo que hace
+/// que la serie se lea como que la app se preocupa y no como que persigue.
+({String title, String body}) buildNudgeText(
+  int stage,
+  int days,
+  String court,
+  int streak,
+  int seed,
+) {
+  final hayCancha = court.isNotEmpty;
+  final rot = seed.abs();
+  switch (stage) {
+    case 0:
+      if (hayCancha) {
+        return rot % 2 == 0
+            ? (
+                title: 'Hace $days días que $court no te ve',
+                body: 'Una hora alcanza. Fijate quién anda por ahí.'
+              )
+            : (
+                title: '$court te está esperando',
+                body: '$days días afuera. Hoy puede ser el día.'
+              );
+      }
+      return rot % 2 == 0
+          ? (
+              title: '$days días sin pisar una cancha',
+              body: 'La pelota no se tira sola.'
+            )
+          : (
+              title: 'Hace $days días que no jugás',
+              body: 'Buscá una cancha cerca y armá algo.'
+            );
+    case 1:
+      if (streak > 0) {
+        return (
+          title: 'Tu racha de $streak sigue viva. Por ahora.',
+          body: '$days días sin jugar. Todavía estás a tiempo.'
+        );
+      }
+      if (hayCancha) {
+        return (
+          title: '$days días afuera',
+          body: '$court sigue en el mismo lugar.'
+        );
+      }
+      return (
+        title: '$days días afuera',
+        body: 'El que vuelve primero es el que mejor juega.'
+      );
+    default:
+      return hayCancha
+          ? (
+              title: '$days días sin $court',
+              body: 'Último recordatorio, prometido. '
+                  'Cuando quieras volver, te esperamos.'
+            )
+          : (
+              title: '$days días sin jugar',
+              body: 'Último recordatorio, prometido. Acá vamos a estar.'
+            );
+  }
+}
+
+/// Tick del aviso de reenganche. Corre en un isolate de background cada 4 h.
+///
+/// **Barato a propósito**: prefs adentro, notificación afuera y listo. El
+/// plugin invoca los callbacks sin `await`, así que el wakelock se suelta al
+/// primer `await` y todo lo que venga después puede truncarse — por eso acá no
+/// hay ni GPS ni red (a diferencia del radar, que sí toma un fix).
+@pragma('vm:entry-point')
+Future<void> alarmNudgeCallback() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+
+  // Gate ESTRICTO: esto es un aviso proactivo, no el cierre de algo ya en
+  // curso. Mismo criterio que alarmStartCallback.
+  if (!await hasBgSession(prefs)) {
+    await cancelNudge();
+    return;
+  }
+  // Sin userKey no se puede namespacear, y `bgNsKey` cae a la clave pelada:
+  // leeríamos el estado de nadie.
+  final uk = prefs.getString(kBgUserKey) ?? '';
+  if (uk.isEmpty) return;
+
+  if (!(prefs.getBool(bgNsKey(kNudgeEnabledBase, uk)) ?? true)) return;
+
+  // Nunca jugó: "hace 2 días que no jugás" sería mentira. Ese caso es
+  // onboarding, no reenganche.
+  final last = prefs.getInt(bgNsKey(kLastSessionBase, uk)) ?? 0;
+  if (last <= 0) return;
+
+  final stage = prefs.getInt(bgNsKey(kNudgeStageBase, uk)) ?? 0;
+  if (stage >= kNudgeDaysSteps.length) return;
+
+  final now = DateTime.now();
+  if (now.hour < kNudgeHourFrom || now.hour >= kNudgeHourTo) return;
+
+  // Ya se avisó hoy: con período de 4 h entra más de un tick en la ventana.
+  final lastNudge = prefs.getInt(bgNsKey(kNudgeLastBase, uk)) ?? 0;
+  if (lastNudge > 0) {
+    final prev = DateTime.fromMillisecondsSinceEpoch(lastNudge);
+    if (prev.year == now.year &&
+        prev.month == now.month &&
+        prev.day == now.day) {
+      return;
+    }
+  }
+
+  final days =
+      now.difference(DateTime.fromMillisecondsSinceEpoch(last)).inDays;
+
+  // Saltar a la etapa MÁS ALTA ya alcanzada. Sin esto, alguien que estuvo 12
+  // días afuera (o que reinstaló) recibiría las tres etapas en tres noches
+  // seguidas: la de 2 días, la de 5 y la de 10, todas atrasadas. Se avisa una
+  // sola vez, con el mensaje que corresponde a lo que realmente pasó.
+  var etapa = stage;
+  while (etapa + 1 < kNudgeDaysSteps.length &&
+      days >= kNudgeDaysSteps[etapa + 1]) {
+    etapa++;
+  }
+  if (days < kNudgeDaysSteps[etapa]) return;
+
+  var court = '';
+  var streak = 0;
+  try {
+    final raw = prefs.getString(bgNsKey(kNudgeCtxBase, uk));
+    if (raw != null && raw.isNotEmpty) {
+      final ctx = jsonDecode(raw) as Map<String, dynamic>;
+      court = (ctx['court'] as String?) ?? '';
+      streak = (ctx['streak'] as num?)?.toInt() ?? 0;
+    }
+  } catch (_) {/* sin contexto: mensaje genérico */}
+
+  final txt = buildNudgeText(etapa, days, court, streak, last);
+  // Se persiste ANTES de notificar: si el proceso muere entre las dos cosas,
+  // preferimos perder un aviso a mandar el mismo dos veces.
+  await prefs.setInt(bgNsKey(kNudgeStageBase, uk), etapa + 1);
+  await prefs.setInt(bgNsKey(kNudgeLastBase, uk), now.millisecondsSinceEpoch);
+  await NotificationsService.instance.showNudge(txt.title, txt.body);
 }

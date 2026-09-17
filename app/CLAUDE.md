@@ -19,6 +19,21 @@ existentes.
 > | Un partido individual dentro de esa sesión (desglose, formatos, logros) | **partido** |
 > | Un **pickup** (partido agendado con otra gente) | **partido** |
 >
+> **El resultado de una sesión no se elige: se deriva del marcador.** El sheet
+> de cierre (`screens/main_shell.dart`) pregunta cuántos partidos se jugaron y
+> cuántos se ganaron, y de ahí sale Victoria / Derrota / Empate. Antes se elegía
+> a mano Y se cargaba el marcador aparte, así que se podían contradecir y
+> `PlaySession.displayResult` lo tapaba por atrás. Ese getter sigue existiendo
+> **solo** para el historial viejo; no lo uses como excusa para volver a pedir
+> el resultado a mano.
+>
+> **Cada modalidad puntúa distinto.** En 1v1 a 4v4 (media cancha) los tiros
+> valen **1 y 2**; en 5v5 valen **2 y 3**, más el libre. Por eso el desglose se
+> guarda por **valor del tiro** (`u3`/`u2`/`uFT` = puntos anotados en tiros de
+> 3, de 2 y de 1) y NO por tipo: "triple" es un nombre equivocado en 3v3. El
+> sheet muestra solo los valores que existen según el formato cargado. Si
+> escribís UI sobre estos campos, decí "Puntos de 3", nunca "Triples".
+
 > Ojo con la colisión: "sesión" **también** significa la sesión de cuenta
 > ("Cerrar sesión", "Tu sesión expiró"). Donde pueda confundirse —permisos,
 > legales, avisos sueltos— escribí **"sesión de juego"** completo; "sesión" a
@@ -295,6 +310,15 @@ tokens + endpoint).
 - **Constantes duplicadas a propósito**: `session_alarms.dart` tiene copias de
   algunas constantes (`_kRadiusMeters`, `_kMinMatchSeconds`, …) porque el isolate no
   puede leer las del servicio. Si cambiás una, **cambiá su gemela**.
+- **Aviso de reenganche** ("hace 2 días que no jugás"): alarma periódica
+  inexacta (`kAlarmNudgeId`, cada 4 h) que solo lee prefs y muestra la
+  notificación entre las 18 y las 22, escalonada 2/5/10 días con tope. Vive en
+  `session_alarms.dart` porque `notifications_service.dart` **no sabe programar
+  notificaciones** (no hay `zonedSchedule` ni `timezone`): la única forma de
+  despertar la app en dos días es una alarma del SO. Su estado
+  (`play_last_session`, `play_nudge_*`) lo deja masticado el isolate principal —
+  el callback NO puede parsear `play_log`. Detalle en §5.6 de
+  `docs/deteccion-partidos.md`.
 - ⚠️ **El radar de respaldo tiene que seguir siendo `AndroidAlarmManager.periodic`.**
   Convertirlo en una cadena de one-shots exactas (donde cada callback programa el
   siguiente) **ya rompió la detección en background una vez**, y el fallo es mudo:

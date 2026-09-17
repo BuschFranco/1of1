@@ -144,7 +144,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                               showResult:
                                   !hidden.contains(MatchSection.resultado))
                         else if (!hidden.contains(MatchSection.resultado))
-                          _resultOnlyBanner(color, label),
+                          _resultOnlyBanner(color, label, s),
                         if (!hidden.contains(MatchSection.ubicacion) ||
                             !hidden.contains(MatchSection.resultado))
                           const SizedBox(height: 22),
@@ -280,6 +280,14 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                           weight: FontWeight.w900,
                           color: color,
                           letterSpacing: 0.2)),
+                  if (_scoreLabel(s).isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Text(_scoreLabel(s),
+                        style: AppText.archivo(
+                            size: 12,
+                            weight: FontWeight.w700,
+                            color: Colors.white.withAlpha(180))),
+                  ],
                 ],
               ),
             ),
@@ -310,7 +318,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
 
   /// Resultado sin la foto de la cancha, para cuando ocultó la ubicación pero no
   /// el resultado (que normalmente vive dentro del hero).
-  Widget _resultOnlyBanner(Color color, String label) {
+  Widget _resultOnlyBanner(Color color, String label, PlaySession s) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -329,6 +337,14 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                   weight: FontWeight.w900,
                   color: color,
                   letterSpacing: 0.2)),
+          if (_scoreLabel(s).isNotEmpty) ...[
+            const SizedBox(width: 8),
+            Text(_scoreLabel(s),
+                style: AppText.archivo(
+                    size: 12,
+                    weight: FontWeight.w700,
+                    color: AppColors.white(0.55))),
+          ],
         ],
       ),
     );
@@ -1167,6 +1183,17 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 }
 
+/// Marcador de la sesión ("2-1") cuando tuvo más de un partido; vacío si no.
+///
+/// Acompaña SIEMPRE al resultado: con varios partidos, un "VICTORIA" solo no
+/// dice de dónde salió. Las perdidas se infieren como `partidos - ganadas`, por
+/// la misma razón que en [PlaySession.displayResult]: el desglose no registra
+/// empates por partido.
+String _scoreLabel(PlaySession s) =>
+    (s.isMultiGame && s.gamesPlayed >= 2)
+        ? '${s.winsCount}-${s.gamesPlayed - s.winsCount}'
+        : '';
+
 /// Métricas derivadas de lo que anotó el usuario. FUENTE ÚNICA: la usan tanto el
 /// registro en pantalla como la imagen de compartir, así las dos SIEMPRE muestran
 /// lo mismo.
@@ -1258,6 +1285,15 @@ class _ShareCard extends StatelessWidget {
                     weight: FontWeight.w900,
                     color: color,
                     letterSpacing: 0.25)),
+            if (_scoreLabel(s).isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text('${_scoreLabel(s)} EN LA SESIÓN',
+                  style: AppText.archivo(
+                      size: 24,
+                      weight: FontWeight.w700,
+                      letterSpacing: 0.1,
+                      color: Colors.white.withAlpha(150))),
+            ],
             const SizedBox(height: 40),
           ],
           // Cancha: nombre, zona y el chip de tipo se van juntos. La foto no

@@ -251,8 +251,10 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
   Widget _summaryCard(List<PlaySession> matches) {
     final total = matches.fold(0, (s, m) => s + (m.userPoints ?? 0));
     // Una entrada puede valer por varios partidos: el conteo y el promedio van
-    // sobre los partidos REALES, no sobre las entradas del historial.
-    final count = matches.fold(0, (s, m) => s + (m.gamesPlayed + m.trainingsDone));
+    // sobre los partidos REALES, no sobre las entradas del historial. Los
+    // entrenamientos quedan AFUERA del denominador: no anotan puntos, así que
+    // contarlos hundía el promedio de cualquier sesión mixta.
+    final count = matches.fold(0, (s, m) => s + m.gamesPlayed);
     final avg = count > 0 ? total / count : 0.0;
     // "Mejor partido": con los puntos cargados uno por uno sale del mejor
     // partido individual; si solo se cargó el total de la sesión, es lo único
@@ -628,9 +630,9 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
               spacing: 16,
               runSpacing: 6,
               children: [
-                legend(_c3, 'Triples'),
-                legend(_c2, 'Dobles'),
-                legend(_cTl, 'Tiros libres'),
+                legend(_c3, 'Puntos de 3'),
+                legend(_c2, 'Puntos de 2'),
+                legend(_cTl, 'Puntos de 1'),
               ],
             ),
           ],

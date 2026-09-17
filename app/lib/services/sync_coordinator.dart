@@ -70,6 +70,10 @@ class SyncCoordinator {
   // "Siempre"), pero es su propia alarma.
   bool _watchdogOn = false;
 
+  /// Si el aviso de reenganche está programado. Igual que `_radarOn`, el flag
+  /// se enciende DESPUÉS de que la programación haya terminado bien.
+  bool _nudgeOn = false;
+
   void _wire() {
     // Presencia "Jugando" → Notion (best-effort, con reintento vía batch).
     // Además dispara una notificación del sistema en cada arranque/cierre de
@@ -130,6 +134,10 @@ class SyncCoordinator {
     };
     // Al cambiar la preferencia de background, registramos o quitamos geofences.
     _play.onBackgroundChanged = (_) => unawaited(_syncGeofences());
+    // Al cambiar la preferencia del aviso de reenganche, programamos o
+    // cancelamos su alarma. Es independiente de las geofences: el aviso no
+    // necesita ubicación ni permiso "Siempre", solo leer prefs.
+    _play.onNudgeChanged = (_) => unawaited(_syncNudge());
 
     // Cada recompensa (logro/título/nivel) también dispara un push del sistema.
     // chatCreated se salta: solo se muestra el banner in-app.
@@ -254,6 +262,28 @@ class SyncCoordinator {
   /// permiso Android no entrega geofences ni GPS en background: registrarlas
   /// solo daría una falsa sensación de que funciona. Evita re-registrar si la
   /// cantidad de canchas no cambió.
+  /// Programa o cancela el aviso de "hace días que no jugás".
+  ///
+  /// Aparte de `_syncGeofences` a propósito: aquel exige permiso de ubicación
+  /// "Siempre" y canchas cargadas, y el aviso no necesita ninguna de las dos
+  /// cosas — su callback solo lee prefs. Metido ahí adentro, el usuario que no
+  /// dio background nunca recibiría el aviso, que es justo el que más lejos
+  /// está de volver a la cancha.
+  Future<void> _syncNudge() async {
+    final on = _session.profile != null && _play.nudgeEnabled;
+    if (!on) {
+      if (_nudgeOn) {
+        _nudgeOn = false;
+        unawaited(cancelNudge());
+      }
+      return;
+    }
+    if (!_nudgeOn) {
+      _nudgeOn = true;
+      unawaited(scheduleNudge().onError((_, _) => _nudgeOn = false));
+    }
+  }
+
   Future<void> _syncGeofences() async {
     final loggedIn = _session.profile != null;
     final courts = _courts.courts;
@@ -364,6 +394,7 @@ class SyncCoordinator {
         _geofencedCount = -1;
         _radarOn = false;
         _watchdogOn = false;
+        _nudgeOn = false;
         GeofenceService.instance.clear();
         unawaited(cancelAllPlayAlarms());
         // Notificaciones ya posteadas que sobrevivirían al logout.
@@ -407,6 +438,9 @@ class SyncCoordinator {
     // Partidos (partidos anteriores a la migración al backend). Recién cuando
     // el tracking terminó de restaurar (el log local ya está cargado).
     unawaited(tracking.then((_) => _backfillMatchLog(userKey)));
+    // Después del restore: recién ahí `startTracking` dejó el userKey para los
+    // isolates y se sembró la fecha de la última sesión.
+    unawaited(tracking.then((_) => _syncNudge()));
     // Avisar decisiones de moderación sobre las canchas que propuso el usuario
     // (se aprobaron/rechazaron desde la última vez que abrió la app).
     unawaited(_checkCourtDecisions(userKey));

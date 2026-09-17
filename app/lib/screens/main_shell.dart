@@ -589,15 +589,39 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-/// Sheet ÚNICO de cierre de partido: resultado, formato, puntos y desglose.
+/// Qué hizo el usuario en la sesión. Es la PRIMERA pregunta del sheet y la que
+/// decide qué pasos siguen; antes esto venía mezclado con el resultado en una
+/// sola lista de cinco filas, que juntaba dos preguntas distintas ("qué hiciste"
+/// y "cómo te fue") en un mismo control.
+enum _Actividad { partidos, entrenamiento, ambas }
+
+/// Cómo carga sus puntos el usuario. UNO A LA VEZ, a propósito: antes el total
+/// a mano, el desglose por valor de tiro y los puntos por partido convivían y
+/// ninguno se validaba contra los otros, así que se podía guardar un total de 30
+/// con un desglose que sumaba 12. Con un solo modo activo la contradicción es
+/// imposible por construcción y no hace falta inventar validación cruzada.
+enum _ModoPuntos { total, porValor, porPartido }
+
+/// Colores del desglose por valor de tiro. Gemelos de los de
+/// `game_stats_screen.dart`: el input y el gráfico tienen que leerse como la
+/// misma cosa.
+const _dot3 = Color(0xFF3B82F6);
+const _dot2 = Color(0xFFA855F7);
+const _dot1 = Color(0xFFEAB308);
+
+/// Sheet ÚNICO de cierre de la sesión de juego: qué hiciste, el marcador, el
+/// formato y los puntos.
 ///
 /// Antes eran dos sheets encadenados (elegir resultado → cargar estadísticas).
 /// Se unificaron porque son una sola pregunta —"¿qué pasó en la cancha?"— y
 /// encadenar dos hojas para eso se sentía como dos pantallas distintas.
 ///
-/// El resultado es lo único OBLIGATORIO: sin él no hay nada que registrar, así
-/// que los botones quedan deshabilitados hasta elegirlo. Descartar el sheet
-/// devuelve null y el partido se guarda como "Sin información".
+/// **El resultado NO se elige: se deriva del marcador.** Elegirlo a mano y
+/// cargar aparte cuántos partidos se ganaron permitía contradecirse (marcar
+/// VICTORIA con 1 de 3 ganados), y la app lo tapaba por atrás con
+/// [PlaySession.displayResult], que mostraba lo contrario de lo que el usuario
+/// acababa de elegir sin explicar por qué. Ahora el marcador es la entrada y el
+/// resultado es su consecuencia, visible en vivo mientras se carga.
 class _MatchStatsSheet extends StatefulWidget {
   final String courtName;
   final String duration;
@@ -616,29 +640,45 @@ class _MatchStatsSheet extends StatefulWidget {
 }
 
 class _MatchStatsSheetState extends State<_MatchStatsSheet> {
-  /// Resultado elegido. null = todavía no eligió ⇒ no se puede guardar.
-  PlayResult? _result;
+  // ── Paso 1: qué hiciste ──────────────────────────────────────────────────
+  _Actividad _actividad = _Actividad.partidos;
 
-  /// Formato cuando NO hay desglose (jugadores por equipo, 1..5).
-  int _format = 3;
+  /// "No cuentes esta sesión": reemplaza a la fila SIN INFORMACIÓN. Cuando está
+  /// activo, todo lo demás deja de preguntarse.
+  bool _noCuenta = false;
 
+  // ── Paso 2: el marcador ──────────────────────────────────────────────────
+  int _partidos = 1;
+  int _ganados = 0;
+  int _entrenamientos = 1;
+
+  /// Resultado del único partido cuando [_partidos] == 1. Con un solo partido
+  /// un contador 0..1 sería un control raro para una pregunta de tres opciones.
+  PlayResult? _unico;
+
+  // ── Paso 3: formato ──────────────────────────────────────────────────────
+  /// Formato general (jugadores por equipo, 1..5). `null` = el usuario no
+  /// eligió. **No hay default**: antes arrancaba en 3 y el payload lo escribía
+  /// siempre, así que toda sesión decía "3v3" aunque nadie hubiera mirado el
+  /// control, y `hasFormats` no significaba nada.
+  int? _formato;
+
+  /// Un formato por partido: se puede mezclar 3v3 con 1v1 en la misma tarde.
+  final List<int?> _fmts = [];
+
+  // ── Paso 4: puntos ───────────────────────────────────────────────────────
+  _ModoPuntos _modo = _ModoPuntos.total;
   final _ptsCtrl = TextEditingController();
   final _p3Ctrl = TextEditingController();
   final _p2Ctrl = TextEditingController();
   final _p1Ctrl = TextEditingController();
-
-  // ── Desglose "Fue más de un partido" ─────────────────────────────────────
-  // Cerrado por defecto: el caso común sigue siendo un solo partido y no vale la
-  // pena alargarle el formulario a todo el mundo.
-  bool _multi = false;
-  int _matches = 2;
-  int _trainings = 0;
-  int _wins = 0;
-  bool _perGame = false;
   final List<TextEditingController> _gameCtrls = [];
 
-  /// Un formato por partido: se puede mezclar 3v3 con 1v1 en la misma tarde.
-  final List<int> _gameFmts = [];
+  @override
+  void initState() {
+    super.initState();
+    _sync();
+  }
 
   @override
   void dispose() {
@@ -655,83 +695,298 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
   /// Mantiene un controller y un formato por partido al cambiar la cantidad. Se
   /// conservan los valores ya cargados: bajar y volver a subir la cantidad no
   /// debería borrar lo que el usuario venía poniendo.
-  void _syncPerGame() {
-    while (_gameCtrls.length < _matches) {
+  void _sync() {
+    // Ojo: la cantidad de filas depende de la ACTIVIDAD, no de [_noCuenta].
+    // Si dependiera de `_hayPartidos`, tildar "no cuentes esta sesión" borraría
+    // los formatos y los puntos ya cargados, y destildarlo no los devolvería.
+    final n = _actividad == _Actividad.entrenamiento ? 0 : _partidos;
+    while (_gameCtrls.length < n) {
       _gameCtrls.add(TextEditingController());
     }
-    while (_gameCtrls.length > _matches) {
+    while (_gameCtrls.length > n) {
       _gameCtrls.removeLast().dispose();
     }
-    while (_gameFmts.length < _matches) {
-      _gameFmts.add(_format); // arranca con el formato general
+    while (_fmts.length < n) {
+      _fmts.add(_formato);
     }
-    while (_gameFmts.length > _matches) {
-      _gameFmts.removeLast();
+    while (_fmts.length > n) {
+      _fmts.removeLast();
     }
+    if (_ganados > _partidos) _ganados = _partidos;
+    // "Por partido" no tiene sentido con uno solo: ahí el total YA es el del
+    // partido. Se cae a "Total" sin avisar, igual que antes se apagaba el check.
+    if (_partidos < 2 && _modo == _ModoPuntos.porPartido) {
+      _modo = _ModoPuntos.total;
+    }
+    if (!_hayPartidos) _modo = _ModoPuntos.total;
   }
 
-  /// Suma de los puntos por partido, o null si no se cargó ninguno.
-  int? get _gamePointsTotal {
-    if (!_multi || !_perGame) return null;
-    var total = 0;
-    var any = false;
-    for (final c in _gameCtrls) {
-      final v = int.tryParse(c.text.trim());
-      if (v != null) {
-        total += v;
-        any = true;
-      }
-    }
-    return any ? total : null;
+  bool get _hayPartidos =>
+      !_noCuenta &&
+      (_actividad == _Actividad.partidos || _actividad == _Actividad.ambas);
+
+  bool get _hayEntrenamiento =>
+      !_noCuenta &&
+      (_actividad == _Actividad.entrenamiento ||
+          _actividad == _Actividad.ambas);
+
+  /// Formatos efectivamente elegidos, sin repetir. Vacío = el usuario no eligió
+  /// ninguno.
+  Set<int> get _formatosElegidos => {for (final f in _fmts) ?f};
+
+  /// Valores de tiro que existen en esta sesión.
+  ///
+  /// En media cancha (1v1 a 4v4) los tiros valen **1 y 2**; en 5v5 valen **2 y
+  /// 3**, más el libre. Una sesión mixta ofrece los tres porque pasaron las dos
+  /// cosas. Sin formato elegido se muestran los tres: no hay con qué descartar.
+  Set<int> get _valoresDeTiro {
+    final f = _formatosElegidos;
+    if (f.isEmpty) return {3, 2, 1};
+    return {
+      if (f.any((n) => n >= 5)) 3,
+      2,
+      1,
+    };
   }
+
+  // ── Resultado DERIVADO ────────────────────────────────────────────────────
+
+  /// El resultado que se va a guardar. Nunca lo elige el usuario cuando hubo
+  /// más de un partido: sale del marcador, con la MISMA regla que
+  /// [PlaySession.displayResult] usaba para mostrar.
+  ///
+  /// Con un solo partido sí es una elección directa (ganamos/perdimos/empate),
+  /// porque ahí el marcador no agrega información.
+  PlayResult? get _resultado {
+    if (_noCuenta) return PlayResult.notCounted;
+    if (!_hayPartidos) return PlayResult.training;
+    if (_partidos == 1) return _unico;
+    final perdidos = _partidos - _ganados;
+    if (_ganados > perdidos) return PlayResult.win;
+    if (_ganados < perdidos) return PlayResult.loss;
+    return PlayResult.tie;
+  }
+
+  /// Victorias que se guardan. Con un solo partido salen del selector directo,
+  /// no del contador.
+  int get _ganadosEfectivos =>
+      _partidos == 1 ? (_unico == PlayResult.win ? 1 : 0) : _ganados;
+
+  Color _colorDe(PlayResult? r) => switch (r) {
+        PlayResult.win => AppColors.open,
+        PlayResult.loss => AppColors.accentDark,
+        PlayResult.tie => AppColors.white(0.7),
+        PlayResult.training => AppColors.accent,
+        _ => AppColors.white(0.4),
+      };
+
+  // ── Totales calculados ────────────────────────────────────────────────────
+
+  int _val(TextEditingController c) => int.tryParse(c.text.trim()) ?? 0;
+
+  /// Total en modo "Por valor": la cuenta que el usuario ve en pantalla.
+  int get _totalPorValor =>
+      _val(_p3Ctrl) * 3 + _val(_p2Ctrl) * 2 + _val(_p1Ctrl);
+
+  /// Total en modo "Por partido": la suma de las filas.
+  int get _totalPorPartido => _gameCtrls.fold(0, (a, c) => a + _val(c));
+
+  /// El número grande de arriba, o null si es editable a mano. En los modos
+  /// calculados es read-only: dos fuentes editables para el mismo número solo
+  /// generan contradicciones.
+  int? get _totalCalculado => switch (_modo) {
+        _ModoPuntos.total => null,
+        _ModoPuntos.porValor => _totalPorValor,
+        _ModoPuntos.porPartido => _totalPorPartido,
+      };
 
   Map<String, dynamic> _payload({required bool viewDetail}) {
-    final perGameTotal = _gamePointsTotal;
+    final calc = _totalCalculado;
+    final total = calc ?? int.tryParse(_ptsCtrl.text.trim());
+    final porValor = _modo == _ModoPuntos.porValor;
     return {
-      'result': _result!.name,
-      'pts': perGameTotal ?? int.tryParse(_ptsCtrl.text),
-      'p3': int.tryParse(_p3Ctrl.text),
-      'p2': int.tryParse(_p2Ctrl.text),
-      'p1': int.tryParse(_p1Ctrl.text),
-      // Con desglose va un formato por partido; sin desglose, uno solo. Siempre
-      // lista, para que el modelo no tenga dos caminos.
-      'gameFmt': _multi ? List<int>.from(_gameFmts) : <int>[_format],
-      if (_multi) ...{
-        'nMatches': _matches,
-        'nTrainings': _trainings,
-        'nWins': _wins,
-        if (_perGame && perGameTotal != null)
-          'gamePts': [
-            for (final c in _gameCtrls) int.tryParse(c.text.trim()) ?? 0,
-          ],
+      'result': _resultado!.name,
+      // 0 no es un puntaje cargado, es "no cargué nada". Guardarlo metería la
+      // sesión en los promedios con cero puntos.
+      'pts': (total ?? 0) > 0 ? total : null,
+      'p3': porValor && _val(_p3Ctrl) > 0 ? _val(_p3Ctrl) : null,
+      'p2': porValor && _val(_p2Ctrl) > 0 ? _val(_p2Ctrl) : null,
+      'p1': porValor && _val(_p1Ctrl) > 0 ? _val(_p1Ctrl) : null,
+      // El desglose de la sesión va SIEMPRE que haya algo cargado, no solo
+      // cuando fue más de un partido: con un solo partido `nMatches: 1` es
+      // exactamente lo que los getters ya devolvían por defecto, así que no
+      // cambia ningún conteo, pero deja de haber dos caminos.
+      if (!_noCuenta) ...{
+        'nMatches': _hayPartidos ? _partidos : 0,
+        'nTrainings': _hayEntrenamiento ? _entrenamientos : 0,
+        'nWins': _hayPartidos ? _ganadosEfectivos : 0,
       },
+      // Solo si el usuario eligió: una lista con formatos inventados haría que
+      // el detalle mostrara un "3v3" que nadie cargó.
+      if (_hayPartidos && _formatosElegidos.isNotEmpty)
+        'gameFmt': [for (final f in _fmts) f ?? _formato ?? 3],
+      if (_modo == _ModoPuntos.porPartido && _totalPorPartido > 0)
+        'gamePts': [for (final c in _gameCtrls) _val(c)],
       'viewDetail': viewDetail,
     };
   }
 
   // ── Piezas de UI ─────────────────────────────────────────────────────────
 
-  InputDecoration _numDeco(double size) => InputDecoration(
-        hintText: '0',
-        hintStyle: AppText.display(size: size, color: AppColors.white(0.14)),
-        filled: false,
-        isDense: true,
-        contentPadding: const EdgeInsets.only(bottom: 6, top: 2),
-        enabledBorder: UnderlineInputBorder(
-          borderSide: BorderSide(color: AppColors.white(0.12)),
-        ),
-        focusedBorder: const UnderlineInputBorder(
-          borderSide: BorderSide(color: AppColors.accent, width: 2),
+  /// Encabezado de paso. Reemplaza al `microLabel` de 10 px al 45 %: a ese
+  /// tamaño los pasos no se leían como pasos y el sheet era un scroll plano.
+  Widget _paso(String n, String titulo) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          children: [
+            Text(n, style: AppText.display(size: 15, color: AppColors.accent)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(titulo.toUpperCase(),
+                  style: AppText.archivo(
+                      size: 12.5,
+                      weight: FontWeight.w800,
+                      letterSpacing: 0.06,
+                      color: AppColors.white(0.85))),
+            ),
+          ],
         ),
       );
 
-  Widget _numField(String label, TextEditingController ctrl,
-      {bool isLast = false}) {
-    return Expanded(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+  /// Segmentado genérico de chips. Es el mismo control que ya usaba el selector
+  /// de formato, extraído para que todas las preguntas del sheet se elijan
+  /// igual.
+  Widget _segment<T>(
+    List<(T, String)> opciones,
+    T? value,
+    ValueChanged<T> onChanged, {
+    bool compact = false,
+  }) =>
+      Row(
         children: [
-          microLabel(label),
+          for (var i = 0; i < opciones.length; i++) ...[
+            if (i > 0) SizedBox(width: compact ? 4 : 6),
+            Expanded(
+              child: PressableWidget(
+                onTap: () => onChanged(opciones[i].$1),
+                child: Container(
+                  padding: EdgeInsets.symmetric(vertical: compact ? 8 : 11),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: value == opciones[i].$1
+                        ? AppColors.accent
+                        : Colors.transparent,
+                    border: Border.all(
+                      color: value == opciones[i].$1
+                          ? AppColors.accent
+                          : AppColors.white(0.14),
+                    ),
+                    borderRadius: BorderRadius.circular(AppShape.rChip),
+                  ),
+                  child: Text(opciones[i].$2,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.archivo(
+                          size: compact ? 11.5 : 12.5,
+                          weight: FontWeight.w800,
+                          color: value == opciones[i].$1
+                              ? Colors.white
+                              : AppColors.white(0.65))),
+                ),
+              ),
+            ),
+          ],
+        ],
+      );
+
+  Widget _formatPicker(int? value, ValueChanged<int> onChanged,
+          {bool compact = false}) =>
+      _segment<int>(
+        [for (var n = 1; n <= 5; n++) (n, '${n}v$n')],
+        value,
+        onChanged,
+        compact: compact,
+      );
+
+  /// Fila de contador -/+ con la etiqueta a la izquierda, a tamaño legible.
+  ///
+  /// Antes iban tres contadores en una fila con etiquetas de 9 px al 40 % que
+  /// no entraban ("ENTRENAM." truncado). Una pregunta por fila entra completa.
+  Widget _contador(String label, int value, int min, int max,
+      ValueChanged<int> onChanged) {
+    Widget btn(IconData icon, bool enabled, VoidCallback onTap) =>
+        PressableWidget(
+          onTap: enabled ? onTap : null,
+          child: Container(
+            width: 34,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: enabled ? AppColors.white(0.06) : Colors.transparent,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon,
+                size: 18,
+                color: enabled ? AppColors.white(0.85) : AppColors.white(0.18)),
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label,
+                style: AppText.grotesk(
+                    size: 13.5,
+                    weight: FontWeight.w600,
+                    color: AppColors.white(0.8))),
+          ),
+          btn(Icons.remove, value > min, () => onChanged(value - 1)),
+          SizedBox(
+            width: 46,
+            child: Text('$value',
+                textAlign: TextAlign.center,
+                style: AppText.display(size: 24, height: 1.0)),
+          ),
+          btn(Icons.add, value < max, () => onChanged(value + 1)),
+        ],
+      ),
+    );
+  }
+
+  /// Campo numérico DENTRO de una caja. El underline pelado sobre `bgElev`
+  /// prácticamente no se veía: no había forma de saber dónde se escribía.
+  Widget _numBox(
+    String label,
+    TextEditingController ctrl, {
+    Color? dot,
+    bool isLast = false,
+    double size = 22,
+  }) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (dot != null) ...[
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 6),
+              ],
+              Flexible(
+                child: Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.archivo(
+                        size: 11,
+                        weight: FontWeight.w700,
+                        color: AppColors.white(0.65))),
+              ),
+            ],
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: ctrl,
@@ -739,284 +994,311 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
             textAlign: TextAlign.center,
             textInputAction:
                 isLast ? TextInputAction.done : TextInputAction.next,
-            style: AppText.display(size: 24, height: 1.0),
+            style: AppText.display(size: size, height: 1.0),
             cursorColor: AppColors.accent,
             inputFormatters: [
               FilteringTextInputFormatter.digitsOnly,
               LengthLimitingTextInputFormatter(3),
             ],
-            decoration: _numDeco(16),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Fila de resultado: barra de color + label. Al elegir NO cierra el sheet
-  /// (antes sí): queda marcada y el usuario sigue cargando lo demás.
-  Widget _resultRow(PlayResult r, IconData icon, Color color) {
-    final sel = _result == r;
-    return PressableWidget(
-      onTap: () => setState(() => _result = r),
-      child: Container(
-        color: sel ? color.withAlpha(28) : Colors.transparent,
-        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
-        child: Row(
-          children: [
-            Container(width: 4, height: 24, color: color),
-            const SizedBox(width: 14),
-            Icon(icon, size: 18, color: color),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(r.label.toUpperCase(),
-                  style: AppText.archivo(
-                      size: 15,
-                      weight: FontWeight.w800,
-                      letterSpacing: 0.02,
-                      color: sel ? Colors.white : AppColors.white(0.7))),
-            ),
-            if (sel) Icon(Icons.check_rounded, size: 18, color: color),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Selector de formato 1v1..5v5. [compact] para las filas por partido, donde
-  /// no hay ancho para el segmentado grande.
-  Widget _formatPicker(int value, ValueChanged<int> onChanged,
-      {bool compact = false}) {
-    return Row(
-      children: [
-        for (var n = 1; n <= 5; n++) ...[
-          if (n > 1) SizedBox(width: compact ? 4 : 6),
-          Expanded(
-            child: PressableWidget(
-              onTap: () => onChanged(n),
-              child: Container(
-                padding: EdgeInsets.symmetric(vertical: compact ? 6 : 10),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: value == n ? AppColors.accent : Colors.transparent,
-                  border: Border.all(
-                    color:
-                        value == n ? AppColors.accent : AppColors.white(0.12),
-                  ),
-                  borderRadius: BorderRadius.circular(AppShape.rChip),
-                ),
-                child: Text('${n}v$n',
-                    style: AppText.archivo(
-                        size: compact ? 10.5 : 13,
-                        weight: FontWeight.w800,
-                        color: value == n
-                            ? Colors.white
-                            : AppColors.white(0.6))),
+            // El total de arriba es la suma de estos campos: se refresca a
+            // medida que se escribe, NO dentro del build (antes `_ptsCtrl.text`
+            // se mutaba ahí, que es un efecto secundario durante el layout).
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: '0',
+              hintStyle:
+                  AppText.display(size: size, color: AppColors.white(0.14)),
+              filled: true,
+              fillColor: AppColors.card,
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppShape.rField),
+                borderSide: const BorderSide(color: AppColors.line),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppShape.rField),
+                borderSide: const BorderSide(color: AppColors.accent, width: 2),
               ),
             ),
           ),
         ],
+      );
+
+  Widget _nota(String text) => Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Text(text,
+            style: AppText.grotesk(
+                size: 11.5, color: AppColors.white(0.42), height: 1.4)),
+      );
+
+  // ── Pasos ────────────────────────────────────────────────────────────────
+
+  /// Paso 2: el marcador. Todo lo que se carga acá desemboca en la franja de
+  /// resultado, que se actualiza en vivo.
+  Widget _pasoMarcador() {
+    final r = _resultado;
+    final ganados = _ganadosEfectivos;
+    final perdidos = _partidos - ganados;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _paso('2', _hayPartidos ? 'El marcador' : 'Cuánto entrenaste'),
+        if (_hayPartidos) ...[
+          _contador('Partidos jugados', _partidos, 1, 12, (v) {
+            setState(() {
+              _partidos = v;
+              _sync();
+            });
+          }),
+          if (_partidos == 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: _segment<PlayResult>(
+                const [
+                  (PlayResult.win, 'GANAMOS'),
+                  (PlayResult.loss, 'PERDIMOS'),
+                  (PlayResult.tie, 'EMPATE'),
+                ],
+                _unico,
+                (v) => setState(() => _unico = v),
+              ),
+            )
+          else
+            _contador('Cuántos ganaste', _ganados, 0, _partidos,
+                (v) => setState(() => _ganados = v)),
+        ],
+        if (_hayEntrenamiento)
+          _contador('Entrenamientos', _entrenamientos, 1, 12,
+              (v) => setState(() => _entrenamientos = v)),
+        // Franja de resultado derivado: es la respuesta a "cómo te fue" y se ve
+        // MIENTRAS se carga el marcador, en vez de contradecirlo después.
+        if (_hayPartidos) ...[
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 14),
+            decoration: BoxDecoration(
+              color: _colorDe(r).withAlpha(r == null ? 10 : 28),
+              borderRadius: BorderRadius.circular(AppShape.rField),
+              border:
+                  Border.all(color: _colorDe(r).withAlpha(r == null ? 30 : 90)),
+            ),
+            child: r == null
+                ? Text('Elegí cómo terminó para poder guardar',
+                    style: AppText.grotesk(
+                        size: 12.5, color: AppColors.white(0.5)))
+                : Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          // Con un solo partido no hay marcador que mostrar: el
+                          // resultado ES la elección, no su consecuencia.
+                          _partidos == 1
+                              ? 'Un partido'
+                              : '$ganados ${ganados == 1 ? "ganado" : "ganados"}  ·  $perdidos ${perdidos == 1 ? "perdido" : "perdidos"}',
+                          style: AppText.grotesk(
+                              size: 12.5, color: AppColors.white(0.7)),
+                        ),
+                      ),
+                      Icon(Icons.arrow_forward_rounded,
+                          size: 15, color: AppColors.white(0.35)),
+                      const SizedBox(width: 10),
+                      Text(r.label.toUpperCase(),
+                          style: AppText.archivo(
+                              size: 14,
+                              weight: FontWeight.w800,
+                              letterSpacing: 0.04,
+                              color: _colorDe(r))),
+                    ],
+                  ),
+          ),
+          if (_partidos > 1)
+            _nota(
+                'El resultado sale del marcador: no hace falta elegirlo aparte.'),
+        ],
       ],
     );
   }
 
-  /// Contador compacto con -/+. Se usa en vez de un input porque los límites
-  /// (victorias ≤ partidos) quedan garantizados por construcción.
-  Widget _counter(String label, int value, int min, int max,
-      ValueChanged<int> onChanged) {
-    Widget btn(IconData icon, bool enabled, VoidCallback onTap) =>
-        PressableWidget(
-          onTap: enabled ? onTap : null,
-          child: SizedBox(
-            width: 26,
-            height: 26,
-            child: Icon(icon,
-                size: 16,
-                color: enabled ? AppColors.white(0.8) : AppColors.white(0.2)),
-          ),
-        );
-    return Expanded(
-      child: Column(
+  /// Paso 3: formato. Es lo que define cuánto vale cada tiro, así que va ANTES
+  /// de los puntos.
+  Widget _pasoFormato() => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label.toUpperCase(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppText.grotesk(
-                  size: 9,
-                  weight: FontWeight.w700,
-                  color: AppColors.white(0.4),
-                  letterSpacing: 0.06)),
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.only(bottom: 4),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: AppColors.white(0.12))),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                btn(Icons.remove, value > min, () => onChanged(value - 1)),
-                Text('$value', style: AppText.display(size: 22, height: 1.0)),
-                btn(Icons.add, value < max, () => onChanged(value + 1)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Desglose de la sesión: cuántos partidos/entrenamientos/victorias y, por
-  /// partido, su formato y sus puntos.
-  Widget _multiSection() {
-    return Column(
-      children: [
-        PressableWidget(
-          onTap: () => setState(() {
-            _multi = !_multi;
-            if (_multi) _syncPerGame();
-          }),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Row(
-              children: [
-                Icon(Icons.groups_2_outlined,
-                    size: 18,
-                    color: _multi ? AppColors.accent : AppColors.white(0.45)),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text('FUE MÁS DE UN PARTIDO',
-                      style: AppText.archivo(
-                          size: 13,
-                          weight: FontWeight.w800,
-                          letterSpacing: 0.04,
-                          color:
-                              _multi ? Colors.white : AppColors.white(0.7))),
-                ),
-                Icon(_multi ? Icons.expand_less : Icons.expand_more,
-                    size: 20, color: AppColors.white(0.4)),
-              ],
-            ),
-          ),
-        ),
-        if (_multi)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          _paso('3', _partidos == 1 ? 'Formato' : 'Formato de cada partido'),
+          if (_partidos == 1)
+            _formatPicker(
+              _fmts.isEmpty ? _formato : _fmts.first,
+              (n) => setState(() {
+                _formato = n;
+                if (_fmts.isNotEmpty) _fmts[0] = n;
+              }),
+            )
+          else
+            for (var i = 0; i < _fmts.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
                   children: [
-                    _counter('Partidos', _matches, 0, 12, (v) {
-                      setState(() {
-                        _matches = v;
-                        // Las victorias no pueden superar a los partidos: el
-                        // tope se ajusta solo al bajar la cantidad.
-                        if (_wins > _matches) _wins = _matches;
-                        _syncPerGame();
-                        if (_matches < 2) _perGame = false;
-                      });
-                    }),
-                    const SizedBox(width: 8),
-                    _counter('Entrenam.', _trainings, 0, 12,
-                        (v) => setState(() => _trainings = v)),
-                    const SizedBox(width: 8),
-                    _counter('Victorias', _wins, 0, _matches,
-                        (v) => setState(() => _wins = v)),
-                  ],
-                ),
-                if (_matches >= 2) ...[
-                  const SizedBox(height: 14),
-                  PressableWidget(
-                    onTap: () => setState(() => _perGame = !_perGame),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _perGame
-                              ? Icons.check_box_rounded
-                              : Icons.check_box_outline_blank_rounded,
-                          size: 18,
-                          color:
-                              _perGame ? AppColors.accent : AppColors.white(0.4),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text('Cargar los puntos de cada partido',
-                              style: AppText.grotesk(
-                                  size: 12.5,
-                                  weight: FontWeight.w600,
-                                  color: AppColors.white(0.75))),
-                        ),
-                      ],
+                    SizedBox(
+                      width: 30,
+                      child: Text('P${i + 1}',
+                          style: AppText.archivo(
+                              size: 12,
+                              weight: FontWeight.w800,
+                              color: AppColors.white(0.6))),
                     ),
-                  ),
-                ],
-                // Una fila por partido: su formato y, si se pidió, sus puntos.
-                if (_gameFmts.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  microLabel('Formato de cada partido'),
-                  const SizedBox(height: 8),
-                  for (var i = 0; i < _gameFmts.length; i++)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 26,
-                            child: Text('P${i + 1}',
-                                style: AppText.grotesk(
-                                    size: 11,
-                                    weight: FontWeight.w700,
-                                    color: AppColors.white(0.45))),
-                          ),
-                          Expanded(
-                            child: _formatPicker(
-                              _gameFmts[i],
-                              (n) => setState(() => _gameFmts[i] = n),
-                              compact: true,
-                            ),
-                          ),
-                          if (_perGame) ...[
-                            const SizedBox(width: 10),
-                            SizedBox(
-                              width: 54,
-                              child: TextField(
-                                controller: _gameCtrls[i],
-                                keyboardType: TextInputType.number,
-                                textAlign: TextAlign.center,
-                                style: AppText.display(size: 18, height: 1.0),
-                                cursorColor: AppColors.accent,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(3),
-                                ],
-                                // Refresca el total de arriba, que es la suma.
-                                onChanged: (_) => setState(() {}),
-                                decoration: _numDeco(14),
-                              ),
-                            ),
-                          ],
-                        ],
+                    Expanded(
+                      child: _formatPicker(
+                        _fmts[i],
+                        (n) => setState(() {
+                          _fmts[i] = n;
+                          _formato ??= n;
+                        }),
+                        compact: true,
                       ),
                     ),
-                ],
+                  ],
+                ),
+              ),
+          _nota(
+              'En 1v1 a 4v4 los tiros valen 1 y 2. En 5v5, 2 y 3, más el libre.'),
+        ],
+      );
+
+  /// Paso 4: los puntos. Un modo de carga a la vez (ver [_ModoPuntos]).
+  Widget _pasoPuntos() {
+    final calc = _totalCalculado;
+    final valores = _valoresDeTiro;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _paso('4', 'Tus puntos'),
+        _segment<_ModoPuntos>(
+          [
+            (_ModoPuntos.total, 'TOTAL'),
+            (_ModoPuntos.porValor, 'POR VALOR'),
+            if (_partidos >= 2) (_ModoPuntos.porPartido, 'POR PARTIDO'),
+          ],
+          _modo,
+          (v) => setState(() => _modo = v),
+          compact: true,
+        ),
+        const SizedBox(height: 16),
+        // El número grande. Editable solo en modo "Total"; en los otros dos es
+        // la cuenta de lo de abajo y se muestra bloqueado.
+        if (calc == null)
+          TextField(
+            controller: _ptsCtrl,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            textInputAction: TextInputAction.done,
+            style: AppText.display(size: 48, height: 1.0),
+            cursorColor: AppColors.accent,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(3),
+            ],
+            decoration: InputDecoration(
+              hintText: '0',
+              hintStyle:
+                  AppText.display(size: 48, color: AppColors.white(0.12)),
+              filled: true,
+              fillColor: AppColors.card,
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 14),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppShape.rField),
+                borderSide: const BorderSide(color: AppColors.line),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppShape.rField),
+                borderSide: const BorderSide(color: AppColors.accent, width: 2),
+              ),
+            ),
+          )
+        else
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(AppShape.rField),
+              border: Border.all(color: AppColors.line),
+            ),
+            child: Column(
+              children: [
+                Text('$calc',
+                    style: AppText.display(
+                        size: 48,
+                        height: 1.0,
+                        color:
+                            calc > 0 ? AppColors.ink : AppColors.white(0.18))),
+                const SizedBox(height: 4),
+                Text(
+                  _modo == _ModoPuntos.porValor
+                      ? _cuentaPorValor()
+                      : 'Suma de tus $_partidos partidos',
+                  style:
+                      AppText.grotesk(size: 11, color: AppColors.white(0.42)),
+                ),
               ],
             ),
           ),
+        const SizedBox(height: 14),
+        if (_modo == _ModoPuntos.porValor)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (valores.contains(3)) ...[
+                Expanded(child: _numBox('Pts de 3', _p3Ctrl, dot: _dot3)),
+                const SizedBox(width: 10),
+              ],
+              Expanded(child: _numBox('Pts de 2', _p2Ctrl, dot: _dot2)),
+              const SizedBox(width: 10),
+              Expanded(
+                  child:
+                      _numBox('Pts de 1', _p1Ctrl, dot: _dot1, isLast: true)),
+            ],
+          ),
+        if (_modo == _ModoPuntos.porPartido)
+          Column(
+            children: [
+              for (var i = 0; i < _gameCtrls.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _numBox(
+                    'Partido ${i + 1}${_fmts[i] != null ? "  ·  ${_fmts[i]}v${_fmts[i]}" : ""}',
+                    _gameCtrls[i],
+                    size: 18,
+                    isLast: i == _gameCtrls.length - 1,
+                  ),
+                ),
+            ],
+          ),
+        _nota(_hayEntrenamiento
+            ? 'Los entrenamientos no suman puntos: esto es lo que anotaste jugando. No importa si no es exacto, con el tiempo se arma tu promedio.'
+            : 'No importa si no es exacto: con el tiempo se arma tu promedio.'),
       ],
     );
+  }
+
+  /// La cuenta a la vista, para que el número grande no salga de la nada.
+  String _cuentaPorValor() {
+    final partes = <String>[
+      if (_valoresDeTiro.contains(3) && _val(_p3Ctrl) > 0) '${_val(_p3Ctrl)}×3',
+      if (_val(_p2Ctrl) > 0) '${_val(_p2Ctrl)}×2',
+      if (_val(_p1Ctrl) > 0) '${_val(_p1Ctrl)}',
+    ];
+    return partes.isEmpty ? 'Cargá tus tiros abajo' : partes.join('  +  ');
   }
 
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     final screenH = MediaQuery.of(context).size.height;
-    final puedeGuardar = _result != null;
-
-    // El total lo manda la suma por partido mientras esa carga esté activa.
-    final perGameTotal = _gamePointsTotal;
-    if (perGameTotal != null && _ptsCtrl.text != '$perGameTotal') {
-      _ptsCtrl.text = '$perGameTotal';
-    }
+    final puedeGuardar = _resultado != null;
 
     return Padding(
       // El padding del teclado va AFUERA del container: así el sheet flota por
@@ -1055,85 +1337,70 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                 ],
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 1) Resultado (obligatorio)
-                    for (final o in <(PlayResult, IconData, Color)>[
-                      (PlayResult.win, Icons.emoji_events, AppColors.open),
-                      (PlayResult.loss, Icons.thumb_down_alt_outlined,
-                          AppColors.accentDark),
-                      (PlayResult.tie, Icons.handshake_outlined,
-                          AppColors.white(0.7)),
-                      (PlayResult.training, Icons.fitness_center,
-                          AppColors.accent),
-                      (PlayResult.notCounted, Icons.not_interested,
-                          AppColors.white(0.4)),
-                    ]) ...[
-                      if (o.$1 != PlayResult.win) hairline(),
-                      _resultRow(o.$1, o.$2, o.$3),
-                    ],
-                    const SizedBox(height: 20),
-                    // 2) Formato general. Con desglose no va: ahí cada partido
-                    //    tiene el suyo y tener los dos confundiría.
-                    if (!_multi) ...[
-                      microLabel('Formato'),
-                      const SizedBox(height: 8),
-                      _formatPicker(
-                          _format, (n) => setState(() => _format = n)),
-                      const SizedBox(height: 20),
-                    ],
-                    // 3) Puntos
-                    microLabel(perGameTotal != null
-                        ? 'Puntos anotados (suma)'
-                        : 'Puntos anotados'),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _ptsCtrl,
-                      keyboardType: TextInputType.number,
-                      textAlign: TextAlign.center,
-                      textInputAction: TextInputAction.next,
-                      // Con los puntos cargados partido por partido el total es
-                      // la suma y se bloquea: dos fuentes editables para el
-                      // mismo número solo generan contradicciones.
-                      readOnly: perGameTotal != null,
-                      style: AppText.display(size: 48, height: 1.0),
-                      cursorColor: AppColors.accent,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(3),
+                    // ── Paso 1: qué hiciste ──────────────────────────────
+                    _paso('1', '¿Qué hiciste?'),
+                    _segment<_Actividad>(
+                      const [
+                        (_Actividad.partidos, 'PARTIDOS'),
+                        (_Actividad.entrenamiento, 'ENTRENÉ'),
+                        (_Actividad.ambas, 'LAS DOS'),
                       ],
-                      decoration: _numDeco(20),
+                      _noCuenta ? null : _actividad,
+                      (v) => setState(() {
+                        _actividad = v;
+                        _noCuenta = false;
+                        _sync();
+                      }),
+                      compact: true,
                     ),
-                    const SizedBox(height: 16),
-                    // Desglose por VALOR del tiro: en 3x3 los tiros valen 1 y 2,
-                    // así que "triple" sería un nombre equivocado.
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _numField('Pts de 3', _p3Ctrl),
-                        const SizedBox(width: 10),
-                        _numField('Pts de 2', _p2Ctrl),
-                        const SizedBox(width: 10),
-                        _numField('Pts de 1', _p1Ctrl, isLast: true),
+                    const SizedBox(height: 10),
+                    PressableWidget(
+                      onTap: () => setState(() {
+                        _noCuenta = !_noCuenta;
+                        _sync();
+                      }),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _noCuenta
+                                  ? Icons.check_box_rounded
+                                  : Icons.check_box_outline_blank_rounded,
+                              size: 17,
+                              color: _noCuenta
+                                  ? AppColors.accent
+                                  : AppColors.white(0.35),
+                            ),
+                            const SizedBox(width: 8),
+                            Text('No cuentes esta sesión',
+                                style: AppText.grotesk(
+                                    size: 12.5,
+                                    color: _noCuenta
+                                        ? AppColors.white(0.85)
+                                        : AppColors.white(0.55))),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (!_noCuenta) ...[
+                      const SizedBox(height: 22),
+                      _pasoMarcador(),
+                      if (_hayPartidos) ...[
+                        const SizedBox(height: 26),
+                        _pasoFormato(),
+                        const SizedBox(height: 26),
+                        _pasoPuntos(),
                       ],
-                    ),
-                    const SizedBox(height: 12),
-                    // 4) Desglose de la sesión
-                    _multiSection(),
-                    const SizedBox(height: 14),
-                    Text(
-                      'No importa si no es exacto: con el tiempo se arma tu promedio.',
-                      style: AppText.grotesk(
-                          size: 11.5,
-                          color: AppColors.white(0.4),
-                          height: 1.4),
-                    ),
-                    const SizedBox(height: 20),
+                    ],
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),
@@ -1194,7 +1461,9 @@ class _MatchStatsSheetState extends State<_MatchStatsSheet> {
                         ),
                       ),
                       child: Text(
-                          puedeGuardar ? 'VER RESULTADO' : 'ELEGÍ UN RESULTADO',
+                          puedeGuardar
+                              ? 'VER RESULTADO'
+                              : 'ELEGÍ CÓMO TERMINÓ',
                           style: AppText.archivo(
                               size: 13,
                               weight: FontWeight.w800,

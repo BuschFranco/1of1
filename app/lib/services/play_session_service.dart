@@ -117,6 +117,14 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   String get _kNotifs => _k('reward_notifications');
   String get _kCalRecord => _k('play_calorie_record');
   String get _kHealthEnabled => _k('play_health_enabled');
+  // Estado del aviso de reenganche. Lo escribe este servicio y lo LEE el
+  // isolate de la alarma (`alarmNudgeCallback`), que arma las mismas claves con
+  // `bgNsKey` + `kBgUserKey`. Las bases están declaradas en session_alarms.dart
+  // para que no haya dos literales que se puedan desincronizar.
+  String get _kLastSession => _k(kLastSessionBase);
+  String get _kNudgeStage => _k(kNudgeStageBase);
+  String get _kNudgeCtx => _k(kNudgeCtxBase);
+  String get _kNudgeEnabled => _k(kNudgeEnabledBase);
   String get _kVisibility => _k('match_visibility');
   // Buffer de partidos pendientes de subir a la DB "Partidos" de Notion. Se
   // sube en lote en el flush (mala señal en la cancha = reintento, sin perder
@@ -159,6 +167,12 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Si el usuario habilitó la detección en segundo plano.
   bool get backgroundEnabled => _background;
+
+  /// Si el usuario quiere que le avisemos cuando pasan días sin jugar.
+  /// Encendido por defecto: es el comportamiento que el usuario espera de una
+  /// app que "se acuerda" de él, y se puede apagar de un toque en Privacidad.
+  bool _nudge = true;
+  bool get nudgeEnabled => _nudge;
 
   /// Notifica cuando empieza/termina un partido, para propagar la presencia
   /// (ej. actualizar el estado "Jugando" en Notion vía Session).
@@ -695,7 +709,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
 
   // ── Stats de juego ingresadas por el usuario (derivadas del log) ────────
 
-  /// Partidos que tienen stats de juego ingresadas.
+  /// Sesiones que tienen stats de juego ingresadas.
   int get userStatsMatches =>
       _log.where((s) => s.userPoints != null).length;
 
@@ -703,29 +717,55 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   int get totalUserPoints =>
       _log.fold(0, (sum, s) => sum + (s.userPoints ?? 0));
 
-  /// Suma total de triples.
+  /// Suma total de puntos anotados en tiros de 3.
   int get totalUserPts3 =>
       _log.fold(0, (sum, s) => sum + (s.userPts3 ?? 0));
 
-  /// Suma total de dobles.
+  /// Suma total de puntos anotados en tiros de 2.
   int get totalUserPts2 =>
       _log.fold(0, (sum, s) => sum + (s.userPts2 ?? 0));
 
-  /// Suma total de tiros libres.
+  /// Suma total de puntos anotados en tiros de 1.
   int get totalUserPts1 =>
       _log.fold(0, (sum, s) => sum + (s.userPts1 ?? 0));
 
-  /// Promedio de puntos por partido (solo partidos con stats).
+  /// Promedio de puntos por SESIÓN (solo sesiones con stats).
   double get avgUserPoints =>
       userStatsMatches > 0 ? totalUserPoints / userStatsMatches : 0;
 
-  /// Mejor marca de puntos en un solo partido (récord personal).
+  /// Mejor marca de puntos en una sola SESIÓN (récord personal).
   int get bestUserPoints => _log
       .where((s) => s.userPoints != null)
       .fold(0, (m, s) => (s.userPoints ?? 0) > m ? (s.userPoints ?? 0) : m);
 
+  // ── Los mismos números, pero por PARTIDO ──────────────────────────────────
+  // Una entrada del historial puede valer por varios partidos, así que dividir
+  // por entradas da un promedio inflado (una tarde de 5 partidos pesa lo mismo
+  // que una de 1). Los entrenamientos NO entran en el denominador: no anotan
+  // puntos, y contarlos hundiría el promedio de una sesión mixta.
 
-  /// Total de tiros anotados (triples + dobles + tiros libres).
+  /// Partidos reales con stats cargadas (denominador de los promedios).
+  int get userGamesWithStats => _log
+      .where((s) => s.userPoints != null)
+      .fold(0, (a, s) => a + s.gamesPlayed);
+
+  /// Promedio de puntos por PARTIDO.
+  double get avgPointsPerGame =>
+      userGamesWithStats > 0 ? totalUserPoints / userGamesWithStats : 0;
+
+  /// Mejor marca de puntos en un solo PARTIDO.
+  ///
+  /// Si la sesión se cargó partido por partido sale del mejor individual; si
+  /// solo se cargó el total de la sesión, eso es todo lo que se sabe.
+  int get bestGamePoints => _log.where((s) => s.userPoints != null).fold(0, (m, s) {
+        final v = s.hasGamePoints
+            ? s.gamePoints!.fold(0, (a, b) => b > a ? b : a)
+            : (s.userPoints ?? 0);
+        return v > m ? v : m;
+      });
+
+
+  /// Total de tiros anotados (de 3 + de 2 + de 1).
   int get totalUserMadeShots =>
       totalUserPts3 + totalUserPts2 + totalUserPts1;
 
@@ -1623,6 +1663,51 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// Avisa cuando cambia [nudgeEnabled], para que el coordinador programe o
+  /// cancele la alarma. Mismo cableado que [onBackgroundChanged].
+  void Function(bool enabled)? onNudgeChanged;
+
+  /// Enciende o apaga el aviso de reenganche.
+  ///
+  /// Al apagarlo la alarma se cancela en el acto (lo hace el coordinador): una
+  /// alarma periódica que despierta el equipo para no hacer nada es gasto puro.
+  Future<void> setNudge(bool enabled) async {
+    _nudge = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kNudgeEnabled, enabled);
+    onNudgeChanged?.call(enabled);
+    notifyListeners();
+  }
+
+  /// Deja masticado lo que el isolate de la alarma necesita para el aviso.
+  ///
+  /// El callback corre sin wakelock garantizado, así que no puede parsear
+  /// `play_log` (hasta 100 sesiones de JSON) ni consultar nada en memoria: todo
+  /// lo que vaya a usar tiene que estar ya resuelto en prefs.
+  ///
+  /// [played] en true cuando acaba de registrarse una sesión: estampa el
+  /// momento y **resetea la etapa**, que es lo que hace que la escalera de
+  /// avisos (2/5/10 días) arranque de cero cada vez que el usuario vuelve.
+  Future<void> _persistNudgeState({required bool played}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (played) {
+        await prefs.setInt(
+            _kLastSession, DateTime.now().millisecondsSinceEpoch);
+        await prefs.setInt(_kNudgeStage, 0);
+      }
+      // Cancha habitual: `breakdown` ya viene ordenado por tiempo jugado.
+      final b = breakdown;
+      await prefs.setString(
+        _kNudgeCtx,
+        jsonEncode({
+          'court': b.isEmpty ? '' : b.first.name,
+          'streak': _streak,
+        }),
+      );
+    } catch (_) {/* best-effort: sin esto el aviso sale genérico, no falla */}
+  }
+
   /// Stream de ubicación con servicio en primer plano (mantiene la app viva en
   /// background). Su rol principal es ese; la detección la sigue haciendo el
   /// ticker con getCurrentPosition (funciona aunque estés quieto).
@@ -2147,10 +2232,21 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     // fijo), así el peso del resultado escala con lo que jugaste. Victoria y
     // derrota valen IGUAL a propósito: el resultado es autorreportado y no
     // queremos incentivo a mentir; ganar sigue rindiendo vía racha y logros.
+    //
+    // El empate vale menos (0.20) cuando ES un empate: un partido que terminó
+    // parejo. Pero desde que el sheet deriva el resultado del marcador, `tie`
+    // también aparece por una SESIÓN pareja —2 ganados y 2 perdidos— donde se
+    // jugó y se ganó tanto como en cualquier otra. Cobrarle 0.20 a eso sería
+    // castigar haber cargado el desglose.
+    //
+    // El corte es en DOS partidos a propósito: con uno solo el empate sigue
+    // siendo un empate real y vale lo de siempre, así que la EXP de nadie se
+    // mueve por este cambio.
+    final sesionPareja = (matchCount ?? 0) >= 2;
     final resultPct = switch (result) {
       PlayResult.win => 0.30,
       PlayResult.loss => 0.30,
-      PlayResult.tie => 0.20,
+      PlayResult.tie => sesionPareja ? 0.30 : 0.20,
       PlayResult.training => 0.15,
       PlayResult.notCounted => 0.0,
     };
@@ -2260,6 +2356,8 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     await _persistPoints();
     await _persistCalorieRecord();
     await _clearPending();
+    // El usuario volvió a jugar: reinicia la escalera del aviso de reenganche.
+    await _persistNudgeState(played: true);
     _recomputeBadges();
     _checkLevelUp(); // los puntos ganados pueden haber subido el nivel
     notifyListeners();
@@ -2606,6 +2704,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _points = prefs.getInt(_kPoints) ?? 0;
     _calorieRecord = prefs.getDouble(_kCalRecord) ?? 0;
     _healthEnabled = prefs.getBool(_kHealthEnabled) ?? false;
+    _nudge = prefs.getBool(_kNudgeEnabled) ?? true;
     _defaultHidden
       ..clear()
       ..addAll(MatchSectionX.parseAll(prefs.getStringList(_kVisibility)));
@@ -2820,6 +2919,17 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       // background; si seguimos jugando en background, la re-dibuja correcta.
       _renderSessionNotif();
     }
+
+    // Estado del aviso de reenganche. Si nunca se escribió `play_last_session`
+    // —todo usuario que ya venía usando la app— se siembra desde el historial,
+    // que está ordenado del más reciente al más viejo. Sin esto el aviso no se
+    // activaría hasta la PRÓXIMA sesión, y justo el que dejó de jugar no va a
+    // tener una próxima sesión que lo active.
+    if (prefs.getInt(_kLastSession) == null && _log.isNotEmpty) {
+      await prefs.setInt(_kLastSession, _log.first.endedAtMillis);
+    }
+    await _persistNudgeState(played: false);
+
     notifyListeners();
   }
 
@@ -3009,13 +3119,18 @@ class PlaySession {
   final bool distanceEstimated;
 
   // ── Estadísticas ingresadas por el usuario (opcionales) ──────────────────
-  /// Puntos anotados por el usuario en este partido.
+  //
+  // El desglose va por VALOR del tiro, no por tipo: en media cancha (1v1 a 4v4)
+  // los tiros valen 1 y 2, y en 5v5 valen 2 y 3 más el libre. Un mismo tiro de
+  // larga distancia vale 2 en 3v3 y 3 en 5v5, así que "triple" sería un nombre
+  // equivocado. Ver la regla en el sheet de cierre (`main_shell.dart`).
+  /// Puntos anotados por el usuario en toda la sesión.
   final int? userPoints;
-  /// Triples anotados (tiros de 3 puntos).
+  /// Puntos anotados en tiros de 3.
   final int? userPts3;
-  /// Dobles anotados (tiros de 2 puntos).
+  /// Puntos anotados en tiros de 2.
   final int? userPts2;
-  /// Tiros libres anotados (tiros de 1 punto).
+  /// Puntos anotados en tiros de 1.
   final int? userPts1;
 
   /// ¿Este partido marcó un récord personal de calorías? (para destacarlo).
@@ -3300,6 +3415,7 @@ class PlaySession {
         trainingCount: trainingCount,
         winCount: winCount,
         gamePoints: gamePoints,
+        gameFormats: gameFormats,
         // Estas SÍ se fusionan (no se arrastran): son el motivo de la re-lectura
         // diferida. Solo rellenan lo que falta, igual que el pulso y los pasos.
         spo2: spo2 ?? hm.spo2,

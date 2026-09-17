@@ -66,6 +66,10 @@ class NotificationsService {
   /// conviven: el aviso interrumpe una vez y el cronómetro queda persistente.
   static const int _arrivalId = 100002;
 
+  /// Aviso de reenganche ("hace 2 días que no jugás"). Id fijo para que los
+  /// avisos de distintas etapas se reemplacen entre sí en vez de apilarse.
+  static const int _nudgeId = 100003;
+
   /// Lo invoca el handler de la acción "EMPEZAR YA" (con el proceso vivo). Lo
   /// cablea SyncCoordinator para llamar a `PlaySessionService.startNow()`.
   VoidCallback? onStartNowAction;
@@ -160,6 +164,21 @@ class NotificationsService {
     importance: Importance.high,
   );
 
+  // Aviso de reenganche: no es urgente como la llegada a la cancha (que
+  // interrumpe a propósito) pero tampoco mudo como el cronómetro. Va en canal
+  // PROPIO —y no colgado de 'rewards'— para que el usuario pueda silenciar solo
+  // esto sin perderse los logros ni el aviso de llegada.
+  //
+  // MISMO OJO AL ID que en `_arrivalChannel`: Android ignora los cambios de
+  // importancia sobre un canal ya creado.
+  static const AndroidNotificationChannel _nudgeChannel =
+      AndroidNotificationChannel(
+    'nudge',
+    'Volvé a la cancha',
+    description: 'Aviso cuando pasan varios días sin que juegues',
+    importance: Importance.defaultImportance,
+  );
+
   void _onResponse(NotificationResponse response) {
     if (response.actionId == kStartNowAction) onStartNowAction?.call();
     if (response.actionId == kStopAction) onStopAction?.call();
@@ -218,6 +237,7 @@ class NotificationsService {
       await android?.createNotificationChannel(_channel);
       await android?.createNotificationChannel(_sessionChannel);
       await android?.createNotificationChannel(_arrivalChannel);
+      await android?.createNotificationChannel(_nudgeChannel);
       _ready = true;
       // App abierta desde una notificación de pickup (proceso estaba muerto):
       // capturamos el id para enrutar al chat en cuanto se cablee el listener.
@@ -391,6 +411,32 @@ class NotificationsService {
     if (!_ready) return;
     try {
       await _plugin.cancel(_arrivalId);
+    } catch (_) {/* ignorar */}
+  }
+
+  /// Aviso de reenganche: pasaron varios días sin una sesión de juego.
+  ///
+  /// Lo dispara una alarma del SO desde un isolate de background (ver
+  /// `session_alarms.dart`), así que llega con la app cerrada. Sin botones: el
+  /// tap abre la app, que es todo lo que se le pide.
+  Future<void> showNudge(String title, String body) async {
+    if (!_ready) await init();
+    if (!_ready) return;
+    try {
+      const details = NotificationDetails(
+        android: AndroidNotificationDetails(
+          'nudge',
+          'Volvé a la cancha',
+          channelDescription: 'Aviso cuando pasan varios días sin que juegues',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+          autoCancel: true,
+          // El texto nombra la cancha habitual del usuario: mismo criterio de
+          // privacidad que el cronómetro, no va en la pantalla bloqueada.
+          visibility: NotificationVisibility.private,
+        ),
+      );
+      await _plugin.show(_nudgeId, title, body, details);
     } catch (_) {/* ignorar */}
   }
 

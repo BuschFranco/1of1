@@ -1447,12 +1447,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final cells = <Widget>[
       stat('Puntos totales', '${ps.totalUserPoints}', Icons.score,
           const Color(0xFFFF6B1A)),
-      stat('Prom. por sesión', ps.avgUserPoints.toStringAsFixed(1),
+      // Por PARTIDO, no por sesión: una tarde de 5 partidos no puede pesar lo
+      // mismo que una de 1. Son los mismos getters que usa game_stats_screen,
+      // que antes mostraba otro número bajo la misma idea.
+      stat('Prom. por partido', ps.avgPointsPerGame.toStringAsFixed(1),
           Icons.trending_up, const Color(0xFF22C55E)),
-      if (ps.bestUserPoints > 0)
-        stat('Mejor sesión', '${ps.bestUserPoints}', Icons.emoji_events,
+      if (ps.bestGamePoints > 0)
+        stat('Mejor partido', '${ps.bestGamePoints}', Icons.emoji_events,
             const Color(0xFFEAB308)),
-      stat('Sesiones', '${ps.userStatsMatches}', Icons.event_available,
+      stat('Partidos', '${ps.userGamesWithStats}', Icons.event_available,
           const Color(0xFF64748B)),
       if (ps.avgUserPointsPerMinute > 0)
         stat('Puntos por min', ps.avgUserPointsPerMinute.toStringAsFixed(1),
@@ -1946,6 +1949,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// "2-1  ·  " cuando la sesión tuvo más de un partido; vacío si no. Los
+  /// perdidos se infieren (el desglose no registra empates por partido), igual
+  /// que en `PlaySession.displayResult`.
+  String _marcador(PlaySession s) {
+    if (!s.isMultiGame || s.gamesPlayed < 2) return '';
+    return '${s.winsCount}-${s.gamesPlayed - s.winsCount}  ·  ';
+  }
+
   Widget _historyRow(PlaySession s) {
     final (color, label) = _resultStyle(s.displayResult);
     final healthOn = context.read<PlaySessionService>().healthEnabled;
@@ -1975,7 +1986,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     children: [
                       _flatChip(color, label),
                       Text(
-                        '  ·  ${PlaySessionService.fmt(s.seconds)}  ·  ${_fmtDate(s.endedAtMillis)}',
+                        // Con varios partidos el marcador va a la vista: un
+                        // "VICTORIA" solo no dice de dónde salió.
+                        '  ·  ${_marcador(s)}${PlaySessionService.fmt(s.seconds)}  ·  ${_fmtDate(s.endedAtMillis)}',
                         style: AppText.grotesk(
                             size: 11, color: AppColors.white(0.45)),
                       ),
@@ -4363,14 +4376,18 @@ class _PrivacyDialogState extends State<_PrivacyDialog> {
   late bool _time = widget.profile.shareTime;
   late bool _showLast = widget.profile.showLastPlayed;
   late bool _background = context.read<PlaySessionService>().backgroundEnabled;
+  late bool _nudge = context.read<PlaySessionService>().nudgeEnabled;
   bool _saving = false;
 
   Future<void> _save() async {
     final play = context.read<PlaySessionService>();
     final session = context.read<Session>();
     setState(() => _saving = true);
-    // Background es local (por dispositivo); se aplica siempre.
+    // Background y aviso de reenganche son locales (por dispositivo); se
+    // aplican siempre, aunque después falle la escritura de las preferencias
+    // de privacidad, que sí van al backend.
     await play.setBackground(_background);
+    await play.setNudge(_nudge);
     final err = await session.setSharePrefs(
           shareStatus: _status,
           shareCourt: _court,
@@ -4512,6 +4529,12 @@ class _PrivacyDialogState extends State<_PrivacyDialog> {
             'Detecta y guarda tus sesiones de juego aunque no tengas la app abierta. Requiere permiso de ubicación "Siempre".',
             _background,
             _toggleBackground,
+          ),
+          _switchRow(
+            'Recordarme volver a jugar',
+            'Un aviso si pasan varios días sin que pises una cancha. Como mucho tres, y después te dejamos en paz.',
+            _nudge,
+            (v) => setState(() => _nudge = v),
           ),
         ],
       ),

@@ -97,6 +97,15 @@ El servicio está siempre en uno de estos estados (por usuario, namespaced):
 - Al cerrar, el partido queda **pendiente de resultado**: la app pregunta
   "¿Cómo te fue?" y recién ahí `resolvePending()` computa puntos, logros,
   historial y lo encola en `pending_matches` para subir con `POST /matches`.
+- El sheet de "¿Cómo te fue?" (`_MatchStatsSheet` en `screens/main_shell.dart`)
+  va en cuatro pasos: qué hiciste → el marcador → el formato → los puntos. Dos
+  reglas que **no** hay que revertir:
+  - **El resultado se DERIVA del marcador**, no se elige. Pedirlo a mano y
+    cargar las victorias aparte permitía contradecirse, y `displayResult` lo
+    tapaba mostrando lo contrario de lo elegido.
+  - **Un solo modo de carga de puntos a la vez** (total / por valor de tiro /
+    por partido). Antes los tres convivían sin validarse entre sí y se podía
+    guardar un total que no cuadraba con su propio desglose.
 
 ### 3.1 Partido largo: AWAITING CONFIRM (pregunta de las 3h)
 
@@ -257,6 +266,7 @@ SharedPreferences para que el callback sepa qué hacer sin memoria compartida.
 | **Radar** | 100015 | Ver §5.5 | — |
 | **Pregunta 3h** | 100016 | Al arrancar el partido, a +2 h (reprogramada al reanudar una pausa: el umbral es juego neto) | Si el partido sigue (sin gracia ni pregunta previa): estampa `confirmAskedAtMillis` en la sesión activa ("pausa" en background), muestra "¿Seguís jugando?" con SÍ/NO y programa el timeout. |
 | **Timeout pregunta** | 100017 | Al preguntar, a +20 min | Si nadie respondió (el flag sigue en la sesión activa): descarta el partido POR COMPLETO (sin pendiente), snooze 2 h 30 min de la cancha, notifica "Partido cancelado". |
+| **Reenganche** | 100020 | Al loguear y al tocar el switch, **periódica 4 h** | Ver §5.6. **No toma GPS ni red**: solo lee prefs. |
 | **Cierre duro 4h** | 100018 | Al responder "Sí", a +1 h de juego neto | Cierra y GUARDA el partido (pendiente de resultado) con el tope como fin, snooze 2 h 30 min, notifica "Llegaste al tiempo límite". |
 
 Detalle importante del arranque en background: la sesión que escribe la
@@ -290,6 +300,37 @@ cadencia del radar), + 6 min de dwell = el partido arranca como muy tarde
 ~21 min después de llegar. La gracia de salida, ídem: cierre como muy tarde
 ~21 min después de irte, pero el cierre usa `endsAtMillis` como tope así el
 tiempo jugado no se infla.
+
+### 5.6 Aviso de reenganche ("hace 2 días que no jugás")
+
+La única notificación que sale **sin que haya pasado nada en la cancha**. Vive
+en `session_alarms.dart` por una razón de infraestructura, no de detección:
+`notifications_service.dart` solo sabe mostrar notificaciones **inmediatas**
+(no hay `zonedSchedule` ni el paquete `timezone`), así que lo único que puede
+despertar a la app en dos días es una alarma del SO.
+
+- **Alarma periódica cada 4 h, INEXACTA** (`kAlarmNudgeId`). Inexacta porque no
+  hay deadline que cumplir: `exact: true` se descarta en silencio sin el
+  permiso y gastaría el presupuesto que sí necesitan las alarmas del ciclo de
+  juego. Periódica —y no una cadena de one-shots— por lo mismo que el radar
+  (§8.4).
+- **Solo dispara entre las 18:00 y las 22:00**, para no sonar de madrugada. El
+  período (4 h) es ≤ el largo de la ventana (4 h) **a propósito**: una grilla de
+  período `s` cae siempre dentro de una ventana de largo ≥ `s`, así que hay
+  garantía de un tick por día caiga donde caiga la grilla. Con 6 h, una grilla
+  17/23/05/11 se saltearía el día entero.
+- **Escalera con tope**: avisa a los 2, 5 y 10 días, una vez cada uno, y después
+  silencio hasta que vuelva a jugar. El mensaje de la última etapa dice que es
+  el último.
+- El callback es **barato a propósito**: prefs adentro, notificación afuera. Sin
+  GPS y sin red, porque el plugin invoca los callbacks sin `await` y todo lo que
+  venga después del primer `await` puede truncarse.
+- Estado (namespaced, lo deja masticado el isolate principal porque el callback
+  no puede parsear las 100 sesiones de `play_log`): `play_last_session` (última
+  sesión **registrada**, no la última vez que abrió la app), `play_nudge_stage`,
+  `play_nudge_last`, `play_nudge_ctx` (cancha habitual + racha, para
+  personalizar) y `play_nudge_enabled` (el switch, en Perfil → Privacidad).
+- Se cancela en `cancelAllPlayAlarms()` con el logout, junto con `kBgUserKey`.
 
 ## 6. Reconciliación: cómo se sincronizan los isolates
 
