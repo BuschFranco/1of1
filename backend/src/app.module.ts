@@ -7,6 +7,7 @@ import { HealthModule } from './health/health.module';
 import { FriendsModule } from './friends/friends.module';
 import { GeoModule } from './geo/geo.module';
 import { MatchesModule } from './matches/matches.module';
+import { NewsModule } from './news/news.module';
 import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PickupsModule } from './pickups/pickups.module';
@@ -25,6 +26,7 @@ import { UploadsModule } from './uploads/uploads.module';
     PickupsModule,
     FriendsModule,
     GeoModule,
+    NewsModule,
     MatchesModule,
     ClansModule,
     RankingsModule,

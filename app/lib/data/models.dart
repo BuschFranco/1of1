@@ -122,6 +122,38 @@ class Review {
 
 }
 
+/// Nota de noticias (NBA / WNBA / Liga Nacional). Forma común aunque el
+/// backend la arme desde dos fuentes distintas (ESPN o NewsData.io) — ver
+/// `backend/src/news/news.module.ts`.
+class NewsArticle {
+  final String title;
+  final String summary;
+  final String url;
+  final String imageUrl;
+  final String source;
+  final String publishedAt;
+
+  const NewsArticle({
+    this.title = '',
+    this.summary = '',
+    this.url = '',
+    this.imageUrl = '',
+    this.source = '',
+    this.publishedAt = '',
+  });
+
+  factory NewsArticle.fromApi(Map<String, dynamic> json) {
+    return NewsArticle(
+      title: json['title'] as String? ?? '',
+      summary: json['summary'] as String? ?? '',
+      url: json['url'] as String? ?? '',
+      imageUrl: json['imageUrl'] as String? ?? '',
+      source: json['source'] as String? ?? '',
+      publishedAt: json['publishedAt'] as String? ?? '',
+    );
+  }
+}
+
 /// Publicación en el feed de una cancha.
 class CourtPost {
   final String pageId;

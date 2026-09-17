@@ -126,8 +126,8 @@ class _AppTabBarState extends State<AppTabBar>
         AppTab.list => isActive ? Icons.stadium : Icons.stadium_outlined,
         // Botón principal: la pelota de básquet (el ícono que tenía Canchas).
         AppTab.plus => Icons.sports_basketball,
-        AppTab.chat =>
-          isActive ? Icons.chat_bubble : Icons.chat_bubble_outline,
+        // Social: Crew (chats/pickups) + Noticias, ya no es solo mensajería.
+        AppTab.chat => isActive ? Icons.groups : Icons.groups_outlined,
         AppTab.profile => isActive ? Icons.person : Icons.person_outline,
       };
 

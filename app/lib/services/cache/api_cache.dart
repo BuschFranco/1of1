@@ -36,6 +36,9 @@ class ApiCache {
   static const Duration ttlPickups = Duration(seconds: 60);
   static const Duration ttlFriends = Duration(seconds: 60);
   static const Duration ttlRanking = Duration(minutes: 2);
+  // Noticias no necesitan frescura al segundo, y el backend ya cachea 30 min
+  // de su lado (cupo compartido de NewsData.io) — acompañamos ese número.
+  static const Duration ttlNews = Duration(minutes: 30);
 
   /// Valor cacheado sin importar su edad (o null si nunca se guardó).
   static T? peek<T>(String key) => _store[key]?.value as T?;

@@ -386,6 +386,14 @@ class ApiClient {
         'mode': mode,
       }));
 
+  // ── Noticias ───────────────────────────────────────────────────────────
+
+  /// Feed de noticias de [league] ('nba' | 'wnba' | 'lnb'). Lista vacía si la
+  /// liga no es válida o la fuente falló — la llamada a ESPN/NewsData.io la
+  /// hace el backend, ver `NewsService` para el porqué.
+  Future<List<Map<String, dynamic>>> getNews(String league) =>
+      _list(_send('GET', '/news', query: {'league': league}));
+
   /// Sube una imagen de cancha (ya comprimida) a Storage vía multipart.
   /// Devuelve la URL pública. Timeout propio más largo que el de JSON.
   ///

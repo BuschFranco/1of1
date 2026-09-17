@@ -15,7 +15,6 @@ import '../widgets/form_style.dart';
 import '../widgets/match_status_pill.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/reward_banner.dart';
-import 'crew_screen.dart';
 import 'create_screen.dart';
 import 'detail_screen.dart';
 import 'filters_screen.dart';
@@ -23,6 +22,7 @@ import 'home_screen.dart';
 import 'list_screen.dart';
 import 'match_detail_screen.dart';
 import 'profile_screen.dart';
+import 'social_screen.dart';
 
 /// ValueNotifier global para el badge de activity en el tab de crew.
 /// Se setea desde pickup_create_screen al crear un chat de equipo, y se limpia
@@ -43,6 +43,9 @@ class _MainShellState extends State<MainShell> {
   // Subpestaña del Perfil (0 = Perfil, 1 = Amigos). Vive acá para que el swipe
   // del shell pueda alternarla antes de saltar a otra pestaña principal.
   int _profileTab = 0;
+
+  // Subpestaña de Social (0 = Crew, 1 = Noticias). Mismo motivo que _profileTab.
+  int _socialTab = 0;
 
   // Tope de seguridad del loader: si las señales (mapa/GPS/canchas) no llegan,
   // igual lo ocultamos a los 6s para no dejar la app tapada.
@@ -205,6 +208,11 @@ class _MainShellState extends State<MainShell> {
       setState(() => _profileTab = 0);
       return true;
     }
+    // Ídem en Social: si estás en Noticias, atrás vuelve a Crew.
+    if (_tab == AppTab.chat && _socialTab == 1) {
+      setState(() => _socialTab = 0);
+      return true;
+    }
     if (_tabHistory.isNotEmpty) {
       final prev = _tabHistory.removeLast();
       setState(() {
@@ -247,6 +255,17 @@ class _MainShellState extends State<MainShell> {
       }
       if (v > 0 && _profileTab == 1) {
         setState(() => _profileTab = 0); // swipe derecha → Perfil
+        return;
+      }
+    }
+    // Ídem, para el segmento Crew/Noticias de Social.
+    if (_tab == AppTab.chat) {
+      if (v < 0 && _socialTab == 0) {
+        setState(() => _socialTab = 1); // swipe izquierda → Noticias
+        return;
+      }
+      if (v > 0 && _socialTab == 1) {
+        setState(() => _socialTab = 0); // swipe derecha → Crew
         return;
       }
     }
@@ -427,7 +446,11 @@ class _MainShellState extends State<MainShell> {
           enterDir: _slideDir,
         ),
       AppTab.plus => const CreateScreen(key: ValueKey('tab:plus')),
-      AppTab.chat => const CrewScreen(key: ValueKey('tab:chat')),
+      AppTab.chat => SocialScreen(
+          key: const ValueKey('tab:chat'),
+          activeTab: _socialTab,
+          onTabChange: (t) => setState(() => _socialTab = t),
+        ),
       AppTab.profile => ProfileScreen(
           key: const ValueKey('tab:profile'),
           onSelectCourt: _openDetail,

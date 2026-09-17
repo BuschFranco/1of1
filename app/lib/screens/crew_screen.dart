@@ -9,7 +9,14 @@ import '../widgets/pressable_widget.dart';
 import 'pickup_chat_screen.dart';
 
 class CrewScreen extends StatefulWidget {
-  const CrewScreen({super.key});
+  /// Espacio arriba del título antes de que empiece el scroll. Default: el
+  /// mismo que siempre tuvo (pantalla completa, sin nada arriba). Dentro de
+  /// `SocialScreen` (segmento Crew/Noticias) el selector de segmentos ya
+  /// ocupa ese lugar, así que ahí se pasa un valor chico para no duplicar el
+  /// espacio en blanco.
+  final double topPadding;
+
+  const CrewScreen({super.key, this.topPadding = 56});
 
   @override
   State<CrewScreen> createState() => _CrewScreenState();
@@ -67,7 +74,7 @@ class _CrewScreenState extends State<CrewScreen> {
         color: AppColors.accent,
         backgroundColor: AppColors.bgElev,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 56, 20, 160),
+          padding: EdgeInsets.fromLTRB(20, widget.topPadding, 20, 160),
           children: [
             // Titular de dos líneas, como Canchas: la segunda en acento.
             Text.rich(

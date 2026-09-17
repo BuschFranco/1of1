@@ -101,6 +101,7 @@ Ejemplos: `_ReviewsSection`, `_PostsSection` en `detail_screen.dart`.
 | Ranking de amigos | `ranking::<period>` | 2 min | `_RankingSheet` en `profile_screen.dart` |
 | Ranking global | `globalranking::<period>` | 2 min | `ranking_screen.dart` |
 | Mensajes de chat | `chat::<pickupId>` | (semilla) | `PickupChatScreen` (últimos ~50; el polling incremental sigue igual) |
+| Noticias por liga | `news::<league>` (nba/wnba/lnb) | 30 min | `NewsScreen`. Sin invalidación por mutación: nadie crea noticias desde el cliente, es TTL puro. |
 
 Notas:
 
