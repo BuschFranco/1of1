@@ -1,6 +1,6 @@
 ---
 import { useTranslations } from '../../i18n';
-import type { Lang } from '../../lib/urls';
+import { asset, type Lang } from '../../lib/urls';
 
 interface Props {
   lang: Lang;
@@ -44,6 +44,20 @@ const s = t.seasons;
       }
     </div>
 
+    <!-- Captura REAL del detalle de una cancha (rating y conquista), recortada
+         para que no salgan nombres ni ubicación. -->
+    <figure class="seasons-shot reveal">
+      <img
+        src={asset('app-conquista.png')}
+        alt={s.shotAlt}
+        width="986"
+        height="395"
+        loading="lazy"
+        decoding="async"
+      />
+      <figcaption>{s.shotCaption}</figcaption>
+    </figure>
+
     <div class="seasons-keep reveal">
       <span class="material-symbols-outlined">shield_lock</span>
       <div>
@@ -58,6 +72,26 @@ const s = t.seasons;
   /* Alterna con el --bg de Discover (la sección anterior). */
   .seasons {
     background: var(--bg-lowest);
+  }
+
+  .seasons-shot {
+    margin: 40px auto 0;
+    max-width: 520px;
+  }
+
+  .seasons-shot img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+  }
+
+  .seasons-shot figcaption {
+    margin-top: 12px;
+    text-align: center;
+    color: var(--ink-muted);
+    font-size: var(--fs-label);
   }
 
   .seasons-lead {

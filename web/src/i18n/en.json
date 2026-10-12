@@ -8,12 +8,12 @@
     "menu": "Open menu"
   },
   "hero": {
-    "badge": "ELITE PERFORMANCE",
+    "badge": "STREET BASKETBALL",
     "title1": "THE COURT",
     "title2": "IS YOURS",
-    "subtitle": "The ultimate tactical advantage for the modern hooper. Find premium courts near you, track every movement with GPS precision, and dominate the leaderboard with elite analytics.",
+    "subtitle": "The ultimate tactical advantage for the modern hooper. Find courts near you, log every play session without lifting a finger, and climb a real leaderboard.",
     "cta1": "DOWNLOAD NOW",
-    "cta2": "WATCH TRAILER",
+    "cta2": "SEE FEATURES",
     "freeNote": "No subscriptions. No hidden fees.",
     "freeAccent": "100% free."
   },
@@ -21,48 +21,39 @@
     "title": "PLAYBOOK",
     "eyebrow": "01 // FEATURES",
     "items": [
-      { "icon": "location_on", "title": "FIND YOUR COURT", "body": "Real-time court scouting. See how many players are currently on court and get live condition reports." },
-      { "icon": "distance", "title": "GPS GAME TRACKER", "body": "Automatic playtime logging and movement heatmaps. Know exactly where you dominate on the floor." },
-      { "icon": "analytics", "title": "ELITE STATS", "body": "Professional-grade analytics. Track FG%, speed metrics, and verticality in every pickup game." }
+      { "icon": "location_on", "title": "FIND YOUR COURT", "body": "A map of the courts in your area: hours, surface, lighting and which ones are open right now. Pick how to get there, on foot or by vehicle." },
+      { "icon": "distance", "title": "LOGS ITSELF", "body": "You arrive at the court and your play session starts on its own; you leave and it closes on its own. It works even with the app closed. You touch nothing." },
+      { "icon": "analytics", "title": "YOUR GAME, YOUR NUMBERS", "body": "Log how many games you played, how many you won and in what format, from 1v1 to 5v5. The app gives you points per game, win rate and your best game." }
     ],
-    "liveTracking": "LIVE TRACKING",
+    "liveTracking": "AUTO-DETECTION",
+    "chips": ["Nearby", "Open now", "Lit", "Free", "Indoor"],
     "bars": [
-      { "label": "Shots", "value": "85%", "pct": 85 },
-      { "label": "Win Rate", "value": "62%", "pct": 62 },
-      { "label": "Heart", "value": "142bpm", "pct": 94 },
-      { "label": "Stamina", "value": "78%", "pct": 78 },
-      { "label": "Speed", "value": "18km/h", "pct": 71 }
+      { "label": "Win rate", "value": "62%", "pct": 62 },
+      { "label": "% pts from 3", "value": "34%", "pct": 34 },
+      { "label": "Peak zone", "value": "53%", "pct": 53 },
+      { "label": "Max zone", "value": "33%", "pct": 33 },
+      { "label": "Cardio", "value": "13%", "pct": 13 }
     ]
   },
   "stats": {
-    "playerId": "PLAYER_ID_001",
-    "playerName": "[CLAN]@tomi_b",
-    "level": "LEVEL",
-    "winRate": "WIN RATE",
-    "avgSpd": "AVG SPD",
-    "speed": "18.2 MPH",
     "title": "MASTER YOUR",
     "titleAccent": "METRICS",
-    "desc": "Don't just play—analyze. Our deep-learning algorithm breaks down your movement patterns, shot efficiency, and fatigue levels to give you a pro-ready profile.",
+    "shotAlt": "1of1 profile: level, XP, games, streak and ranking.",
+    "desc": "Don't just play—analyze. Every session gets logged: how many games you played, how many you won and how many points you scored in each. With a watch connected, real effort is added: heart-rate zones, calories and distance.",
     "list": [
-      "Pro-Grade Shot Selection Heatmaps",
-      "High-Speed Displacement Tracking",
-      "Regional Leaderboard Progression"
+      "Points per game, best game and win rate",
+      "Heart-rate effort zones and calories with a personal record",
+      "Ranking by week, month, season or all-time"
     ],
-    "cta": "VIEW MY DATA",
-    "metrics": [
-      { "label": "Distance", "value": "4.8 km" },
-      { "label": "Active Time", "value": "48 min" },
-      { "label": "Calories", "value": "620 kcal" },
-      { "label": "Avg Heart", "value": "138 bpm" }
-    ]
+    "cta": "VIEW MY DATA"
   },
   "cta": {
     "title": "UNLEASH YOUR POTENTIAL",
-    "subtitle": "Find where to play, log every game and take your progress with you. The next court is waiting for you.",
+    "subtitle": "Find where to play, log every session and take your progress with you. The next court is waiting for you.",
     "appStore": "APP STORE",
     "playStore": "PLAY STORE",
     "comingSoon": "Coming soon",
+    "androidNote": "Available on Android first.",
     "freeNote": "No subscriptions. No hidden fees."
   },
   "footer": {
@@ -78,11 +69,11 @@
     "eyebrow": "02 // THE ALLIANCE",
     "share": {
       "title": "Share your results",
-      "body": "Track your performance and share your stats with friends and on social media. Show your progress and challenge other players."
+      "body": "When you close your session, the app builds a card ready for your stories: result, score and your numbers, made to read even as a thumbnail. Share it with your crew and dare them to beat it."
     },
     "socialHub": {
       "title": "SOCIAL HUB",
-      "body": "Stay connected. Chat with your crew, share highlights on social media, and scout the competition in real-time.",
+      "body": "Add friends by their @handle and see who's playing and where, when they share their status with you. Chat with your crew and set up every pickup from the app.",
       "friendsActive": "3 FRIENDS ACTIVE NOW",
       "friend1": "[BOCA]@agus",
       "friend1Status": "Playing at Plaza Italia",
@@ -102,13 +93,13 @@
       "publicBody": "Post your game and anyone can jump in straight from the map, no invite needed. Perfect when you're two players short and don't want to sit out."
     },
     "clan": {
-      "badge": "NEW: CLAN SYSTEM",
+      "badge": "CLANS",
       "title": "CONQUER THE COURT",
-      "body": "Introduce your squad to the global stage. Win matches at your local park to claim the title of",
-      "highlight": "CANCHA CONQUISTADA POR EL CLAN",
+      "body": "Put your clan's tag on and earn XP at your court. The clan with the most XP in the season claims the title of",
+      "highlight": "COURT CONQUERED BY THE CLAN",
       "currentRulers": "CURRENT RULERS",
       "clanName": "RENN",
-      "cta": "CHALLENGE CLAN"
+      "cta": "DEFEND MY COURT"
     },
     "leaderboard": {
       "title": "KING OF THE COURT",
@@ -164,29 +155,31 @@
         "body": "Long enough that whoever actually played wins, not whoever had one good week — but short enough that a rematch is always around the corner."
       }
     ],
+    "shotAlt": "A court detail in 1of1: rating and the clan that conquered it this season.",
+    "shotCaption": "Every court shows which clan conquered it this season.",
     "keepTitle": "Your progress isn't wiped",
     "keepBody": "A season resets the competition, not your history: your level, your achievements and your lifetime XP stay for good. You can view your numbers by week, month, season or all time."
   },
   "wearables": {
     "title": "PLAY WITH YOUR WATCH ON",
     "eyebrow": "05 // YOUR BODY",
-    "lead": "If you play wearing a smartwatch or a band, 1of1 reads the real effort of every game —heart rate, calories, steps and distance— and turns it into metrics you can't eyeball.",
+    "lead": "If you play wearing a smartwatch or a band that syncs with Health Connect, 1of1 reads the real effort of every session —heart rate, calories, steps and distance, plus blood oxygen or heart-rate variability if your watch measures them— and turns it into metrics you can't eyeball.",
     "comboTitle": "Your body and your game, together",
-    "comboBody": "The watch tells you how hard you pushed; the points you log at the end tell you how it went on court. Cross both halves and you see what neither shows alone: whether your stamina improves game after game, whether you play differently once your heart rate spikes, and where you're actually getting better.",
-    "chartTitle": "YOUR PROGRESSION",
+    "comboBody": "The watch tells you how hard you pushed; the points you log at the end tell you how it went on court. Both sit together in each session's detail: heart-rate zones, calories with a personal record and your points per game.",
+    "chartTitle": "EFFORT AND POINTS",
     "chartPhysical": "Body",
     "chartGame": "Game",
-    "chartFoot": "Game after game, season after season."
+    "chartFoot": "Both stay saved in every session."
   },
   "terms": {
     "badge": "1OF1",
     "title": "Terms & Conditions",
-    "updated": "Last updated: July 22, 2026",
+    "updated": "Last updated: October 12, 2026",
     "intro": "By creating an account and using 1of1, you accept these terms.",
     "sections": [
-      { "heading": "Use of the app", "body": "1of1 helps you find courts and log games. You are responsible for the information you submit (courts, reviews, handle, name) and for playing safely: the app does not monitor or guarantee the condition of courts." },
+      { "heading": "Use of the app", "body": "1of1 helps you find courts and log your play sessions. You are responsible for the information you submit (courts, reviews, handle, name) and for playing safely: the app does not monitor or guarantee the condition of courts." },
       { "heading": "Content and conduct", "body": "You are responsible for the content you post, including court reviews and messages sent in pickup chats. Offensive content, spam, harassment, or impersonation is not allowed. You can report inappropriate content or users from the app and block other users. We review reports and may remove content or suspend accounts that violate these rules. We do not tolerate abusive content." },
-      { "heading": "Location and background", "body": "Game detection uses your location, including in the background if you authorize it. You can disable it anytime from Settings → Privacy or from system permissions." },
+      { "heading": "Location and background", "body": "Play-session detection uses your location, including in the background if you authorize it. You can disable it anytime from Settings → Privacy or from system permissions." },
       { "heading": "Health data", "body": "Health metrics are informational and do not constitute medical advice." },
       { "heading": "Liability", "body": "The app is provided \"as is\". We are not liable for injuries, losses, or damages arising from the use of the app or from attending courts." },
       { "heading": "Account deletion", "body": "You can delete your account anytime from Settings → Delete Account." },
@@ -199,12 +192,12 @@
   "deleteAccount": {
     "badge": "1OF1",
     "title": "Delete your account",
-    "updated": "Last updated: July 22, 2026",
+    "updated": "Last updated: October 12, 2026",
     "intro": "You can delete your 1of1 account and its associated data at any time, whether or not you have the app installed.",
     "sections": [
       { "heading": "From the app (instant)", "body": "Open 1of1 → Profile → Settings → Delete account. Confirm and your account is deleted right away, no waiting." },
       { "heading": "Without access to the app", "body": "Email us at francobusch130@gmail.com from the same address you signed up with, subject \"Delete my account\". We process the request within 30 days and confirm by email once it's done." },
-      { "heading": "What gets deleted", "body": "Your profile (name, handle, photo, clan badge), your match history and stats, your court reviews, your friendships, the pickups you created and their chats, and the messages you sent. Health data (Health Connect) never left your phone, so there's nothing to delete on the server." },
+      { "heading": "What gets deleted", "body": "Your profile (name, handle, photo, clan badge), your play-session history and stats, your court reviews, your friendships, the pickups you created and their chats, and the messages you sent. Health data (Health Connect) never left your phone, so there's nothing to delete on the server." },
       { "heading": "What may be kept briefly", "body": "Database backups may retain the information for a short period before being fully purged, and some records may be kept if required by law (e.g. fraud prevention)." },
       { "heading": "Google accounts", "body": "If you signed up with Google, deleting your 1of1 account doesn't affect your Google account. You can review the permissions you granted to 1of1 from your Google Account settings." }
     ],
@@ -215,13 +208,15 @@
   "privacy": {
     "badge": "1OF1",
     "title": "Privacy Policy",
-    "updated": "Last updated: July 22, 2026",
-    "intro": "1of1 (\"the app\") is an application to find basketball courts and log your games. This policy explains what data we use and why.",
+    "updated": "Last updated: October 12, 2026",
+    "intro": "1of1 (\"the app\") is an application to find basketball courts and log your play sessions. This policy explains what data we use and why.",
     "sections": [
-      { "heading": "What data we collect", "body": "Account data: name, email, and optionally city and phone number you provide when signing up. Your birth date is stored to verify and confirm you meet the minimum age. Handle and profile data: public handle, clan badge, photo (if you sign in with Google), and your game stats. Location: we use it to show nearby courts and detect when you're playing; with \"Always\" permission, detection works with the app closed. We don't store your coordinates in our database, only which court you played at (see \"Third-party services\"). Health data (optional): if you connect Health (Health Connect / Apple Health), we read calories, heart rate, steps and distance — this stays ONLY on your device. Game activity: match history (court, date, duration, points). Messages: the content of pickup chats is stored on our server so we can show it to that pickup's participants." },
-      { "heading": "What we use it for", "body": "To make the app work: locating you on the map, detecting and scoring your games, showing your profile and rankings, and connecting the community (friends, pickups, and their chats)." },
+      { "heading": "What data we collect", "body": "Account data: name, email, and optionally city and phone number you provide when signing up. Your birth date is stored to verify and confirm you meet the minimum age. Handle and profile data: public handle, clan badge, photo (if you sign in with Google), and your game stats. Location: we use it to show nearby courts and detect when you're playing; with \"Always\" permission, detection works with the app closed. We don't store your coordinates in our database, only which court you played at (see \"Third-party services\"). Health data (optional): if you connect Health (Health Connect), we read calories, heart rate, steps, distance, speed, blood oxygen, resting heart rate, heart rate variability and respiratory rate from your play sessions, plus the exercise sessions your watch records. We only read them (we never write to your health history) and they stay ONLY on your device: they are not uploaded to our servers. Game activity: play-session history (court, date, duration, result, score, format and the points you log), your past streaks, your favorite courts and the users you blocked. This is backed up on our server so you don't lose it if you reinstall the app or switch phones. Health metrics are NOT backed up: they stay only on your device. Messages: the content of pickup chats is stored on our server so we can show it to that pickup's participants." },
+      { "heading": "What we use it for", "body": "To make the app work: locating you on the map, detecting and scoring your play sessions, showing your profile and rankings, and connecting the community (friends, pickups, and their chats)." },
       { "heading": "Where it's stored", "body": "Account, game, and message data is stored on our own backend, hosted on Render (Render Services, Inc., servers in the United States) on a Supabase Postgres database (Supabase, Inc.). Both providers act as data processors on our behalf. By using the app you accept this international data transfer to the United States. Health data never leaves your phone." },
-      { "heading": "Third-party services", "body": "We use Google services for map features: Google Maps (displaying the map), Geocoding (converting addresses to coordinates), and Directions (calculating routes). When you use those features, your location and/or the address queried is sent to Google. If you sign in with Google, your authentication and profile photo are provided by Google Sign-In. Google's handling of that data is governed by its own privacy policy (policies.google.com/privacy)." },
+      { "heading": "Third-party services", "body": "We use Google services for map features: Google Maps (displaying the map), Geocoding (converting addresses to coordinates), and Directions (calculating routes). When you use those features, your location and/or the address queried is sent to Google. Map-area and route lookups go through our server, which forwards them to Google and does not store the coordinates in our database. If you sign in with Google, your authentication and profile photo are provided by Google Sign-In. Google's handling of that data is governed by its own privacy policy (policies.google.com/privacy)." },
+      { "heading": "Notifications", "body": "The app shows local notifications on your device: a court-arrival alert, the play-session timer and, if you leave it on, a reminder to get back on court when several days pass without a session (at most three in a row, and only until you play again). They are generated on your phone: we do not send them from our servers or share data with third parties to show them. You can turn them off in your system permissions, and the come-back reminder in Settings → Privacy." },
+      { "heading": "News", "body": "The News section shows basketball stories (NBA, WNBA and Liga Nacional) that our server fetches from ESPN and NewsData.io. We send none of your data to those services: the request is by league only." },
       { "heading": "How long we keep it", "body": "We keep your data while your account is active. If you delete your account, we remove it from our database; it may persist briefly in backups before being fully purged." },
       { "heading": "What other users see", "body": "Other users can see your name, handle, badge, and public stats. In pickup chats, participants see the messages you send and your handle. Your \"playing\" presence, court, and time are only shared if you enable those settings in Settings → Privacy (all off by default)." },
       { "heading": "Your rights", "body": "You can access, correct, or delete your data. Settings → Delete Account removes your account and data from our database (you can also do this without the app: see \"Delete Account\"). Email francobusch130@gmail.com to exercise any right (Argentina's Law 25.326 and, depending on your jurisdiction, equivalent rights such as CCPA/CPRA in the US)." },

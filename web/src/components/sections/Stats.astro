@@ -1,6 +1,6 @@
 ---
 import { useTranslations } from '../../i18n';
-import type { Lang } from '../../lib/urls';
+import { asset, type Lang } from '../../lib/urls';
 
 interface Props {
   lang: Lang;
@@ -14,43 +14,19 @@ const s = t.stats;
   <!-- Tarjeta con inclinación 3D. El seguimiento del mouse lo activa Base.astro
        solo en punteros finos y pantallas anchas. -->
   <div class="statcard reveal reveal-left" data-tilt>
-    <div class="statcard-head">
-      <div class="statcard-who">
-        <div class="statcard-avatar">
-          <span class="material-symbols-outlined">person</span>
-        </div>
-        <div>
-          <div class="statcard-label statcard-label--accent">{s.playerId}</div>
-          <div class="statcard-name">{s.playerName}</div>
-        </div>
-      </div>
-      <div class="statcard-level">
-        <div class="statcard-label">{s.level}</div>
-        <div class="statcard-name">42</div>
-      </div>
-    </div>
-
-    <div class="statcard-kpis">
-      <div class="kpi">
-        <div class="kpi-label">{s.winRate}</div>
-        <div class="kpi-value">78.4%</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">{s.avgSpd}</div>
-        <div class="kpi-value">{s.speed}</div>
-      </div>
-    </div>
-
-    <div class="statcard-metrics">
-      {
-        s.metrics.map((m: { label: string; value: string }) => (
-          <div class="metric">
-            <div class="metric-label">{m.label}</div>
-            <div class="metric-value">{m.value}</div>
-          </div>
-        ))
-      }
-    </div>
+    <!-- Captura REAL de la app (perfil). Recortada a propósito para que no
+         salga el nombre, el handle ni la ciudad: si se reemplaza, que siga
+         sin datos personales. Antes había una maqueta con jugador y métricas
+         inventadas. -->
+    <img
+      class="statcard-shot"
+      src={asset('app-perfil.png')}
+      alt={s.shotAlt}
+      width="986"
+      height="895"
+      loading="lazy"
+      decoding="async"
+    />
   </div>
 
   <div class="stats-copy reveal reveal-right">
@@ -81,6 +57,12 @@ const s = t.stats;
     align-items: center;
     position: relative;
     z-index: 1;
+  }
+
+  .statcard-shot {
+    display: block;
+    width: 100%;
+    height: auto;
   }
 
   .statcard {

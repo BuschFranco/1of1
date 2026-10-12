@@ -8,10 +8,10 @@
     "menu": "Abrir menú"
   },
   "hero": {
-    "badge": "RENDIMIENTO ÉLITE",
+    "badge": "BÁSQUET CALLEJERO",
     "title1": "LA CANCHA",
     "title2": "ES TUYA",
-    "subtitle": "La ventaja táctica definitiva para el jugador moderno. Encontrá canchas premium cerca tuyo, trackea cada movimiento con precisión GPS y dominá el leaderboard con analytics de élite.",
+    "subtitle": "La ventaja táctica definitiva para el jugador moderno. Encontrá canchas cerca tuyo, registrá cada sesión de juego sin tocar nada y subí en un ranking real.",
     "cta1": "DESCARGAR AHORA",
     "cta2": "VER CARACTERÍSTICAS",
     "freeNote": "Sin suscripciones. Sin costos ocultos.",
@@ -21,48 +21,39 @@
     "title": "MANUAL DE JUEGO",
     "eyebrow": "01 // CARACTERÍSTICAS",
     "items": [
-      { "icon": "location_on", "title": "ENCONTRÁ TU CANCHA", "body": "Búsqueda en tiempo real. Mirá cuántos jugadores hay en cada cancha y el estado actual." },
-      { "icon": "distance", "title": "GPS GAME TRACKER", "body": "Registro automático de tiempo de juego y mapas de calor. Dominá la cancha con datos precisos." },
-      { "icon": "analytics", "title": "STATS ÉLITE", "body": "Analítica de nivel profesional. Seguí tu % de tiros, velocidad y verticalidad en cada pickup." }
+      { "icon": "location_on", "title": "ENCONTRÁ TU CANCHA", "body": "Un mapa con las canchas de tu zona: horarios, superficie, iluminación y cuáles están abiertas ahora. Elegí cómo llegar, caminando o en vehículo." },
+      { "icon": "distance", "title": "SE REGISTRA SOLO", "body": "Llegás a la cancha y tu sesión de juego arranca sola; te vas y se cierra sola. Funciona incluso con la app cerrada. Vos no tocás nada." },
+      { "icon": "analytics", "title": "TU PARTIDO, TUS NÚMEROS", "body": "Cargás cuántos partidos jugaste, cuántos ganaste y en qué formato, de 1v1 a 5v5. La app te devuelve puntos por partido, efectividad y tu mejor partido." }
     ],
-    "liveTracking": "LIVE TRACKING",
+    "liveTracking": "DETECCIÓN AUTOMÁTICA",
+    "chips": ["Cerca", "Abierto ahora", "Iluminada", "Gratis", "Interior"],
     "bars": [
-      { "label": "Tiros", "value": "85%", "pct": 85 },
-      { "label": "Win Rate", "value": "62%", "pct": 62 },
-      { "label": "Ritmo", "value": "142bpm", "pct": 94 },
-      { "label": "Resist.", "value": "78%", "pct": 78 },
-      { "label": "Veloc.", "value": "18km/h", "pct": 71 }
+      { "label": "Efectividad", "value": "62%", "pct": 62 },
+      { "label": "% pts de 3", "value": "34%", "pct": 34 },
+      { "label": "Zona pico", "value": "53%", "pct": 53 },
+      { "label": "Zona máx.", "value": "33%", "pct": 33 },
+      { "label": "Cardio", "value": "13%", "pct": 13 }
     ]
   },
   "stats": {
-    "playerId": "JUGADOR_ID_001",
-    "playerName": "[CLAN]@tomi_b",
-    "level": "NIVEL",
-    "winRate": "TASA VICTORIA",
-    "avgSpd": "VEL. PROMEDIO",
-    "speed": "18.2 KM/H",
     "title": "DOMINÁ TUS",
     "titleAccent": "MÉTRICAS",
-    "desc": "No solo juegues — analizá. Nuestro algoritmo de deep-learning desglosa tus patrones de movimiento, eficiencia de tiro y niveles de fatiga para darte un perfil de nivel profesional.",
+    "shotAlt": "Perfil de 1of1: nivel, EXP, partidos, racha y ranking.",
+    "desc": "No solo juegues — analizá. Cada sesión queda registrada: cuántos partidos jugaste, cuántos ganaste y cuántos puntos hiciste en cada uno. Con un reloj conectado se suma el esfuerzo real: pulso por zonas, calorías y distancia.",
     "list": [
-      "Heatmaps de Selección de Tiro Profesional",
-      "Tracking de Desplazamiento de Alta Velocidad",
-      "Progresión en Leaderboard Regional"
+      "Puntos por partido, mejor partido y efectividad",
+      "Pulso por zonas de esfuerzo y calorías con récord personal",
+      "Ranking por semana, mes, temporada o total"
     ],
-    "cta": "VER MIS DATOS",
-    "metrics": [
-      { "label": "Km Recorridos", "value": "4.8 km" },
-      { "label": "Tiempo Activo", "value": "48 min" },
-      { "label": "Calorías", "value": "620 kcal" },
-      { "label": "Ritmo Prom.", "value": "138 bpm" }
-    ]
+    "cta": "VER MIS DATOS"
   },
   "cta": {
     "title": "LIBERÁ TU POTENCIAL",
-    "subtitle": "Encontrá dónde jugar, registrá cada partido y llevá tu progreso con vos. La próxima cancha te está esperando.",
+    "subtitle": "Encontrá dónde jugar, registrá cada sesión y llevá tu progreso con vos. La próxima cancha te está esperando.",
     "appStore": "APP STORE",
     "playStore": "PLAY STORE",
     "comingSoon": "Próximamente",
+    "androidNote": "Disponible primero en Android.",
     "freeNote": "Sin suscripciones. Sin costos ocultos."
   },
   "footer": {
@@ -78,11 +69,11 @@
     "eyebrow": "02 // LA ALIANZA",
     "share": {
       "title": "Compartí tus resultados",
-      "body": "Monitorizá tu rendimiento y compartí tus estadísticas con amigos y en redes sociales. Mostrá tu progreso y desafiá a otros jugadores."
+      "body": "Al cerrar tu sesión, la app arma una tarjeta lista para tus historias: resultado, marcador y tus números, hecha para leerse hasta en miniatura. Compartila con tu crew y desafialos a superarla."
     },
     "socialHub": {
       "title": "SOCIAL HUB",
-      "body": "Mantenete conectado. Chateá con tu crew, compartí highlights en redes y espeá a la competencia en tiempo real.",
+      "body": "Sumá amigos por su @handle y mirá quién está jugando y dónde, cuando te comparten su estado. Chateá con tu crew y coordiná cada pickup desde la app.",
       "friendsActive": "3 AMIGOS ACTIVOS AHORA",
       "friend1": "[BOCA]@agus",
       "friend1Status": "Jugando en Plaza Italia",
@@ -102,26 +93,26 @@
       "publicBody": "Publicá el partido y cualquiera puede sumarse desde el mapa, sin invitación. Ideal para cuando faltan dos y no querés quedarte afuera."
     },
     "clan": {
-      "badge": "NUEVO: SISTEMA DE CLANES",
+      "badge": "CLANES",
       "title": "CONQUER THE COURT",
-      "body": "Presentá a tu squad en el escenario global. Ganá partidos en tu cancha para reclamar el título de",
+      "body": "Ponete el tag de tu clan y sumá EXP en tu cancha. El clan con más EXP de la temporada reclama el título de",
       "highlight": "CANCHA CONQUISTADA POR EL CLAN",
       "currentRulers": "GOBERNANTES ACTUALES",
       "clanName": "RENN",
-      "cta": "DESAFIAR CLAN"
+      "cta": "DEFENDER MI CANCHA"
     },
     "leaderboard": {
       "title": "KING OF THE COURT",
       "rank1": "@phantom_hooper",
-      "rank1Stats": "342 VICTORIAS // 94% TG",
+      "rank1Stats": "342 VICTORIAS // 94% EFECT.",
       "rank2": "@skywalker_x",
-      "rank2Stats": "289 VICTORIAS // 88% TG",
+      "rank2Stats": "289 VICTORIAS // 88% EFECT.",
       "rank3": "@bucket_god_7",
-      "rank3Stats": "256 VICTORIAS // 82% TG",
+      "rank3Stats": "256 VICTORIAS // 82% EFECT.",
       "yourRank": "TU RANKING",
       "rankNumber": "#1.432",
       "nextTier": "SIGUIENTE NIVEL",
-      "nextTierXP": "120 XP"
+      "nextTierXP": "120 EXP"
     }
   },
   "discover": {
@@ -164,29 +155,31 @@
         "body": "Alcanza para que gane el que jugó de verdad y no el que tuvo una buena semana, pero es lo bastante corto para que siempre haya una revancha cerca."
       }
     ],
+    "shotAlt": "Detalle de una cancha en 1of1: rating y el clan que la conquistó esta temporada.",
+    "shotCaption": "Cada cancha muestra qué clan la conquistó esta temporada.",
     "keepTitle": "Tu progreso no se borra",
     "keepBody": "La temporada reinicia la competencia, no tu historia: tu nivel, tus logros y tu EXP acumulada quedan para siempre. Podés mirar tus números por semana, mes, temporada o total."
   },
   "wearables": {
     "title": "JUGÁ CON TU RELOJ PUESTO",
     "eyebrow": "05 // TU FÍSICO",
-    "lead": "Si jugás con un smartwatch o una banda, 1of1 lee el esfuerzo real de cada partido —pulso, calorías, pasos y distancia— y lo convierte en métricas que no se pueden estimar a ojo.",
+    "lead": "Si jugás con un smartwatch o una banda que sincronice con Health Connect, 1of1 lee el esfuerzo real de cada sesión —pulso, calorías, pasos y distancia, y oxígeno en sangre o variabilidad cardíaca si tu reloj los mide— y lo convierte en métricas que no se pueden estimar a ojo.",
     "comboTitle": "El cuerpo y el juego, juntos",
-    "comboBody": "El reloj cuenta cuánto pusiste el cuerpo; los puntos que cargás al terminar cuentan cómo te fue en la cancha. Cruzando las dos mitades ves lo que ninguna muestra sola: si tu resistencia mejora partido a partido, si rendís distinto cuando el pulso se va arriba, y en qué estás avanzando de verdad.",
-    "chartTitle": "TU EVOLUCIÓN",
+    "comboBody": "El reloj cuenta cuánto pusiste el cuerpo; los puntos que cargás al terminar cuentan cómo te fue en la cancha. Los dos quedan juntos en el detalle de cada sesión: zonas de pulso, calorías con récord personal y tus puntos por partido.",
+    "chartTitle": "ESFUERZO Y PUNTOS",
     "chartPhysical": "Físico",
     "chartGame": "Juego",
-    "chartFoot": "Partido a partido, temporada a temporada."
+    "chartFoot": "Los dos quedan guardados en cada sesión."
   },
   "terms": {
     "badge": "1OF1",
     "title": "Términos y Condiciones",
-    "updated": "Última actualización: 22 de julio de 2026",
+    "updated": "Última actualización: 12 de octubre de 2026",
     "intro": "Al crear una cuenta y usar 1of1 aceptás estos términos.",
     "sections": [
-      { "heading": "Uso de la app", "body": "1of1 te ayuda a encontrar canchas y registrar partidos. Sos responsable de la información que cargás (canchas, reseñas, handle, nombre) y de jugar de forma segura: la app no supervisa ni garantiza el estado de las canchas." },
+      { "heading": "Uso de la app", "body": "1of1 te ayuda a encontrar canchas y registrar tus sesiones de juego. Sos responsable de la información que cargás (canchas, reseñas, handle, nombre) y de jugar de forma segura: la app no supervisa ni garantiza el estado de las canchas." },
       { "heading": "Contenido y conducta", "body": "Sos responsable del contenido que publicás, incluidas reseñas de canchas y los mensajes que enviás en los chats de pickups. No se permite contenido ofensivo, ilegal, spam, acoso ni suplantación de identidad. Podés reportar contenido o usuarios inapropiados desde la app, y bloquear a otros usuarios. Revisamos los reportes y podemos eliminar contenido o suspender cuentas que violen estas reglas. No toleramos contenido abusivo." },
-      { "heading": "Ubicación y segundo plano", "body": "La detección de partidos usa tu ubicación, incluso en segundo plano si lo autorizás. Podés desactivarla cuando quieras desde Ajustes → Privacidad o desde los permisos del sistema." },
+      { "heading": "Ubicación y segundo plano", "body": "La detección de sesiones de juego usa tu ubicación, incluso en segundo plano si lo autorizás. Podés desactivarla cuando quieras desde Ajustes → Privacidad o desde los permisos del sistema." },
       { "heading": "Datos de salud", "body": "Las métricas de salud son informativas y no constituyen consejo médico." },
       { "heading": "Responsabilidad", "body": "La app se ofrece \"tal cual\". No nos responsabilizamos por lesiones, pérdidas o daños derivados del uso de la app o de la asistencia a las canchas." },
       { "heading": "Baja", "body": "Podés eliminar tu cuenta en cualquier momento desde Ajustes → Eliminar cuenta." },
@@ -199,12 +192,12 @@
   "deleteAccount": {
     "badge": "1OF1",
     "title": "Eliminar tu cuenta",
-    "updated": "Última actualización: 22 de julio de 2026",
+    "updated": "Última actualización: 12 de octubre de 2026",
     "intro": "Podés eliminar tu cuenta de 1of1 y los datos asociados en cualquier momento, tengas la app instalada o no.",
     "sections": [
       { "heading": "Desde la app (inmediato)", "body": "Abrí 1of1 → Perfil → Ajustes → Eliminar cuenta. Confirmá y tu cuenta se borra al instante, sin esperar respuesta." },
       { "heading": "Sin acceso a la app", "body": "Escribinos a francobusch130@gmail.com desde el mismo email con el que te registraste, con el asunto \"Eliminar mi cuenta\". Procesamos el pedido en un plazo de hasta 30 días y te confirmamos por mail cuando esté hecho." },
-      { "heading": "Qué se elimina", "body": "Tu perfil (nombre, handle, foto, insignia de clan), tu historial de partidos y estadísticas, tus reseñas de canchas, tus amistades, los pickups que creaste y sus chats, y los mensajes que enviaste. Los datos de salud (Health Connect) nunca salieron de tu teléfono, así que no hay nada que borrar del servidor." },
+      { "heading": "Qué se elimina", "body": "Tu perfil (nombre, handle, foto, insignia de clan), tu historial de sesiones de juego y estadísticas, tus reseñas de canchas, tus amistades, los pickups que creaste y sus chats, y los mensajes que enviaste. Los datos de salud (Health Connect) nunca salieron de tu teléfono, así que no hay nada que borrar del servidor." },
       { "heading": "Qué puede conservarse un tiempo", "body": "Las copias de seguridad de la base de datos pueden conservar la información por un período breve antes de eliminarse por completo, y algunos registros pueden retenerse si la ley lo exige (por ejemplo, para prevenir fraude)." },
       { "heading": "Cuentas de Google", "body": "Si te registraste con Google, eliminar tu cuenta de 1of1 no afecta tu cuenta de Google. Podés revisar los permisos que le diste a 1of1 desde la configuración de tu cuenta de Google." }
     ],
@@ -215,13 +208,15 @@
   "privacy": {
     "badge": "1OF1",
     "title": "Política de Privacidad",
-    "updated": "Última actualización: 22 de julio de 2026",
-    "intro": "1of1 (\"la app\") es una aplicación para encontrar canchas de básquet y registrar tus partidos. Esta política explica qué datos usamos y por qué.",
+    "updated": "Última actualización: 12 de octubre de 2026",
+    "intro": "1of1 (\"la app\") es una aplicación para encontrar canchas de básquet y registrar tus sesiones de juego. Esta política explica qué datos usamos y por qué.",
     "sections": [
-      { "heading": "Qué datos recolectamos", "body": "Datos de cuenta: nombre, email y, opcionalmente, ciudad y teléfono que cargás al registrarte. Tu fecha de nacimiento se guarda para verificar y acreditar que cumplís la edad mínima. Handle y datos de perfil: apodo público, insignia de clan, foto (si iniciás sesión con Google) y tus estadísticas de juego. Ubicación: la usamos para mostrarte canchas cercanas y detectar cuándo estás jugando; con el permiso \"Siempre\" funciona con la app cerrada. No almacenamos tus coordenadas en nuestra base, solo en qué cancha jugaste (ver \"Servicios de terceros\"). Datos de salud (opcional): si conectás Salud (Health Connect / Apple Health), leemos calorías, pulso, pasos y distancia — quedan SOLO en tu dispositivo. Actividad de juego: historial de partidos (cancha, fecha, duración, puntos). Mensajes: el contenido de los chats de pickups se guarda en nuestro servidor para mostrárselo a los participantes de ese pickup." },
-      { "heading": "Para qué los usamos", "body": "Para hacer funcionar la app: ubicarte en el mapa, detectar y puntuar tus partidos, mostrar tu perfil y rankings, y conectar la comunidad (amigos, pickups y sus chats)." },
+      { "heading": "Qué datos recolectamos", "body": "Datos de cuenta: nombre, email y, opcionalmente, ciudad y teléfono que cargás al registrarte. Tu fecha de nacimiento se guarda para verificar y acreditar que cumplís la edad mínima. Handle y datos de perfil: apodo público, insignia de clan, foto (si iniciás sesión con Google) y tus estadísticas de juego. Ubicación: la usamos para mostrarte canchas cercanas y detectar cuándo estás jugando; con el permiso \"Siempre\" funciona con la app cerrada. No almacenamos tus coordenadas en nuestra base, solo en qué cancha jugaste (ver \"Servicios de terceros\"). Datos de salud (opcional): si conectás Salud (Health Connect), leemos calorías, pulso, pasos, distancia, velocidad, oxígeno en sangre, frecuencia cardíaca en reposo, variabilidad cardíaca y ritmo respiratorio de tus sesiones de juego, además de las sesiones de ejercicio que registre tu reloj. Solo los leemos (nunca escribimos en tu historial de salud) y quedan ÚNICAMENTE en tu dispositivo: no se suben a nuestros servidores. Actividad de juego: historial de sesiones (cancha, fecha, duración, resultado, marcador, formato y los puntos que cargás), tus rachas pasadas, tus canchas favoritas y los usuarios que bloqueaste. Esto se respalda en nuestro servidor para que no lo pierdas si reinstalás la app o cambiás de celular. Las métricas de salud NO se respaldan: quedan solo en tu dispositivo. Mensajes: el contenido de los chats de pickups se guarda en nuestro servidor para mostrárselo a los participantes de ese pickup." },
+      { "heading": "Para qué los usamos", "body": "Para hacer funcionar la app: ubicarte en el mapa, detectar y puntuar tus sesiones de juego, mostrar tu perfil y rankings, y conectar la comunidad (amigos, pickups y sus chats)." },
       { "heading": "Dónde se guardan", "body": "Los datos de cuenta, juego y mensajes se almacenan en nuestro backend propio, alojado en Render (Render Services, Inc., servidores en Estados Unidos) sobre una base de datos Supabase Postgres (Supabase, Inc.). Ambos proveedores actúan como encargados del tratamiento por nuestra cuenta. Al usar la app aceptás esta transferencia internacional de datos a Estados Unidos. Los datos de salud no salen de tu teléfono." },
-      { "heading": "Servicios de terceros", "body": "Usamos servicios de Google para funciones del mapa: Google Maps (mostrar el mapa), Geocoding (convertir direcciones en coordenadas) y Directions (calcular rutas). Al usar esas funciones, tu ubicación y/o la dirección consultada se envían a Google. Si iniciás sesión con Google, tu autenticación y foto de perfil las provee Google Sign-In. El tratamiento que hace Google se rige por su propia política de privacidad (policies.google.com/privacy)." },
+      { "heading": "Servicios de terceros", "body": "Usamos servicios de Google para funciones del mapa: Google Maps (mostrar el mapa), Geocoding (convertir direcciones en coordenadas) y Directions (calcular rutas). Al usar esas funciones, tu ubicación y/o la dirección consultada se envían a Google. Las consultas de zona y de rutas pasan por nuestro servidor, que las reenvía a Google y no guarda las coordenadas en la base de datos. Si iniciás sesión con Google, tu autenticación y foto de perfil las provee Google Sign-In. El tratamiento que hace Google se rige por su propia política de privacidad (policies.google.com/privacy)." },
+      { "heading": "Notificaciones", "body": "La app muestra notificaciones locales en tu dispositivo: aviso de llegada a una cancha, cronómetro de la sesión de juego y, si lo dejás activado, un recordatorio para volver a jugar cuando pasan varios días sin una sesión (como mucho tres seguidos, y solo hasta que vuelvas a jugar). Se generan en tu teléfono: no las enviamos desde nuestros servidores ni compartimos datos con terceros para mostrarlas. Podés apagarlas desde los permisos del sistema, y el recordatorio de volver a jugar desde Ajustes → Privacidad." },
+      { "heading": "Noticias", "body": "La sección de Noticias muestra notas de básquet (NBA, WNBA y Liga Nacional) que nuestro servidor obtiene de ESPN y NewsData.io. Para eso no enviamos ningún dato tuyo a esos servicios: la consulta es solo por liga." },
       { "heading": "Cuánto tiempo los conservamos", "body": "Conservamos tus datos mientras tu cuenta esté activa. Si eliminás tu cuenta, los borramos de nuestra base; pueden persistir por un tiempo breve en copias de respaldo antes de eliminarse por completo." },
       { "heading": "Qué ven otros usuarios", "body": "Otros usuarios pueden ver tu nombre, handle, insignia y estadísticas públicas. En los chats de pickups, los participantes ven los mensajes que enviás y tu handle. Tu presencia \"jugando\", la cancha y el tiempo solo se comparten si activás esos permisos en Ajustes → Privacidad (todos vienen desactivados por defecto)." },
       { "heading": "Tus derechos", "body": "Podés acceder, rectificar o eliminar tus datos. Desde Ajustes → Eliminar cuenta borrás tu cuenta y tus datos de nuestra base (también podés hacerlo sin la app: ver \"Eliminar cuenta\"). Escribinos a francobusch130@gmail.com para ejercer cualquier derecho (Ley 25.326 de Argentina y, según tu jurisdicción, derechos equivalentes como los de CCPA/CPRA en EE.UU.)." },

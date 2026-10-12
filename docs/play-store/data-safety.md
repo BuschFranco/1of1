@@ -41,7 +41,13 @@ cuenta de desarrollador).
 | Fotos y videos | Fotos | Sí (avatar y fotos de cancha) | Sí | No | Funcionalidad de la app |
 | Mensajes | Otros mensajes en la app | Sí (chat de pickups) | No (si usás esa función) | No | Funcionalidad de la app |
 | Actividad en la app | Interacciones en la app | Sí (partidos, reseñas, logros) | No | No | Funcionalidad de la app, Analítica |
-| Salud y fitness | Información de salud (Health Connect: pulso, calorías, pasos, distancia, ejercicio) | Sí, SOLO si el usuario lo activa | **Sí, opt-in explícito** | No | Funcionalidad de la app |
+| Salud y fitness | Información de salud (Health Connect: pulso, calorías, pasos, distancia, velocidad, saturación de oxígeno, frecuencia cardíaca en reposo, variabilidad cardíaca, ritmo respiratorio y sesiones de ejercicio — los 11 permisos `health.READ_*` del manifest) | Sí, SOLO si el usuario lo activa | **Sí, opt-in explícito** | No | Funcionalidad de la app |
+
+> ⚠️ **Esta lista tiene que coincidir con `AndroidManifest.xml` y con la política de
+> privacidad publicada.** Google contrasta las tres cosas al revisar el permiso de
+> Health Connect, y un dato que la app lee pero la política no nombra es causa
+> conocida de rechazo. Si agregás un `health.READ_*`, actualizá **también** el
+> formulario de Seguridad de datos en Play Console (vive allá, no en este repo).
 
 **Sobre "compartir con terceros":** usamos Supabase (base de datos/almacenamiento)
 y Google (Maps, Sign-In) como **proveedores de servicio** para operar la app,

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://buschfranco.github.io/1of1/sitemap.xml

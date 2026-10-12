@@ -15,21 +15,14 @@ const t = useTranslations(lang);
     <h2 class="cta-title">{t.cta.title}</h2>
     <p class="cta-sub">{t.cta.subtitle}</p>
     <p class="cta-free">{t.cta.freeNote}</p>
+    <p class="cta-free">{t.cta.androidNote}</p>
     <div class="cta-stores">
-      <!-- Todavía no hay app publicada: los botones son placeholders (span, no
-           link) y la etiqueta lo aclara. Al publicar, pasar a <a href> y quitar
-           la etiqueta + el aria-disabled. -->
-      <div class="store-slot">
-        <span class="store-soon">{t.cta.comingSoon}</span>
-        <span class="btn btn--store" aria-disabled="true">
-          <svg viewBox="0 0 24 24" aria-hidden="true"
-            ><path
-              d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"
-            ></path></svg
-          >
-          <span>{t.cta.appStore}</span>
-        </span>
-      </div>
+      <!-- La app está EN REVISIÓN en Google Play: el botón es un placeholder (span,
+           no link) y la etiqueta lo aclara. Al aprobarse, pasar a <a href> con la
+           URL de la ficha y quitar la etiqueta + el aria-disabled.
+           No hay botón de App Store a propósito: no existe build de iOS (ios/ es
+           solo el andamio de Flutter, sin HealthKit ni Google Sign-In), así que
+           "Próximamente" sugeriría algo que no está en marcha. -->
       <div class="store-slot">
         <span class="store-soon">{t.cta.comingSoon}</span>
         <span class="btn btn--store" aria-disabled="true">

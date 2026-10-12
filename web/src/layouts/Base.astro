@@ -15,6 +15,24 @@ interface Props {
   current?: 'terms' | 'privacy' | 'delete-account';
 }
 const { lang, title, description, variant = 'landing', current } = Astro.props;
+
+// ── Metadatos para compartir y para buscadores ───────────────────────────
+// Sin esto, pegar el link en WhatsApp o Instagram no mostraba preview, y para
+// una web cuyo único trabajo es convertir visitas en descargas eso es una
+// pérdida directa. Las URLs tienen que ser ABSOLUTAS (las redes no resuelven
+// rutas relativas), por eso salen de `Astro.site` + el `base` del sitio.
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+const origin = Astro.site!.origin;
+const pathname = Astro.url.pathname;
+// El español vive en la raíz y el inglés bajo `/en` (ver lib/urls.ts): la
+// alternativa de cada página se arma insertando o quitando ese prefijo.
+const rest = pathname.startsWith(`${BASE}/en`)
+  ? pathname.slice(`${BASE}/en`.length)
+  : pathname.slice(BASE.length);
+const pathEs = `${BASE}${rest || '/'}`;
+const pathEn = `${BASE}/en${rest || '/'}`;
+const canonical = origin + (lang === 'en' ? pathEn : pathEs);
+const ogImage = origin + asset('og-image.png');
 ---
 
 <!doctype html>
@@ -26,6 +44,21 @@ const { lang, title, description, variant = 'landing', current } = Astro.props;
     <title>{title}</title>
     {description && <meta name="description" content={description} />}
     <meta name="theme-color" content="#0d141e" />
+    <link rel="canonical" href={canonical} />
+    <link rel="alternate" hreflang="es" href={origin + pathEs} />
+    <link rel="alternate" hreflang="en" href={origin + pathEn} />
+    <link rel="alternate" hreflang="x-default" href={origin + pathEs} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="1of1" />
+    <meta property="og:locale" content={lang === 'en' ? 'en_US' : 'es_AR'} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={title} />
+    {description && <meta property="og:description" content={description} />}
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    {description && <meta name="twitter:description" content={description} />}
+    <meta name="twitter:image" content={ogImage} />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
