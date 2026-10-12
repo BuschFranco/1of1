@@ -1,11 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Lista de usuarios bloqueados por el usuario actual. Es LOCAL al dispositivo
-/// (SharedPreferences namespaced por usuario, patrón `base::$userKey`): sin
-/// backend propio no tenemos dónde guardarla de forma compartida, pero alcanza
-/// para el requisito de tiendas de "poder bloquear a otros usuarios" —
-/// el contenido de los bloqueados se oculta en la UI de este dispositivo.
+/// Lista de usuarios bloqueados por el usuario actual. Se guarda en el
+/// dispositivo (SharedPreferences namespaced por usuario, patrón
+/// `base::$userKey`) Y se respalda en el servidor (`/sync/data/blocked`), así que
+/// sobrevive a reinstalar o cambiar de celular: antes el usuario bloqueado
+/// reaparecía. El bloqueo sigue aplicándose SOLO en la UI de este dispositivo —
+/// el servidor guarda la lista pero no filtra nada con ella.
 ///
 /// Guardamos emails normalizados (minúsculas, sin espacios).
 class BlockedProvider extends ChangeNotifier {
@@ -36,6 +37,17 @@ class BlockedProvider extends ChangeNotifier {
     _blocked = {..._blocked, e};
     await _persist();
     notifyListeners();
+  }
+
+  /// Une bloqueados traídos del servidor con los locales. Unión: restaurar
+  /// nunca desbloquea a nadie. Devuelve true si cambió algo.
+  Future<bool> mergeFrom(Iterable<String> remote) async {
+    final merged = {..._blocked, ...remote.map(_norm).where((e) => e.isNotEmpty)};
+    if (merged.length == _blocked.length) return false;
+    _blocked = merged;
+    await _persist();
+    notifyListeners();
+    return true;
   }
 
   Future<void> unblock(String email) async {

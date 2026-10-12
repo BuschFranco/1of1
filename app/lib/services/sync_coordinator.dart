@@ -70,6 +70,19 @@ class SyncCoordinator {
   // "Siempre"), pero es su propia alarma.
   bool _watchdogOn = false;
 
+  // ── Respaldo del historial en el servidor ───────────────────────────────
+  /// Verdadero recién cuando el restore terminó BIEN. Hasta entonces NO se suben
+  /// las listas (favoritos, bloqueados, rachas): el PUT REEMPLAZA el contenido, y
+  /// en una instalación nueva subiría listas vacías encima de las del servidor,
+  /// borrando justo lo que se quería proteger.
+  bool _historyReady = false;
+  bool _syncingHistory = false;
+  String _historyUserKey = '';
+
+  /// Último contenido de cada lista que el servidor ya tiene (kind → JSON), para
+  /// no volver a subir lo que no cambió.
+  final Map<String, String> _lastPushedData = {};
+
   /// Si el aviso de reenganche está programado. Igual que `_radarOn`, el flag
   /// se enciende DESPUÉS de que la programación haya terminado bien.
   bool _nudgeOn = false;
@@ -194,6 +207,12 @@ class SyncCoordinator {
       );
       await _session.flush();
       await _flushPendingMatches();
+      await _flushPendingSessions();
+      // Si el restore no pudo correr al arrancar (sin red), reintenta acá.
+      if (!_historyReady && !_syncingHistory && _historyUserKey.isNotEmpty) {
+        unawaited(_syncHistory(_historyUserKey));
+      }
+      await _pushLists();
     };
 
     // El catálogo de canchas alimenta la detección de cercanía.
@@ -380,6 +399,9 @@ class SyncCoordinator {
         _blocked.clearForLogout();
         ApiCache.clear(); // no filtrar datos cacheados a la próxima cuenta
         _trackingStarted = false;
+        _historyReady = false;
+        _historyUserKey = '';
+        _lastPushedData.clear();
       }
 
       // Sin sesión: apagar TODO el background una sola vez. Va FUERA del if de
@@ -438,6 +460,11 @@ class SyncCoordinator {
     // Partidos (partidos anteriores a la migración al backend). Recién cuando
     // el tracking terminó de restaurar (el log local ya está cargado).
     unawaited(tracking.then((_) => _backfillMatchLog(userKey)));
+    // Respaldo del historial: restaurar lo que el servidor tenga (reinstalación o
+    // celular nuevo) y subir lo que todavía no está. Después de `startTracking`
+    // porque necesita el log local ya cargado.
+    _historyUserKey = userKey;
+    unawaited(tracking.then((_) => _syncHistory(userKey)));
     // Después del restore: recién ahí `startTracking` dejó el userKey para los
     // isolates y se sembró la fecha de la última sesión.
     unawaited(tracking.then((_) => _syncNudge()));
@@ -502,6 +529,162 @@ class SyncCoordinator {
       await prefs.setBool(flag, true);
     } catch (_) {
       // Sin red / error: se reintenta en el próximo inicio de sesión.
+    }
+  }
+
+  // ── Respaldo del historial ──────────────────────────────────────────────
+
+  static const _kSyncBatch = 50; // el servidor rechaza lotes mayores
+
+  /// Sube lo pendiente: sesiones que se cerraron (o cambiaron) desde la última
+  /// vez. Es un upsert por (email, endedAtMs) del lado del servidor, así que
+  /// reintentar NUNCA duplica, incluso si la respuesta se perdió.
+  Future<void> _flushPendingSessions() async {
+    final api = ApiClient();
+    if (!api.isConfigured || !api.hasToken) return;
+    final pending = await _play.readPendingSessions();
+    if (pending.isEmpty) return;
+
+    final sent = <String>{}; // entradas (JSON) que el servidor confirmó
+    for (var i = 0; i < pending.length; i += _kSyncBatch) {
+      final end = i + _kSyncBatch > pending.length ? pending.length : i + _kSyncBatch;
+      final chunk = pending.sublist(i, end);
+      try {
+        final res = await api.syncSessions(chunk);
+        final results = (res['results'] as List?) ?? const [];
+        for (var j = 0; j < chunk.length; j++) {
+          final ok = j < results.length && (results[j] as Map)['ok'] == true;
+          if (ok) sent.add(jsonEncode(chunk[j]));
+        }
+      } catch (_) {/* sin red: queda todo en la cola */}
+    }
+    if (sent.isEmpty) return;
+
+    // Se vuelve a leer la cola y se quita SOLO lo confirmado, comparando el
+    // contenido: mientras la request volaba pudo entrar una sesión nueva, o
+    // cambiar la visibilidad de una ya encolada, y escribir `failed` a secas
+    // pisaría esa versión más nueva.
+    final current = await _play.readPendingSessions();
+    await _play.writePendingSessions(
+        [for (final m in current) if (!sent.contains(jsonEncode(m))) m]);
+  }
+
+  /// Restaura del servidor lo que falte y sube lo que el servidor todavía no
+  /// tiene. Corre en cada inicio de sesión; es idempotente.
+  ///
+  /// - Sesiones: se bajan SOLO la primera vez en este dispositivo (flag
+  ///   `history_restored::uk`); después lo local ya es la fuente.
+  /// - Listas (rachas, favoritos, bloqueados): se bajan siempre (es chico) para
+  ///   saber qué tiene el servidor y no volver a subirlo.
+  /// - Todo es unión: restaurar nunca quita nada, y nunca desbloquea a nadie.
+  Future<void> _syncHistory(String userKey) async {
+    final api = ApiClient();
+    if (_syncingHistory ||
+        !api.isConfigured ||
+        !api.hasToken ||
+        userKey.isEmpty) {
+      return;
+    }
+    _syncingHistory = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final restoredFlag = 'history_restored::$userKey';
+
+      // Los providers cargan sus prefs de forma asíncrona al loguear: se
+      // vuelven a leer acá para que la unión parta de lo local de verdad y no de
+      // una lista todavía vacía.
+      await _favorites.load();
+      await _blocked.loadForUser(userKey);
+
+      // 1) Sesiones.
+      var remoteSessions = <PlaySession>[];
+      if (!(prefs.getBool(restoredFlag) ?? false)) {
+        final res = await api.mySyncedSessions(limit: kMaxLocalSessions);
+        for (final e in (res['sessions'] as List? ?? const [])) {
+          final m = (e as Map).cast<String, dynamic>();
+          final ms = (m['endedAtMs'] as num?)?.toInt() ?? 0;
+          final data = (m['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+          if (ms > 0) remoteSessions.add(PlaySession.fromSyncJson(ms, data));
+        }
+      }
+
+      // 2) Listas.
+      final data = await api.mySyncData();
+      List<dynamic> list(String kind) => (data[kind] as List?) ?? const [];
+      final remoteStreaks = [
+        for (final e in list('streak_history'))
+          StreakEntry.fromJson((e as Map).cast<String, dynamic>())
+      ];
+      await _favorites.mergeFrom(list('favorites').map((e) => '$e'));
+      await _blocked.mergeFrom(list('blocked').map((e) => '$e'));
+      await _play.restoreHistoryFromBackup(remoteSessions, remoteStreaks);
+
+      // Lo que el servidor YA tiene, para no re-subirlo. Un kind ausente queda
+      // sin marcar: significa "nunca se sincronizó" y se sube lo local.
+      _lastPushedData.clear();
+      for (final kind in const ['streak_history', 'favorites', 'blocked']) {
+        if (data.containsKey(kind)) _lastPushedData[kind] = jsonEncode(list(kind));
+      }
+
+      // 3) Subir el historial local que el servidor aún no tiene (una sola vez):
+      // protege a quien ya venía jugando antes de existir el respaldo.
+      await _backfillSessions(userKey, prefs);
+
+      await prefs.setBool(restoredFlag, true);
+      _historyReady = true;
+      await _pushLists();
+    } catch (_) {
+      // Sin red / servidor dormido: queda `_historyReady = false` y se reintenta
+      // en el próximo flush o en el próximo inicio. Mientras tanto NO se suben
+      // listas, para no pisar las del servidor con vacías.
+    } finally {
+      _syncingHistory = false;
+    }
+  }
+
+  /// Sube de una vez el historial local. La flag se marca solo si TODO volvió ok.
+  Future<void> _backfillSessions(String userKey, SharedPreferences prefs) async {
+    final flag = 'sessions_backfill_done::$userKey';
+    if (prefs.getBool(flag) ?? false) return;
+    final api = ApiClient();
+    final all = [
+      for (final s in _play.historyForBackup)
+        if (s.endedAtMillis > 0)
+          {'endedAtMs': s.endedAtMillis, 'data': s.toSyncJson()}
+    ];
+    for (var i = 0; i < all.length; i += _kSyncBatch) {
+      final end = i + _kSyncBatch > all.length ? all.length : i + _kSyncBatch;
+      final chunk = all.sublist(i, end);
+      final res = await api.syncSessions(chunk);
+      final results = (res['results'] as List?) ?? const [];
+      final allOk = results.length == chunk.length &&
+          results.every((r) => (r as Map)['ok'] == true);
+      if (!allOk) return; // reintento en el próximo inicio
+    }
+    await prefs.setBool(flag, true);
+  }
+
+  /// Sube las listas que cambiaron desde la última vez. Solo después del
+  /// restore (ver `_historyReady`).
+  Future<void> _pushLists() async {
+    if (!_historyReady) return;
+    final api = ApiClient();
+    if (!api.isConfigured || !api.hasToken) return;
+    final lists = <String, List<dynamic>>{
+      'streak_history': [for (final e in _play.streakHistory) e.toJson()],
+      'favorites': _favorites.ids.toList()..sort(),
+      'blocked': _blocked.blocked.toList()..sort(),
+    };
+    for (final entry in lists.entries) {
+      final json = jsonEncode(entry.value);
+      if (_lastPushedData[entry.key] == json) continue;
+      // Una lista que el servidor nunca tuvo y que acá está vacía no hace falta
+      // crearla: "ausente" y "vacía" significan lo mismo hasta que haya algo.
+      if (!_lastPushedData.containsKey(entry.key) && entry.value.isEmpty) continue;
+      try {
+        await api.putSyncData(entry.key, entry.value);
+        _lastPushedData[entry.key] = json;
+      } catch (_) {/* se reintenta en el próximo flush */}
     }
   }
 

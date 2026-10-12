@@ -109,6 +109,8 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   String get _kBackground => _k('play_background_enabled');
   String get _kPlays => _k('play_total_count');
   String get _kLog => _k('play_log');
+  // Cola de sesiones por respaldar en el servidor (mismo patrón que pending_matches).
+  String get _kPendingSessions => _k('pending_sessions');
   String get _kPending => _k('play_pending_result');
   String get _kStreak => _k('play_streak');
   String get _kStreakHist => _k('play_streak_history');
@@ -387,6 +389,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _log[i] = _log[i].withHiddenSections(sections);
     notifyListeners();
     await _persistLog();
+    await enqueueSessionBackup(_log[i]);
   }
 
   // IDs de logros desbloqueados (insignias permanentes). Una vez logrado, queda
@@ -645,15 +648,14 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   int get maxHeartRate =>
       _log.fold(0, (m, s) => s.maxHr != null && s.maxHr! > m ? s.maxHr! : m);
 
-  /// Suma de segundos jugados en partidos con datos de salud.
-  int get totalHealthSeconds =>
-      _log.where((s) => s.hasHealth).fold(0, (sum, s) => sum + s.seconds);
-
-  /// Calorías quemadas por minuto (promedio sobre partidos con datos).
-  double get caloriesPerMinute {
-    final secs = totalHealthSeconds;
-    return secs > 0 ? totalCalories / (secs / 60) : 0;
-  }
+  /// Calorías promedio por SESIÓN (sobre las sesiones con datos de salud).
+  ///
+  /// Reemplaza al viejo "calorías por minuto": dividir por el tiempo de la
+  /// estadía mezclaba el esfuerzo con las esperas y descansos entre partidos, así
+  /// que una tarde con mucho tiempo muerto "quemaba menos por minuto" sin haber
+  /// jugado peor. El total por sesión no se diluye con las pausas.
+  double get avgCaloriesPerSession =>
+      healthMatches > 0 ? totalCalories / healthMatches : 0;
 
 
   /// True si hay stats de salud para mostrar (health activo + al menos un partido con datos).
@@ -753,6 +755,22 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   double get avgPointsPerGame =>
       userGamesWithStats > 0 ? totalUserPoints / userGamesWithStats : 0;
 
+  /// Con menos partidos que esto no se muestra la efectividad: 1 de 1 daría
+  /// "100%", un número que parece un logro y es ruido.
+  static const int winRateMinGames = 3;
+
+  /// Partidos con resultado en el historial local (denominador).
+  int get ratedGames => _log.fold(0, (a, s) => a + s.ratedGames);
+
+  /// Efectividad de victorias (0..1), o null si hay muy pocos partidos.
+  ///
+  /// **La base es el historial LOCAL, que guarda hasta 100 sesiones**: es "de lo
+  /// que la app recuerda", no de toda la vida del jugador. Para un total
+  /// histórico haría falta un campo nuevo en el perfil del backend (migración);
+  /// no se hizo para no prometer más de lo que el dato respalda.
+  double? get winRate =>
+      ratedGames >= winRateMinGames ? wins / ratedGames : null;
+
   /// Mejor marca de puntos en un solo PARTIDO.
   ///
   /// Si la sesión se cargó partido por partido sale del mejor individual; si
@@ -768,15 +786,6 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// Total de tiros anotados (de 3 + de 2 + de 1).
   int get totalUserMadeShots =>
       totalUserPts3 + totalUserPts2 + totalUserPts1;
-
-  /// Promedio de puntos por minuto (partidos con stats y duración > 0).
-  double get avgUserPointsPerMinute {
-    final ms = _log.where((s) => s.userPoints != null && s.seconds > 0);
-    if (ms.isEmpty) return 0;
-    final sum =
-        ms.fold<double>(0, (a, s) => a + (s.userPoints! / (s.seconds / 60)));
-    return sum / ms.length;
-  }
 
   /// Puntos promedio por tiro anotado (eficiencia de tiro).
   double get avgPointsPerShot =>
@@ -2376,7 +2385,13 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         speed: hm?.speed,
       ),
     );
-    if (_log.length > 100) _log = _log.sublist(0, 100);
+    if (_log.length > kMaxLocalSessions) {
+      _log = _log.sublist(0, kMaxLocalSessions);
+    }
+    // Respaldo en el servidor. A diferencia de `matches`, va TAMBIÉN lo que no
+    // sumó puntos (un entrenamiento o una sesión sin EXP sigue siendo historia
+    // del usuario). Sin salud: ver `PlaySession.toSyncJson`.
+    await enqueueSessionBackup(_log.first);
 
     // Encolar para el ranking por período (semana/mes/temporada) de amigos.
     // Solo partidos que suman puntos (los "sin información" no aportan al
@@ -2442,6 +2457,82 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       'seconds': seconds,
     }));
     await prefs.setStringList(_kPendingMatches, list);
+  }
+
+  // ── Respaldo del historial en el servidor ────────────────────────────────
+
+  /// Sesiones locales, para el respaldo inicial de quien ya tenía historial.
+  List<PlaySession> get historyForBackup => List.unmodifiable(_log);
+
+  /// Encola una sesión para subirla. Si ya había una versión pendiente de la
+  /// MISMA sesión (p. ej. se cambió su visibilidad antes de que subiera), la
+  /// reemplaza: el servidor hace upsert, así que solo importa la última.
+  Future<void> enqueueSessionBackup(PlaySession s) async {
+    if (!ApiConfig.isConfigured || _userKey.isEmpty || s.endedAtMillis <= 0) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_kPendingSessions) ?? <String>[];
+    list.removeWhere((e) {
+      try {
+        return (jsonDecode(e) as Map)['endedAtMs'] == s.endedAtMillis;
+      } catch (_) {
+        return true; // entrada corrupta: se descarta
+      }
+    });
+    list.add(jsonEncode({'endedAtMs': s.endedAtMillis, 'data': s.toSyncJson()}));
+    await prefs.setStringList(_kPendingSessions, list);
+  }
+
+  /// Sesiones pendientes de subir (`{endedAtMs, data}`).
+  Future<List<Map<String, dynamic>>> readPendingSessions() async {
+    final prefs = await SharedPreferences.getInstance();
+    final out = <Map<String, dynamic>>[];
+    for (final s in prefs.getStringList(_kPendingSessions) ?? const <String>[]) {
+      try {
+        out.add((jsonDecode(s) as Map).cast<String, dynamic>());
+      } catch (_) {/* corrupta: se descarta */}
+    }
+    return out;
+  }
+
+  /// Reescribe la cola con lo que quedó sin subir.
+  Future<void> writePendingSessions(List<Map<String, dynamic>> pending) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (pending.isEmpty) {
+      await prefs.remove(_kPendingSessions);
+      return;
+    }
+    await prefs.setStringList(
+        _kPendingSessions, pending.map(jsonEncode).toList());
+  }
+
+  /// Fusiona lo bajado del servidor con el historial local y lo persiste.
+  /// Devuelve cuántas sesiones eran nuevas para este dispositivo.
+  ///
+  /// Corre sin banners: restaurar historial no es "ganar" nada, y sin esto cada
+  /// logro que el historial restaurado ya cumplía dispararía una notificación.
+  Future<int> restoreHistoryFromBackup(
+    List<PlaySession> remote,
+    List<StreakEntry> remoteStreaks,
+  ) async {
+    final known = _log.map((e) => e.endedAtMillis).toSet();
+    _log = mergeSessionHistory(_log, remote);
+    final added = _log.where((e) => !known.contains(e.endedAtMillis)).length;
+
+    final mergedStreaks = mergeStreakHistory(_streakHistory, remoteStreaks);
+    final streaksChanged = mergedStreaks.length != _streakHistory.length;
+    _streakHistory = mergedStreaks;
+
+    if (added == 0 && !streaksChanged) return 0;
+    final wasNotifying = _notify;
+    _notify = false;
+    _recomputeBadges();
+    _notify = wasNotifying;
+    await _persistLog();
+    await _persistStreak();
+    notifyListeners();
+    return added;
   }
 
   /// Lee los partidos pendientes de subir (cada uno es un mapa JSON).
@@ -3273,6 +3364,14 @@ class PlaySession {
   /// Victorias que representa.
   int get winsCount => winCount ?? (result == PlayResult.win ? 1 : 0);
 
+  /// Partidos que cuentan como DENOMINADOR de una efectividad.
+  ///
+  /// Distinto de [gamesPlayed] en un solo caso: una sesión marcada "no cuenta"
+  /// (`notCounted`) sin desglose figura como 1 partido ahí, pero no se jugó
+  /// para efectos del rendimiento y no puede bajar el porcentaje.
+  int get ratedGames =>
+      (result == PlayResult.notCounted && !isMultiGame) ? 0 : gamesPlayed;
+
   /// Si el usuario cargó el desglose de la sesión.
   bool get isMultiGame => matchCount != null || trainingCount != null;
 
@@ -3558,6 +3657,63 @@ class PlaySession {
         distanceEstimated: distanceEstimated,
       );
 
+  /// Lo que se RESPALDA en el servidor de esta sesión. Es un subconjunto de
+  /// [toJson] y **no incluye ningún dato de salud**: ni calorías, pulso, pasos,
+  /// distancia, zonas, oxígeno, variabilidad, velocidad, ni el flag de récord.
+  /// Eso queda solo en el teléfono, como declara la política de privacidad.
+  ///
+  /// El servidor además aplica su propia lista blanca (`backend/src/sync`), así
+  /// que un campo de más acá no llegaría a guardarse; pero la primera barrera es
+  /// esta, y hay un test que lo verifica.
+  ///
+  /// La identidad de la sesión (`endedAtMillis`) NO va dentro: viaja aparte.
+  Map<String, dynamic> toSyncJson() => {
+        'courtId': courtId,
+        'courtName': courtName,
+        'seconds': seconds,
+        if (result != null) 'result': result!.name,
+        'points': points,
+        if (userPoints != null) 'uPts': userPoints,
+        if (userPts3 != null) 'u3': userPts3,
+        if (userPts2 != null) 'u2': userPts2,
+        if (userPts1 != null) 'uFT': userPts1,
+        if (hiddenSections != null)
+          'hidden': hiddenSections!.map((e) => e.name).toList(),
+        if (matchCount != null) 'nMatches': matchCount,
+        if (trainingCount != null) 'nTrainings': trainingCount,
+        if (winCount != null) 'nWins': winCount,
+        if (gamePoints != null) 'gamePts': gamePoints,
+        if (gameFormats != null) 'gameFmt': gameFormats,
+      };
+
+  /// Reconstruye una sesión desde lo respaldado. Sin salud (nunca se subió): los
+  /// campos del reloj quedan en su valor vacío.
+  factory PlaySession.fromSyncJson(int endedAtMillis, Map<String, dynamic> j) =>
+      PlaySession(
+        courtId: (j['courtId'] ?? '') as String,
+        courtName: (j['courtName'] ?? '') as String,
+        seconds: (j['seconds'] as num?)?.toInt() ?? 0,
+        endedAtMillis: endedAtMillis,
+        result: PlayResultX.fromName(j['result'] as String?),
+        points: (j['points'] as num?)?.toInt() ?? 0,
+        userPoints: (j['uPts'] as num?)?.toInt(),
+        userPts3: (j['u3'] as num?)?.toInt(),
+        userPts2: (j['u2'] as num?)?.toInt(),
+        userPts1: (j['uFT'] as num?)?.toInt(),
+        hiddenSections: j.containsKey('hidden')
+            ? MatchSectionX.parseAll(j['hidden'] as List<dynamic>?)
+            : null,
+        matchCount: (j['nMatches'] as num?)?.toInt(),
+        trainingCount: (j['nTrainings'] as num?)?.toInt(),
+        winCount: (j['nWins'] as num?)?.toInt(),
+        gamePoints: (j['gamePts'] as List<dynamic>?)
+            ?.map((e) => (e as num).toInt())
+            .toList(),
+        gameFormats: (j['gameFmt'] as List<dynamic>?)
+            ?.map((e) => (e as num).toInt())
+            .toList(),
+      );
+
   Map<String, dynamic> toJson() => {
         'courtId': courtId,
         'courtName': courtName,
@@ -3824,4 +3980,55 @@ class StreakEntry {
         (j['endedAt'] as num?)?.toInt() ?? 0,
         (j['wins'] as num?)?.toInt() ?? 0,
       );
+}
+
+
+/// Cuántas sesiones se conservan en el historial local. El servidor guarda
+/// TODAS; el tope local existe porque las estadísticas (efectividad, mejor
+/// partido, puntos por período) se calculan sobre este log.
+const int kMaxLocalSessions = 100;
+
+/// Une el historial local con el respaldado en el servidor.
+///
+/// - La identidad de una sesión es su `endedAtMillis`.
+/// - **En un choque gana lo LOCAL**: tiene los datos de salud, que el servidor no
+///   guarda, y los pisaría con valores vacíos.
+/// - Las que solo existen en el servidor entran sin salud.
+/// - El resultado queda ordenado de la más nueva a la más vieja y recortado a
+///   [cap]; las más viejas siguen en el servidor.
+///
+/// Es una función pura a propósito: es donde se podría PERDER historial, y por
+/// eso tiene su test.
+List<PlaySession> mergeSessionHistory(
+  List<PlaySession> local,
+  List<PlaySession> remote, {
+  int cap = kMaxLocalSessions,
+}) {
+  final byKey = <int, PlaySession>{
+    for (final s in remote)
+      if (s.endedAtMillis > 0) s.endedAtMillis: s,
+  };
+  for (final s in local) {
+    if (s.endedAtMillis > 0) byKey[s.endedAtMillis] = s; // lo local pisa
+  }
+  final out = byKey.values.toList()
+    ..sort((a, b) => b.endedAtMillis.compareTo(a.endedAtMillis));
+  return out.length > cap ? out.sublist(0, cap) : out;
+}
+
+/// Unión del historial de rachas por `endedAtMillis`, de la más nueva a la más
+/// vieja. Una racha ya archivada nunca se "desarchiva" por restaurar.
+List<StreakEntry> mergeStreakHistory(
+  List<StreakEntry> local,
+  List<StreakEntry> remote,
+) {
+  final byKey = <int, StreakEntry>{
+    for (final e in remote)
+      if (e.endedAtMillis > 0) e.endedAtMillis: e,
+  };
+  for (final e in local) {
+    if (e.endedAtMillis > 0) byKey[e.endedAtMillis] = e;
+  }
+  return byKey.values.toList()
+    ..sort((a, b) => b.endedAtMillis.compareTo(a.endedAtMillis));
 }

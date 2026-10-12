@@ -233,6 +233,39 @@ model Match {
   @@map("matches")
 }
 
+/// Respaldo del historial de sesiones de juego de cada usuario (lo que la app
+/// guardaba SOLO en el teléfono). `data` NO lleva métricas de salud: la lista
+/// blanca vive en `sync/sync.module.ts`. La identidad es (email, endedAtMs): el
+/// epoch en ms no tiene la ambigüedad de huso horario de `matches.endedAt`, y la
+/// unicidad hace idempotente el reintento. `email` siempre en minúsculas.
+model PlaySession {
+  id        String   @id @default(uuid())
+  email     String
+  endedAtMs BigInt   @map("ended_at_ms")
+  data      Json
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([email, endedAtMs])
+  @@map("play_sessions")
+}
+
+/// Listas chicas por usuario que vivían solo en el teléfono. `kind`:
+/// streak_history | favorites | blocked. Privada por construcción: solo se lee y
+/// escribe con los endpoints del propio usuario.
+model UserData {
+  id        String   @id @default(uuid())
+  email     String
+  kind      String
+  data      Json
+  archived  Boolean  @default(false)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([email, kind])
+  @@map("user_data")
+}
+
 /// Mensaje del chat de un pickup. Vive mientras viva el pickup (se archiva en
 /// cascada con él). El autor se identifica por email: los miembros de un
 /// pickup ya ven los emails de los demás, no expone nada nuevo.

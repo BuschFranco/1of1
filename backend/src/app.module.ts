@@ -13,6 +13,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { PickupsModule } from './pickups/pickups.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { RankingsModule } from './rankings/rankings.module';
+import { SyncModule } from './sync/sync.module';
 import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
@@ -28,6 +29,7 @@ import { UploadsModule } from './uploads/uploads.module';
     GeoModule,
     NewsModule,
     MatchesModule,
+    SyncModule,
     ClansModule,
     RankingsModule,
     UploadsModule,

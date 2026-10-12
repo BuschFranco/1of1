@@ -18,7 +18,7 @@ export class ProfilesService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** Borra (archiva) la cuenta y sus datos, en el mismo orden de siempre:
-   * matches → reviews → friends → pickups (+chats) → perfil → usuario.
+   * matches → historial → reviews → friends → pickups (+chats) → perfil → usuario.
    * Borrado lógico (archived=true); devuelve el conteo por tabla. */
   async deleteAccount(
     email: string,
@@ -32,6 +32,19 @@ export class ProfilesService {
       const out: Record<string, number> = {};
       out.matches = (
         await tx.match.updateMany({
+          where: { email: e, archived: false },
+          data: { archived: true },
+        })
+      ).count;
+      // Respaldo del historial y listas del usuario (play_sessions / user_data).
+      out.playSessions = (
+        await tx.playSession.updateMany({
+          where: { email: e, archived: false },
+          data: { archived: true },
+        })
+      ).count;
+      out.userData = (
+        await tx.userData.updateMany({
           where: { email: e, archived: false },
           data: { archived: true },
         })

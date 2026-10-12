@@ -62,7 +62,7 @@ Todos protegidos con `Authorization: Bearer <jwt>` salvo los de `/auth`.
 | `PATCH /me` | `Partial<Profile>` (flush de stats/clan/título/privacidad; `Adm` NO es escribible) | `Profile` |
 | `POST /me/handle` | `{handle}` (valida formato + unicidad) | `Profile` |
 | `PATCH /me/presence` | `{playing, courtId?, since?}` | `Profile` |
-| `DELETE /me` | — | `{ok, archived}` — archiva matches/reseñas/amistades/pickups/perfil/usuario (requisito de tiendas) |
+| `DELETE /me` | — | `{ok, archived}` — archiva matches/historial/listas/reseñas/amistades/pickups/perfil/usuario (requisito de tiendas) |
 
 ### Perfiles públicos
 
@@ -125,6 +125,25 @@ texto en `courts.img`. La DB nunca ve bytes de imagen.
 | `GET /matches/mine` | — | partidos del usuario del token |
 | `GET /matches/court-king` | `?courtId=` | `{name, handle, points}` — rey de la cancha en la temporada |
 | `GET /matches/court-points` | `?courtId=` | mis puntos acumulados en esa cancha |
+
+### Respaldo del historial (sync)
+
+Lo que la app guardaba SOLO en el teléfono, para que reinstalar o cambiar de
+celular no lo borre. **Nunca guarda datos de salud**: el cliente no los manda y
+el servidor aplica una lista blanca (`sanitizeSessionData`) que descarta todo lo
+que no esté permitido. No toca `matches` (los rankings leen de ahí).
+
+| Endpoint | Body / Query | Devuelve |
+| --- | --- | --- |
+| `POST /sync/sessions` | `{sessions: [{endedAtMs, data}]}` — lote de hasta **50**; `endedAtMs` (epoch ms) es la identidad | `{results: [{ok}]}` por ítem. **Upsert** por `(email, endedAtMs)`: reintentar no duplica |
+| `GET /sync/sessions` | `?limit=100&before=<ms>` (tope 200) | `{sessions: [{endedAtMs, data}]}`, más nuevas primero |
+| `GET /sync/data` | — | `{streak_history?, favorites?, blocked?}`. Un `kind` **ausente** = nunca sincronizado; **vacío** = el usuario lo vació |
+| `PUT /sync/data/:kind` | `{data: [...]}` — `kind` ∈ `streak_history`, `favorites`, `blocked` | `{ok, count}`. **Reemplaza** el contenido |
+
+`data` de una sesión admite solo: `courtId`, `courtName`, `seconds`, `result`,
+`points`, `uPts`, `u3`, `u2`, `uFT`, `nMatches`, `nTrainings`, `nWins`, `gamePts[]`,
+`gameFmt[]`, `hidden[]` (los mismos que `PlaySession.toSyncJson` en la app). Los
+emails se guardan en minúsculas y `DELETE /me` archiva ambas tablas.
 
 ### Rankings y clanes
 

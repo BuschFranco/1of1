@@ -256,6 +256,13 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
     // contarlos hundía el promedio de cualquier sesión mixta.
     final count = matches.fold(0, (s, m) => s + m.gamesPlayed);
     final avg = count > 0 ? total / count : 0.0;
+    // Sobre el período elegido, no sobre todo el historial. Con menos de 3
+    // partidos no se muestra: 1 de 1 daría "100%", que es ruido y no un logro.
+    final rated = matches.fold(0, (s, m) => s + m.ratedGames);
+    final wins = matches.fold(0, (s, m) => s + m.winsCount);
+    final winRate = rated >= PlaySessionService.winRateMinGames
+        ? (wins / rated * 100).round()
+        : null;
     // "Mejor partido": con los puntos cargados uno por uno sale del mejor
     // partido individual; si solo se cargó el total de la sesión, es lo único
     // que se sabe.
@@ -265,12 +272,6 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
           : (s.userPoints ?? 0);
       return v > m ? v : m;
     });
-    final withTime = matches.where((m) => m.seconds > 0);
-    final ppm = withTime.isEmpty
-        ? 0.0
-        : withTime.fold<double>(
-                0, (a, m) => a + (m.userPoints! / (m.seconds / 60))) /
-            withTime.length;
     final madeShots = matches.fold(
         0,
         (s, m) =>
@@ -289,9 +290,9 @@ class _GameStatsScreenState extends State<GameStatsScreen> {
           const Color(0xFFEAB308)),
       _statCell('Partidos', '$count', Icons.event_available,
           const Color(0xFF64748B)),
-      if (ppm > 0)
-        _statCell('Puntos por min', ppm.toStringAsFixed(1), Icons.bolt,
-            const Color(0xFFF97316)),
+      if (winRate != null)
+        _statCell('Efectividad', '$winRate%', Icons.emoji_events_outlined,
+            const Color(0xFF22C55E)),
       if (perShot > 0)
         _statCell('Puntos por tiro', perShot.toStringAsFixed(1),
             Icons.my_location, const Color(0xFF14B8A6)),

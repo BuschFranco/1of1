@@ -751,9 +751,6 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
             '${s.distanceEstimated ? '~' : ''}'
                 '${s.distance >= 1000 ? (s.distance / 1000).toStringAsFixed(2) : s.distance.round()}',
             '${s.distance >= 1000 ? 'km' : 'm'}${s.distanceEstimated ? ' est.' : ''}'),
-      if (s.calories > 0 && s.seconds > 0)
-        _healthMetric(Icons.whatshot, const Color(0xFFF97316),
-            (s.calories / (s.seconds / 60)).toStringAsFixed(1), 'kcal/min'),
       // Métricas esporádicas: solo si el reloj las midió. Null ≠ 0 — mostrar
       // "0% de oxígeno" cuando simplemente no hubo muestra sería alarmante.
       if (s.spo2 != null)
@@ -1211,21 +1208,45 @@ List<({String label, String value})> _userStatItems(PlaySession s) {
   final p2 = s.userPts2 ?? 0;
   final p1 = s.userPts1 ?? 0;
   final madeShots = p3 + p2 + p1;
-  final ppm = (pts > 0 && s.seconds > 0) ? pts / (s.seconds / 60) : null;
   // Puntos por tiro anotado (eficiencia) y qué parte del puntaje salió de los
-  // tiros de 3.
+  // tiros de 3. Ninguna de las dos depende del TIEMPO, que es lo que las hace
+  // válidas para una sesión.
   final perShot = (pts > 0 && madeShots > 0) ? pts / madeShots : null;
   final threeShare = (pts > 0 && p3 > 0) ? (p3 * 3 / pts * 100).round() : null;
+
+  // ── Métricas que SOLO tienen sentido con varios partidos ──────────────────
+  // Una sesión es una estadía en la cancha, con esperas y descansos entre
+  // partidos: por eso NO hay "puntos por minuto" (4 puntos en 3 horas de estadía
+  // daba 0.0, un número que no dice nada de cómo se jugó). Lo que sí se puede
+  // comparar es PARTIDO contra partido, y eso no se diluye con el tiempo muerto.
+  final games = s.gamesPlayed;
+  final multi = s.isMultiGame && games >= 2;
+  final perGame = (pts > 0 && multi) ? pts / games : null;
+  final best = (multi && s.hasGamePoints && s.gamePoints!.length >= 2)
+      ? s.gamePoints!.reduce((a, b) => a > b ? a : b)
+      : null;
+  // Va en esta tarjeta y no en la fila PARTIDOS/VICTORIAS/ENTRENAM.: en la
+  // imagen para compartir esa fila no se ajusta y una cuarta etiqueta de 30 px
+  // se desbordaría. Solo si hay puntuación cargada, para no dejar la tarjeta
+  // "PUNTUACIÓN" mostrando únicamente victorias.
+  final winRate = (multi && (pts > 0 || madeShots > 0))
+      ? (s.winsCount / games * 100).round()
+      : null;
+
   return [
     if (p3 > 0) (label: 'Puntos de 3', value: '$p3'),
     if (p2 > 0) (label: 'Puntos de 2', value: '$p2'),
     if (p1 > 0) (label: 'Puntos de 1', value: '$p1'),
     if (madeShots > 0) (label: 'Tiros anotados', value: '$madeShots'),
-    if (ppm != null) (label: 'Puntos por minuto', value: ppm.toStringAsFixed(1)),
+    if (perGame != null)
+      (label: 'Puntos por partido', value: perGame.toStringAsFixed(1)),
+    if (best != null) (label: 'Mejor partido', value: '$best'),
     if (perShot != null)
       (label: 'Puntos por tiro', value: perShot.toStringAsFixed(1)),
     if (threeShare != null)
       (label: '% de puntos de 3', value: '$threeShare%'),
+    if (winRate != null)
+      (label: 'Efectividad de victorias', value: '$winRate%'),
   ];
 }
 
@@ -1457,9 +1478,6 @@ class _ShareCard extends StatelessWidget {
                     '${s.distanceEstimated ? '~' : ''}'
                         '${s.distance >= 1000 ? '${(s.distance / 1000).toStringAsFixed(1)} km' : '${s.distance.round()} m'}',
                   ),
-                if (s.calories > 0 && s.seconds > 0)
-                  _shareMiniStat(Icons.whatshot,
-                      '${(s.calories / (s.seconds / 60)).toStringAsFixed(1)} kcal/min'),
                 // Solo las que el reloj llegó a medir (ver la franja del detalle).
                 if (s.spo2 != null)
                   _shareMiniStat(Icons.bloodtype, '${s.spo2}% O₂'),

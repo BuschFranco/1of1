@@ -34,6 +34,18 @@ class FavoritesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Une favoritos traídos del servidor con los locales. Unión: restaurar nunca
+  /// quita un favorito. Devuelve true si cambió algo.
+  Future<bool> mergeFrom(Iterable<String> remote) async {
+    final merged = {..._ids, ...remote.where((e) => e.isNotEmpty)};
+    if (merged.length == _ids.length) return false;
+    _ids = merged;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_key, _ids.toList());
+    return true;
+  }
+
   Future<void> toggle(String courtId) async {
     if (_ids.contains(courtId)) {
       _ids.remove(courtId);

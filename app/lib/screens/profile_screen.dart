@@ -1346,8 +1346,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (ps.totalDistanceMeters > 0)
         stat('Distancia', fmtDistance(ps.totalDistanceMeters), 'total',
             Icons.straighten, const Color(0xFF3B82F6)),
-      if (ps.caloriesPerMinute > 0)
-        stat('Calorías/min', ps.caloriesPerMinute.toStringAsFixed(1), 'prom',
+      if (ps.avgCaloriesPerSession > 0)
+        stat('Calorías', '${ps.avgCaloriesPerSession.round()}', 'por sesión',
             Icons.whatshot, const Color(0xFFF97316)),
     ];
     if (cells.isEmpty) return const SizedBox.shrink();
@@ -1457,9 +1457,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const Color(0xFFEAB308)),
       stat('Partidos', '${ps.userGamesWithStats}', Icons.event_available,
           const Color(0xFF64748B)),
-      if (ps.avgUserPointsPerMinute > 0)
-        stat('Puntos por min', ps.avgUserPointsPerMinute.toStringAsFixed(1),
-            Icons.bolt, const Color(0xFFF97316)),
+      // Del historial local (hasta 100 sesiones), no de toda la vida: ver
+      // `PlaySessionService.winRate`. Oculta con menos de 3 partidos.
+      if (ps.winRate != null)
+        stat('Efectividad', '${(ps.winRate! * 100).round()}%',
+            Icons.emoji_events_outlined, const Color(0xFF22C55E)),
       if (ps.avgPointsPerShot > 0)
         stat('Puntos por tiro', ps.avgPointsPerShot.toStringAsFixed(1),
             Icons.my_location, const Color(0xFF14B8A6)),

@@ -113,6 +113,10 @@ class ApiClient {
         res = await http
             .patch(uri, headers: _headers, body: encoded)
             .timeout(_timeout);
+      case 'PUT':
+        res = await http
+            .put(uri, headers: _headers, body: encoded)
+            .timeout(_timeout);
       case 'DELETE':
         res = await http.delete(uri, headers: _headers).timeout(_timeout);
       default:
@@ -428,6 +432,31 @@ class ApiClient {
     }
     final data = jsonDecode(res.body) as Map;
     return (data['url'] ?? '').toString();
+  }
+
+  // ── Respaldo del historial (sync) ──────────────────────────────────────
+  // Lo que antes vivía SOLO en el teléfono. La salud NO viaja nunca: ver
+  // `PlaySession.toSyncJson` y la lista blanca de `backend/src/sync`.
+
+  /// Sube un lote (máx. 50) de sesiones `{endedAtMs, data}`. Es un upsert por
+  /// (email, endedAtMs), así que reintentar es seguro. Devuelve
+  /// `{results: [{ok}]}` en el mismo orden.
+  Future<Map<String, dynamic>> syncSessions(
+    List<Map<String, dynamic>> sessions,
+  ) =>
+      _map(_send('POST', '/sync/sessions', body: {'sessions': sessions}));
+
+  /// Mis sesiones respaldadas, más nuevas primero: `{sessions: [{endedAtMs, data}]}`.
+  Future<Map<String, dynamic>> mySyncedSessions({int limit = 100}) =>
+      _map(_send('GET', '/sync/sessions', query: {'limit': '$limit'}));
+
+  /// Mis listas respaldadas (`streak_history`, `favorites`, `blocked`). Un `kind`
+  /// AUSENTE significa que nunca se sincronizó; uno vacío, que se vació.
+  Future<Map<String, dynamic>> mySyncData() => _map(_send('GET', '/sync/data'));
+
+  /// Reemplaza el contenido de una lista respaldada.
+  Future<void> putSyncData(String kind, List<dynamic> data) async {
+    await _send('PUT', '/sync/data/$kind', body: {'data': data});
   }
 
   // ── Historial de partidos / ranking ────────────────────────────────────

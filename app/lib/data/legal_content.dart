@@ -26,7 +26,7 @@ const String kPrivacyPolicyUrl = 'https://buschfranco.github.io/1of1/privacidad'
 const String kTermsUrl = 'https://buschfranco.github.io/1of1/terminos';
 
 /// Fecha de última actualización de los documentos (mostrada al usuario).
-const String kLegalLastUpdated = '25 de agosto de 2026';
+const String kLegalLastUpdated = '12 de octubre de 2026';
 
 /// Política de Privacidad (resumen honesto de lo que la app hace hoy).
 const String kPrivacyPolicy = '''
@@ -46,13 +46,17 @@ QUÉ DATOS RECOLECTAMOS
   funciona con la app cerrada. No almacenamos tus coordenadas en nuestra base:
   solo registramos en qué cancha jugaste. (Ver "Servicios de terceros": para el
   mapa y las rutas, tus coordenadas se envían a Google en el momento.)
-• Datos de salud (opcional): si conectás Salud (Health Connect / Apple Health),
+• Datos de salud (opcional): si conectás Salud (Health Connect),
   leemos calorías, pulso, pasos, distancia, velocidad, oxígeno en sangre,
   frecuencia cardíaca en reposo, variabilidad cardíaca y ritmo respiratorio de
   tus sesiones de juego, además de las sesiones de ejercicio que registre tu reloj.
   SOLO los leemos (nunca escribimos en tu historial de salud), quedan
   ÚNICAMENTE en tu dispositivo y no se suben a nuestros servidores.
-• Actividad de juego: historial de sesiones (cancha, fecha, duración, puntos).
+• Actividad de juego: historial de sesiones (cancha, fecha, duración, resultado,
+  marcador, formato y los puntos que cargás), tus rachas pasadas, tus canchas
+  favoritas y los usuarios que bloqueaste. Esto se respalda en nuestro servidor
+  para que no lo pierdas si reinstalás la app o cambiás de celular. Las métricas
+  de salud NO se respaldan: quedan solo en tu dispositivo.
 • Mensajes: el contenido de los chats de pickups que enviás se guarda en nuestro
   servidor para poder mostrárselo a los participantes de ese pickup.
 
@@ -73,9 +77,25 @@ SERVICIOS DE TERCEROS
 Usamos servicios de Google para funciones del mapa: Google Maps (mostrar el
 mapa), Geocoding (convertir direcciones en coordenadas) y Directions (calcular
 rutas a las canchas). Al usar esas funciones, tu ubicación y/o la dirección
-consultada se envían a Google. Si iniciás sesión con Google, tu autenticación y
+consultada se envían a Google. Las consultas de zona y de rutas pasan por
+nuestro servidor, que las reenvía a Google y no guarda las coordenadas en la base
+de datos. Si iniciás sesión con Google, tu autenticación y
 foto de perfil las provee Google Sign-In. El tratamiento que hace Google se rige
 por su propia política de privacidad (policies.google.com/privacy).
+
+NOTIFICACIONES
+La app muestra notificaciones locales en tu dispositivo: aviso de llegada a una
+cancha, cronómetro de la sesión de juego y, si lo dejás activado, un recordatorio
+para volver a jugar cuando pasan varios días sin una sesión (como mucho tres
+seguidos, y solo hasta que vuelvas a jugar). Se generan en tu teléfono: no las
+enviamos desde nuestros servidores ni compartimos datos con terceros para
+mostrarlas. Podés apagarlas desde los permisos del sistema, y el recordatorio de
+volver a jugar desde Ajustes → Privacidad.
+
+NOTICIAS
+La sección de Noticias muestra notas de básquet (NBA, WNBA y Liga Nacional) que
+nuestro servidor obtiene de ESPN y NewsData.io. Para eso no enviamos ningún dato
+tuyo a esos servicios: la consulta es solo por liga.
 
 CUÁNTO TIEMPO LOS CONSERVAMOS
 Conservamos tus datos mientras tu cuenta esté activa. Si eliminás tu cuenta, los

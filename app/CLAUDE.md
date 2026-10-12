@@ -328,6 +328,19 @@ tokens + endpoint).
   Android. El porqué completo, en §8.4 de `docs/deteccion-partidos.md` — leelo
   antes de tocar esto.
 
+### Textos legales: están en DOS lugares y se desincronizan
+
+La política de privacidad y los términos viven **duplicados**: en la app
+([`lib/data/legal_content.dart`](lib/data/legal_content.dart)) y en la web
+(`web/src/i18n/es.json` y `en.json`, claves `privacy` / `terms` /
+`deleteAccount`). La de la web es la URL que se carga en Play Console, y ya se
+quedó atrás una vez: llegó a faltar la mitad de los datos de salud que la app
+pide en el manifest. **Cualquier cambio en uno obliga a cambiar el otro**, y a
+actualizar la fecha (`kLegalLastUpdated` en la app, `updated` en los tres
+documentos de la web). Si sumás un permiso `health.READ_*`, además hay que
+actualizar `docs/play-store/data-safety.md` y el formulario de Seguridad de datos
+de Play Console.
+
 ### Permisos
 
 - Política de pedidos (decisión de producto, jul 2026):
@@ -463,6 +476,14 @@ Si lo hacés, cambiá **de forma consistente**:
 - **google_maps_flutter_android está pineado a `2.19.7`** en `pubspec.yaml`: la
   2.19.8 migró a Pigeon/Kotlin y **rompe el build**. No lo actualices sin verificar.
 - **Windows/adb:** `adb` no está en PATH; usá la ruta completa (§0).
+- **Respaldo en el servidor:** todo estado local que el usuario NO pueda
+  reconstruir tiene que respaldarse en el backend, o reinstalar la app lo borra
+  (ya pasó). El historial de sesiones, las rachas pasadas, los favoritos y los
+  bloqueados viajan por `/sync/*` (`backend/src/sync`, `SyncCoordinator._syncHistory`).
+  **La excepción son los datos de salud**: nunca salen del teléfono, y el servidor
+  además los descarta con una lista blanca. Si agregás un campo a una sesión,
+  decidí si viaja y actualizá `PlaySession.toSyncJson` **y** la lista blanca de
+  `sanitizeSessionData`; hay un test que falla si se cuela salud.
 - **Datos por usuario:** cualquier estado local nuevo debe ir namespaced por
   `userKey` (patrón `base::$userKey`) para no filtrarse entre cuentas. Al cerrar
   sesión, limpialo (`resetForLogout` / `clearForLogout`).
