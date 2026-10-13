@@ -1006,6 +1006,7 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
         SectionTitle(
           title: 'Reseñas',
           right: 'Escribir',
+          rightIcon: Icons.edit_outlined,
           onRight: () => _openReviewDialog(context),
         ),
         FutureBuilder<List<Review>>(
@@ -1780,6 +1781,7 @@ class _PostsSectionState extends State<_PostsSection> {
         SectionTitle(
           title: 'Publicaciones',
           right: 'Publicar',
+          rightIcon: Icons.add,
           onRight: () => _openPostDialog(context),
         ),
         FutureBuilder<List<CourtPost>>(

@@ -6,12 +6,14 @@ class SectionTitle extends StatelessWidget {
   final String title;
   final String? right;
   final VoidCallback? onRight;
+  final IconData? rightIcon;
 
   const SectionTitle({
     super.key,
     required this.title,
     this.right,
     this.onRight,
+    this.rightIcon,
   });
 
   @override
@@ -19,7 +21,7 @@ class SectionTitle extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
@@ -38,20 +40,35 @@ class SectionTitle extends StatelessWidget {
               ),
             ],
           ),
+          // Acción principal de la sección (Escribir / Publicar): botón relleno
+          // con el acento. Como link subrayado de 11px el usuario ni lo veía.
           if (right != null)
             PressableWidget(
               onTap: onRight,
-              child: Text(
-                right!,
-                style: AppText.grotesk(
-                  size: 11,
-                  weight: FontWeight.w700,
-                  color: AppColors.ink,
-                  letterSpacing: 0.04,
-                  height: 1,
-                ).copyWith(
-                  decoration: TextDecoration.underline,
-                  decorationColor: AppColors.ink,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.accent,
+                  borderRadius: BorderRadius.circular(AppShape.rChip),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (rightIcon != null) ...[
+                      Icon(rightIcon, size: 15, color: AppColors.bg),
+                      const SizedBox(width: 6),
+                    ],
+                    Text(
+                      right!,
+                      style: AppText.grotesk(
+                        size: 13,
+                        weight: FontWeight.w700,
+                        color: AppColors.bg,
+                        height: 1,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
