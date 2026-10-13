@@ -122,7 +122,7 @@ class Review {
 
 }
 
-/// Nota de noticias (NBA / WNBA / Liga Nacional). Forma común aunque el
+/// Nota de noticias (NBA / WNBA / Liga Nacional / 3x3). Forma común aunque el
 /// backend la arme desde dos fuentes distintas (ESPN o NewsData.io) — ver
 /// `backend/src/news/news.module.ts`.
 class NewsArticle {

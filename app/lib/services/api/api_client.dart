@@ -392,7 +392,7 @@ class ApiClient {
 
   // ── Noticias ───────────────────────────────────────────────────────────
 
-  /// Feed de noticias de [league] ('nba' | 'wnba' | 'lnb'). Lista vacía si la
+  /// Feed de noticias de [league] ('nba' | 'wnba' | 'lnb' | '3x3'). Lista vacía si la
   /// liga no es válida o la fuente falló — la llamada a ESPN/NewsData.io la
   /// hace el backend, ver `NewsService` para el porqué.
   Future<List<Map<String, dynamic>>> getNews(String league) =>

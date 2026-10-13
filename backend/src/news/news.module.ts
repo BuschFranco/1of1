@@ -39,7 +39,9 @@ type Article = {
   publishedAt: string;
 };
 
-type League = 'nba' | 'wnba' | 'lnb';
+type League = 'nba' | 'wnba' | 'lnb' | '3x3';
+
+const MAX_RSS_ITEMS = 20;
 
 @Injectable()
 class NewsService {
@@ -52,7 +54,11 @@ class NewsService {
     if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
 
     const value =
-      league === 'lnb' ? await this.fromNewsData() : await this.fromEspn(league);
+      league === 'lnb'
+        ? await this.fromNewsData()
+        : league === '3x3'
+          ? await this.fromGoogleNews()
+          : await this.fromEspn(league);
 
     this.cache.set(league, { at: Date.now(), value });
     return value;
@@ -121,6 +127,70 @@ class NewsService {
     }
   }
 
+  /// 3x3: no hay API ni feed dedicado (ESPN no tiene liga 3x3 y la API de FIBA
+  /// 3x3 es privada). Sale del RSS de búsqueda de Google News, sin key y sin
+  /// cupo diario; no es un contrato documentado, pero es un feed público
+  /// estándar. Nunca lanza: ante cualquier falla devuelve lista vacía.
+  private async fromGoogleNews(): Promise<Article[]> {
+    try {
+      const res = await axios.get('https://news.google.com/rss/search', {
+        params: {
+          q: '"FIBA 3x3" OR "3x3 basketball" OR "básquet 3x3"',
+          hl: 'es-419',
+          gl: 'AR',
+          ceid: 'AR:es-419',
+        },
+        timeout: 8000,
+        responseType: 'text',
+      });
+      const xml = String(res.data ?? '');
+      const tag = (block: string, name: string): string => {
+        const m = block.match(
+          new RegExp(`<${name}[^>]*>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</${name}>`),
+        );
+        return this.decodeXml((m?.[1] ?? '').trim());
+      };
+      const items = (xml.match(/<item>[\s\S]*?<\/item>/g) ?? []).map((b) => {
+        const source = tag(b, 'source');
+        let title = tag(b, 'title');
+        // Google agrega " - Fuente" al final del título.
+        if (source && title.endsWith(` - ${source}`)) {
+          title = title.slice(0, -(source.length + 3));
+        }
+        const pub = tag(b, 'pubDate');
+        const ms = Date.parse(pub);
+        return {
+          ms: Number.isNaN(ms) ? 0 : ms,
+          article: {
+            title,
+            summary: '',
+            url: tag(b, 'link'),
+            imageUrl: '',
+            source: source || 'Google News',
+            publishedAt: Number.isNaN(ms) ? '' : new Date(ms).toISOString(),
+          } as Article,
+        };
+      });
+      return items
+        .filter((i) => i.article.title && i.article.url)
+        .sort((a, b) => b.ms - a.ms)
+        .slice(0, MAX_RSS_ITEMS)
+        .map((i) => i.article);
+    } catch (e) {
+      this.log.error(`google news (3x3) falló: ${(e as Error)?.message ?? e}`);
+      return [];
+    }
+  }
+
+  private decodeXml(s: string): string {
+    return s
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;|&#39;/g, "'")
+      .replace(/&amp;/g, '&');
+  }
+
   /// Liga Nacional: NewsData.io por palabra clave — no hay endpoint dedicado
   /// para la LNB en ningún lado. `category=sports&language=es` acota el ruido
   /// del keyword search; igual puede traer alguna nota de otro deporte.
@@ -172,7 +242,7 @@ class NewsController {
   /// fuente falló — quien llama degrada a "sin noticias", no a un error.
   @Get()
   news(@Query('league') league: string) {
-    const l = league === 'nba' || league === 'wnba' || league === 'lnb'
+    const l = league === 'nba' || league === 'wnba' || league === 'lnb' || league === '3x3'
       ? league
       : null;
     if (!l) return [];

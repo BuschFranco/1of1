@@ -106,6 +106,11 @@ class _NewsScreenState extends State<NewsScreen> {
                 active: _league == NewsService.wnba,
                 onTap: () => _selectLeague(NewsService.wnba),
               ),
+              AppChip(
+                label: '3x3',
+                active: _league == NewsService.threeXThree,
+                onTap: () => _selectLeague(NewsService.threeXThree),
+              ),
             ],
           ),
           const SizedBox(height: 20),
