@@ -251,6 +251,35 @@ usuario toca dos veces y se duplica la operación.
 - El chat de pickups usa **mensaje optimista**: la burbuja aparece en gris con
   "Enviando" y se reemplaza por la real al confirmar (`ChatMessage.pending`).
 
+### Modo offline
+
+Quien **ya inició sesión en el celu** puede usar la app sin internet. Si al
+arrancar `GET /me` falla por red, timeout o 5xx, `Session` **no desloguea**:
+entra con el perfil cacheado y `Session.offline = true` (solo el 401 manda al
+login). Una instalación nueva igual necesita conectarse una vez.
+
+- **Qué funciona:** mapa y lista de canchas (catálogo cacheado en `courts_cache`),
+  detección y registro de sesiones con su puntuación (siempre fue local), y el
+  Perfil con lo guardado en el celu (amigos, perfiles y ranking cacheados, ver
+  `docs/cache.md` → "Caché persistente").
+- **Qué se bloquea:** las pestañas Crear y Social (`_offlineBlocked` en
+  `main_shell.dart`), y dentro de las permitidas lo que necesita red:
+  reseñas/publicaciones/partidas/rey/clan en el detalle de cancha, ranking y
+  reseñas del mapa, buscador de lugares, cambiar handle, agregar/quitar amigos,
+  ranking por rango de fechas, eliminar cuenta y cerrar sesión. Para una acción
+  nueva que necesite red usá `requireOnline(context)` (`widgets/offline_pill.dart`).
+- **Reconectar:** `Session.reconnect()`. Lo disparan el botón flotante
+  `OfflinePill` (en el mapa reemplaza al buscador; en el resto, arriba de la
+  barra de pestañas), la vuelta a primer plano (`SyncCoordinator`) y cualquier
+  `POST /matches` que responda. Al reconectar, `SyncCoordinator._onReconnected`
+  sube TODO lo pendiente al toque (`_flushAll`) en vez de esperar el timer.
+- **Nada de lo hecho offline se pierde:** las ediciones del perfil se persisten
+  (`session_dirty`) y, al volver, se superponen al perfil que trae `/me`
+  (`Session._withPending`) antes de subirse. Favoritos/bloqueados cambiados
+  offline no se "unen" con la lista del servidor (volverían los quitados): gana
+  la local. `POST /matches` es idempotente por `(email, endedAt)` en el backend,
+  así que reintentar un lote nunca duplica ranking ni puntos de clan.
+
 ### Notificaciones a OTROS usuarios: no hay push
 
 **No existe canal server→cliente** (nada de FCM; `notifications_service.dart` es

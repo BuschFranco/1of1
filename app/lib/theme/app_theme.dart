@@ -30,6 +30,11 @@ class AppColors {
   /// contraste con las cards las hace respirar).
   static const Color lilac = Color(0xFF080E18);
 
+  /// Fondo del ícono de la app (`adaptive_icon_background` en pubspec y
+  /// `ic_launcher_background` en Android). Lo usan las pantallas de carga del
+  /// arranque, para que abrir la app continúe el color del ícono.
+  static const Color brand = Color(0xFF1E1B4B);
+
   // Aliases históricos de fondo de PANTALLA (no de card): se conservan para no
   // romper call-sites, pero no tienen color propio.
   static const Color sun = bg;

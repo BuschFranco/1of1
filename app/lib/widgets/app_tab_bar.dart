@@ -17,6 +17,10 @@ class AppTabBar extends StatefulWidget {
   /// (verde jugando / naranja countdown / gris pausado). `null` = sin aura.
   final Color? homeGlow;
 
+  /// Pestañas que no se pueden abrir ahora (modo offline): se pintan atenuadas
+  /// y con un candado. El tap igual llega a [onChange], que decide qué avisar.
+  final Set<AppTab> disabled;
+
   const AppTabBar({
     super.key,
     required this.active,
@@ -24,6 +28,7 @@ class AppTabBar extends StatefulWidget {
     required this.onChange,
     this.crewHasActivity = false,
     this.homeGlow,
+    this.disabled = const {},
   });
 
   @override
@@ -190,7 +195,9 @@ class _AppTabBarState extends State<AppTabBar>
                         t == AppTab.plus
                             ? _PlusButton(
                                 key: _plusKey,
-                                color: _indicatorColor,
+                                color: widget.disabled.contains(t)
+                                    ? _indicatorColor.withAlpha(70)
+                                    : _indicatorColor,
                                 onTap: () => widget.onChange(t))
                             : _TabCircle(onTap: () => widget.onChange(t)),
                     ],
@@ -282,14 +289,24 @@ class _AppTabBarState extends State<AppTabBar>
                                                         .abs() <
                                                     _item / 2),
                                         size: _slots[i] == AppTab.plus ? 24 : 21,
-                                        color: _slots[i] == AppTab.plus ||
-                                                (indX - _slotCenter(innerW, i))
-                                                        .abs() <
-                                                    _item / 2
-                                            ? Colors.white
-                                            : AppColors.white(0.6),
+                                        color: widget.disabled.contains(_slots[i])
+                                            ? AppColors.white(0.25)
+                                            : _slots[i] == AppTab.plus ||
+                                                    (indX - _slotCenter(innerW, i))
+                                                            .abs() <
+                                                        _item / 2
+                                                ? Colors.white
+                                                : AppColors.white(0.6),
                                       ),
                                     ),
+                                    if (widget.disabled.contains(_slots[i]))
+                                      Positioned(
+                                        right: 6,
+                                        bottom: 6,
+                                        child: Icon(Icons.lock_rounded,
+                                            size: 12,
+                                            color: AppColors.white(0.55)),
+                                      ),
                                     if (_slots[i] == AppTab.chat && widget.crewHasActivity)
                                       Positioned(
                                         top: 6,

@@ -45,7 +45,7 @@ class BlockedProvider extends ChangeNotifier {
     final merged = {..._blocked, ...remote.map(_norm).where((e) => e.isNotEmpty)};
     if (merged.length == _blocked.length) return false;
     _blocked = merged;
-    await _persist();
+    await _persist(local: false);
     notifyListeners();
     return true;
   }
@@ -58,9 +58,25 @@ class BlockedProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _persist() async {
+  Future<void> _persist({bool local = true}) async {
     final sp = await SharedPreferences.getInstance();
     await sp.setStringList(_key, _blocked.toList());
+    if (local) await sp.setBool(_dirtyKey, true);
+  }
+
+  // Cambiada en el celu y todavía sin subir. Mientras lo esté, el restore NO
+  // une con la lista del servidor: un desbloqueo hecho sin conexión se perdería.
+  String get _dirtyKey => '${_key}_dirty';
+
+  Future<bool> hasLocalChanges() async {
+    final sp = await SharedPreferences.getInstance();
+    return sp.getBool(_dirtyKey) ?? false;
+  }
+
+  /// El servidor ya tiene la lista local.
+  Future<void> markSynced() async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.remove(_dirtyKey);
   }
 
   void clearForLogout() {

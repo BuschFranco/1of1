@@ -81,6 +81,10 @@ class DetailScreen extends StatelessWidget {
     }
     final court = courts.firstWhere((c) => c.id == courtId,
         orElse: () => courts.first);
+    // Modo offline: la info de la cancha sale del caché local; lo que vive en
+    // el servidor (rey, clan, jugando ahora, partidas, reseñas, publicaciones)
+    // se reemplaza por un aviso.
+    final offline = context.select<Session, bool>((s) => s.offline);
 
     return GestureDetector(
       // Deslizar a la derecha cierra el detalle y vuelve a la pestaña previa
@@ -128,15 +132,20 @@ class DetailScreen extends StatelessWidget {
                         },
                       );
                     }),
-                    _CourtOwnerCard(courtId: court.id),
-                    _CourtKingCard(courtId: court.id),
+                    if (!offline) ...[
+                      _CourtOwnerCard(courtId: court.id),
+                      _CourtKingCard(courtId: court.id),
+                    ],
                     Padding(
                       padding: const EdgeInsets.only(top: 16),
                       child: _MyCourtStats(courtId: court.id),
                     ),
-                    _playingNow(court),
+                    if (!offline) _playingNow(court),
                     _MyCourtHistory(courtId: court.id),
-                    _publicPickupsSection(court),
+                    if (offline)
+                      _offlineNotice()
+                    else
+                      _publicPickupsSection(court),
                     const SizedBox(height: 22),
                     const SectionTitle(title: 'Amenities'),
                     Wrap(
@@ -159,11 +168,13 @@ class DetailScreen extends StatelessWidget {
                         height: 1.6,
                       ),
                     ),
-                    const SizedBox(height: 24),
-                    _ReviewsSection(courtId: court.id),
-                    const SizedBox(height: 24),
-                    _PostsSection(courtId: court.id),
-                    if (context.read<Session>().isAdmin) ...[
+                    if (!offline) ...[
+                      const SizedBox(height: 24),
+                      _ReviewsSection(courtId: court.id),
+                      const SizedBox(height: 24),
+                      _PostsSection(courtId: court.id),
+                    ],
+                    if (!offline && context.read<Session>().isAdmin) ...[
                       const SizedBox(height: 24),
                       _adminDeleteCourt(context, court),
                     ],
@@ -607,6 +618,33 @@ class DetailScreen extends StatelessWidget {
     );
   }
 
+  Widget _offlineNotice() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 22),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.wifi_off_rounded, size: 18, color: AppColors.white(0.5)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Conectate para ver quién juega, partidas, reseñas y '
+              'publicaciones de esta cancha.',
+              style: AppText.grotesk(
+                  size: 13, color: AppColors.white(0.7), height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _bottomCta(Court court) {
     return Row(
       // Anclados a la esquina inferior derecha: favoritos a la izquierda del
@@ -987,10 +1025,18 @@ class _ReviewsSectionState extends State<_ReviewsSection> {
   }
 
   Future<List<Review>> _fetch() async {
+    final courts = context.read<CourtsProvider>();
     try {
-      return await context
-          .read<CourtRatingService>()
-          .listReviews(widget.courtId);
+      final list =
+          await context.read<CourtRatingService>().listReviews(widget.courtId);
+      // Las estrellas de las tarjetas salen del catálogo: con la lista fresca
+      // a mano (p. ej. tras dejar una reseña) se corrige esa cancha sin volver
+      // a bajar el catálogo entero.
+      final avg = list.isEmpty
+          ? 0.0
+          : list.fold<double>(0, (s, r) => s + r.rating) / list.length;
+      courts.applyRating(widget.courtId, avg, list.length);
+      return list;
     } catch (_) {
       return [];
     }
@@ -1346,8 +1392,7 @@ class _CourtOwnerCardState extends State<_CourtOwnerCard> {
   Future<void> _load() async {
     if (!ApiConfig.isConfigured || !context.read<Session>().isLoggedIn) return;
     // Pintar al instante lo cacheado (aunque esté viejo), sin spinner.
-    final cached = ApiCache.peek<Map<String, dynamic>?>(
-        CourtOwnerCache.ownerKey(widget.courtId));
+    final cached = CourtOwnerCache.peekOwner(widget.courtId);
     if (cached != null) _apply(cached);
     // Fresco → no toca la red; viejo/ausente → refresca en segundo plano.
     final data = await CourtOwnerCache.ownerDataFor(widget.courtId);
@@ -1432,8 +1477,7 @@ class _CourtKingCardState extends State<_CourtKingCard> {
 
   Future<void> _load() async {
     if (!ApiConfig.isConfigured || !context.read<Session>().isLoggedIn) return;
-    final cached = ApiCache.peek<Map<String, dynamic>?>(
-        CourtOwnerCache.kingKey(widget.courtId));
+    final cached = CourtOwnerCache.peekKing(widget.courtId);
     if (cached != null) _apply(cached);
     final data = await CourtOwnerCache.kingDataFor(widget.courtId);
     if (!mounted) return;

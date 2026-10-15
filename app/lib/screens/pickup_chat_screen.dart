@@ -33,7 +33,13 @@ class PickupChatScreen extends StatefulWidget {
   State<PickupChatScreen> createState() => _PickupChatScreenState();
 }
 
-class _PickupChatScreenState extends State<PickupChatScreen> {
+class _PickupChatScreenState extends State<PickupChatScreen>
+    with WidgetsBindingObserver {
+  // Polling con espaciado: 4 s mientras hay movimiento y se va alargando si no
+  // llega nada (antes era cada 4 s fijo, incluso con la app en segundo plano).
+  static const _pollSteps = [4, 8, 15, 30];
+  int _idlePolls = 0;
+  bool _inBackground = false;
   bool _infoOpen = false; // el chat es el protagonista; la info arranca colapsada
   bool _busy = false;
   bool _rulesShown = false; // guard del dialog de reglas (1 intento por build)
@@ -88,16 +94,40 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
       _loadingMsgs = false;
     }
     _loadMessages(initial: true);
-    // Polling incremental cada 4s mientras la pantalla está montada. Sin
-    // websockets: consistente con la arquitectura REST y suficiente para beta.
-    _poll = Timer.periodic(
-      const Duration(seconds: 4),
-      (_) => _loadMessages(),
-    );
+    // Polling incremental mientras la pantalla está montada y la app a la
+    // vista. Sin websockets: consistente con la arquitectura REST.
+    WidgetsBinding.instance.addObserver(this);
+    _schedulePoll();
+  }
+
+  void _schedulePoll({bool reset = false}) {
+    if (reset) _idlePolls = 0;
+    _poll?.cancel();
+    if (_inBackground || !mounted) return;
+    final secs = _pollSteps[_idlePolls.clamp(0, _pollSteps.length - 1)];
+    _poll = Timer(Duration(seconds: secs), () async {
+      final added = await _loadMessages();
+      _idlePolls = added ? 0 : _idlePolls + 1;
+      _schedulePoll();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _inBackground = false;
+      _loadMessages();
+      _schedulePoll(reset: true);
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _inBackground = true;
+      _poll?.cancel();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _poll?.cancel();
     _cacheMessages();
     _msgCtrl.dispose();
@@ -118,13 +148,14 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
     ApiCache.put(_cacheKey, tail);
   }
 
-  Future<void> _loadMessages({bool initial = false}) async {
+  /// Trae lo nuevo desde el último mensaje. Devuelve true si llegó algo.
+  Future<bool> _loadMessages({bool initial = false}) async {
     try {
       final rows = await _api.pickupMessages(
         widget.pickupId,
         sinceIso: _lastIso.isEmpty ? null : _lastIso,
       );
-      if (!mounted) return;
+      if (!mounted) return false;
       var added = false;
       for (final r in rows) {
         final m = ChatMessage.fromApi(r);
@@ -143,9 +174,11 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
       } else if (_loadingMsgs) {
         setState(() => _loadingMsgs = false);
       }
+      return added;
     } catch (_) {
       // Sin conexión / 403: dejamos lo que haya. El polling reintenta.
       if (mounted && _loadingMsgs) setState(() => _loadingMsgs = false);
+      return false;
     }
   }
 
@@ -208,6 +241,8 @@ class _PickupChatScreenState extends State<PickupChatScreen> {
       });
       _cacheMessages();
       _scrollToBottom();
+      // Hubo actividad: la respuesta del otro probablemente llegue pronto.
+      _schedulePoll(reset: true);
     } catch (_) {
       if (!mounted) return;
       // Falló: se saca la burbuja y el texto vuelve al input para reintentar.

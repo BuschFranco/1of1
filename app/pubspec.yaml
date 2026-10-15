@@ -41,6 +41,8 @@ dependencies:
   fl_chart: ^0.70.0
   google_sign_in: ^6.2.2
   url_launcher: ^6.3.0  # abrir el cliente de mail para reportar contenido / contacto de soporte
+  cached_network_image: ^3.4.1
+  flutter_cache_manager: ^3.4.5
 
 dev_dependencies:
   flutter_test:

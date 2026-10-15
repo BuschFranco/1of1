@@ -1,9 +1,13 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../services/cache/court_image_cache.dart';
 import '../theme/app_theme.dart';
+import 'skeleton.dart';
 
-/// Imagen de una cancha con placeholder. Si no hay URL (o falla la carga),
-/// muestra un fondo gris oscuro con un ícono tenue, dando la impresión de
-/// "sin imagen". Llena el tamaño dado (o se expande si width/height son null).
+/// Imagen de una cancha. Mientras carga muestra un skeleton con brillo y al
+/// llegar entra con un fade; queda guardada en disco ([courtImageCache]) y las
+/// próximas veces aparece al instante. Sin URL (o si falla) muestra un fondo
+/// con una pelota tenue: "sin foto", distinto de "cargando".
 class CourtImage extends StatelessWidget {
   final String url;
   final double? width;
@@ -22,14 +26,16 @@ class CourtImage extends StatelessWidget {
   Widget build(BuildContext context) {
     Widget content = url.trim().isEmpty
         ? _placeholder()
-        : Image.network(
-            url,
+        : CachedNetworkImage(
+            imageUrl: url,
+            cacheManager: courtImageCache,
             width: width,
             height: height,
             fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => _placeholder(),
-            loadingBuilder: (ctx, child, progress) =>
-                progress == null ? child : _placeholder(),
+            fadeInDuration: const Duration(milliseconds: 320),
+            fadeOutDuration: const Duration(milliseconds: 120),
+            placeholder: (_, _) => Skeleton(width: width, height: height),
+            errorWidget: (_, _, _) => _placeholder(),
           );
     if (borderRadius != null) {
       content = ClipRRect(borderRadius: borderRadius!, child: content);

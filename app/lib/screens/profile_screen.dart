@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../data/achievements.dart';
 import '../data/cosmetics.dart';
@@ -14,7 +16,6 @@ import '../services/cache/api_cache.dart';
 import '../services/api/api_config.dart';
 import '../services/app_permissions.dart';
 import '../services/blocked_provider.dart';
-import '../services/court_rating_service.dart';
 import '../services/courts_provider.dart';
 import '../services/favorites_provider.dart';
 import '../services/friends_service.dart';
@@ -23,6 +24,7 @@ import '../services/play_session_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/report_service.dart';
 import '../services/session.dart';
+import '../services/sync_coordinator.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
 import 'legal_screen.dart';
@@ -35,6 +37,7 @@ import '../widgets/permissions_modal.dart';
 import '../widgets/pop_background.dart';
 import '../widgets/pop_panel.dart';
 import '../widgets/busy_overlay.dart';
+import '../widgets/offline_pill.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/rating_badge.dart';
 import '../widgets/season_banner.dart';
@@ -94,10 +97,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _rankFriendsLoaded = false;
   bool _rankBusy = false;
 
+  // Para recargar amigos/ranking cuando vuelve la conexión (modo offline).
+  late bool _wasOffline = context.read<Session>().offline;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadRankFriends());
+  }
+
+  void _watchReconnect() {
+    final offline = context.select<Session, bool>((s) => s.offline);
+    if (_wasOffline && !offline) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        context.read<ProfilesProvider>().load(force: true);
+        _loadRankFriends();
+      });
+    }
+    _wasOffline = offline;
   }
 
   @override
@@ -199,6 +217,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _watchReconnect();
     final session = context.watch<Session>();
     final profile = session.profile ?? const Profile(name: 'Invitado');
 
@@ -669,9 +688,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // puro y sombra dura chica (sin degradado ni glow).
         borderRadius: BorderRadius.circular(AppShape.rCard),
         border: Border.all(color: AppColors.line, width: 1),
-        color: useImage ? null : color,
+        // El color queda de fondo también con foto: sin red (modo offline) la
+        // foto no carga y antes quedaba un cuadro vacío.
+        color: color,
         image: useImage
-            ? DecorationImage(image: NetworkImage(profile.avatar), fit: BoxFit.cover)
+            ? DecorationImage(
+                image: NetworkImage(profile.avatar),
+                fit: BoxFit.cover,
+                onError: (_, _) {})
             : null,
         boxShadow: AppFx.hardShadow(offset: const Offset(2, 2)),
       ),
@@ -1184,6 +1208,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             item('Qué es',
                 'Todo lo que dejás en la cancha: pulso, calorías, pasos y distancia de cada sesión. Así ves cuánto laburaste de verdad.'),
+            item('Minutos intensos',
+                'Una sesión incluye esperas y descansos entre partidos. Por eso, en vez de un pulso promedio (que los descansos bajan), contamos los minutos que estuviste por encima del 70% de tu pulso máximo: es lo que realmente jugaste fuerte. Tu máximo de referencia sale de tu edad.'),
             item('Jugá con tu reloj o banda',
                 'Para medir tu estado necesitás jugar con el reloj o la banda puesta y darle permiso de lectura en Health Connect. Sin wearable no hay datos. Tip: ponelo en modo Básquet y salen mucho más fieles.'),
           ],
@@ -1334,9 +1360,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (ps.totalCalories > 0)
         stat('Calorías', '${ps.totalCalories.round()}', 'total',
             Icons.local_fire_department, const Color(0xFFFF6B1A)),
-      if (ps.avgHeartRate != null)
-        stat('Cardíaco', '${ps.avgHeartRate}', 'prom', Icons.favorite,
-            const Color(0xFFEF4444)),
+      if (ps.totalIntenseMinutes > 0)
+        stat('Intensidad', '${ps.totalIntenseMinutes}', 'min', Icons.whatshot,
+            const Color(0xFFF97316)),
       if (ps.maxHeartRate > 0)
         stat('Cardíaco', '${ps.maxHeartRate}', 'máx', Icons.monitor_heart,
             const Color(0xFFF43F5E)),
@@ -1346,9 +1372,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (ps.totalDistanceMeters > 0)
         stat('Distancia', fmtDistance(ps.totalDistanceMeters), 'total',
             Icons.straighten, const Color(0xFF3B82F6)),
-      if (ps.avgCaloriesPerSession > 0)
-        stat('Calorías', '${ps.avgCaloriesPerSession.round()}', 'por sesión',
-            Icons.whatshot, const Color(0xFFF97316)),
     ];
     if (cells.isEmpty) return const SizedBox.shrink();
 
@@ -2142,16 +2165,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            Builder(builder: (context) {
-              final rs = context.read<CourtRatingService>();
-              return FutureBuilder<CourtRating>(
-                future: rs.ratingFor(c.id),
-                builder: (context, snap) {
-                  final cr = snap.data;
-                  return RatingBadge(value: cr?.average, size: 11);
-                },
-              );
-            }),
+            // El rating viene con el catálogo: sin llamada por favorito.
+            RatingBadge(value: c.reviews > 0 ? c.rating : null, size: 11),
             const SizedBox(width: 10),
             PressableWidget(
               onTap: () => context.read<FavoritesProvider>().toggle(c.id),
@@ -2221,6 +2236,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _editHandle(BuildContext context, String current) async {
+    // Hay que verificar en el servidor que el handle esté libre.
+    if (!requireOnline(context)) return;
     final changed = await showDialog<bool>(
       context: context,
       builder: (_) => _EditHandleDialog(current: current),
@@ -2479,6 +2496,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   /// Confirmación fuerte + borrado real de la cuenta y sus datos en Notion.
   Future<void> _confirmDeleteAccount(BuildContext context) async {
+    if (!requireOnline(context)) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2695,6 +2713,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _confirmLogout(BuildContext context) async {
+    // Offline no: para volver a entrar hace falta internet, y lo editado sin
+    // subir se perdería.
+    if (!requireOnline(context)) return;
     final ok = await showDialog<bool>(
       context: context,
       // El fondo/forma los pone el dialogTheme global (neobrutalista).
@@ -2931,8 +2952,8 @@ class _RankingSheetState extends State<_RankingSheet> {
           ApiCache.isFresh(rankKey, ApiCache.ttlRanking)) {
         byEmail.addAll(cachedRank);
       } else {
+        final cutoffIso = _cutoff(p).toIso8601String();
         try {
-          final cutoffIso = _cutoff(p).toIso8601String();
           final rows = await ApiClient().ranking(
             since: cutoffIso,
             emails: emails,
@@ -2944,9 +2965,16 @@ class _RankingSheetState extends State<_RankingSheet> {
           }
           if (rankKey != null) {
             ApiCache.put(rankKey, Map<String, int>.from(byEmail));
+            unawaited(_persistRank(p, cutoffIso, byEmail));
           }
         } catch (_) {
-          // Sin conexión / error: los amigos quedan en 0 para el período.
+          // Sin conexión: lo último que se bajó para ESTE mismo período (no el
+          // de la semana pasada), marcado con la hora en que se bajó.
+          final stale = rankKey == null ? null : await _readRank(p, cutoffIso);
+          if (stale != null) {
+            byEmail.addAll(stale.data);
+            _staleAt[key] = stale.at;
+          }
         }
       }
     }
@@ -2959,6 +2987,49 @@ class _RankingSheetState extends State<_RankingSheet> {
     ];
     list.sort((a, b) => b.points.compareTo(a.points));
     setState(() => _cache[key] = list);
+  }
+
+  /// Cuándo se bajaron los datos de un período que se está mostrando del caché
+  /// local (modo offline). Ausente = datos frescos.
+  final Map<String, DateTime> _staleAt = {};
+
+  String get _rankUser =>
+      (context.read<Session>().email ?? '').trim().toLowerCase();
+
+  String _rankPrefsKey(_RankPeriod p) => 'ranking_cache::$_rankUser::${p.name}';
+
+  Future<void> _persistRank(
+      _RankPeriod p, String since, Map<String, int> data) async {
+    if (_rankUser.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          _rankPrefsKey(p),
+          jsonEncode({
+            'since': since,
+            'at': DateTime.now().millisecondsSinceEpoch,
+            'data': data,
+          }));
+    } catch (_) {}
+  }
+
+  Future<({Map<String, int> data, DateTime at})?> _readRank(
+      _RankPeriod p, String since) async {
+    if (_rankUser.isEmpty) return null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_rankPrefsKey(p));
+      if (raw == null) return null;
+      final m = jsonDecode(raw) as Map<String, dynamic>;
+      if (m['since'] != since) return null; // otro período (p. ej. otra semana)
+      return (
+        data: (m['data'] as Map)
+            .map((k, v) => MapEntry(k.toString(), (v as num).toInt())),
+        at: DateTime.fromMillisecondsSinceEpoch((m['at'] as num).toInt()),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   void _select(_RankPeriod p) {
@@ -3010,7 +3081,13 @@ class _RankingSheetState extends State<_RankingSheet> {
             Text('Ranking',
                 style: AppText.archivo(size: 20, weight: FontWeight.w900)),
             const SizedBox(height: 6),
-            Text(_subtitle(_period),
+            Text(
+                _staleAt[_cacheKey(_period)] == null
+                    ? _subtitle(_period)
+                    : '${_subtitle(_period)} · sin conexión, datos de las '
+                        '${_staleAt[_cacheKey(_period)]!.hour.toString().padLeft(2, '0')}:'
+                        '${_staleAt[_cacheKey(_period)]!.minute.toString().padLeft(2, '0')}',
+                textAlign: TextAlign.center,
                 style: AppText.grotesk(size: 12, color: AppColors.white(0.4))),
             const SizedBox(height: 14),
             // Selector de período (solo si hay historial en Notion).
@@ -3030,16 +3107,19 @@ class _RankingSheetState extends State<_RankingSheet> {
                   ],
                 ),
               ),
-              const SizedBox(height: 6),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _periodChip(_customRangeLabel, _RankPeriod.custom),
-                  ],
+              // El rango a medida necesita consultar al servidor.
+              if (!context.select<Session, bool>((s) => s.offline)) ...[
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _periodChip(_customRangeLabel, _RankPeriod.custom),
+                    ],
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 14),
             ],
             // Lista de ranking: una página por período, deslizable.
@@ -3244,6 +3324,7 @@ class _FriendsTabState extends State<_FriendsTab> {
   Future<void> _add() async {
     final input = _searchCtrl.text.trim();
     if (input.isEmpty) return;
+    if (!requireOnline(context)) return;
     FocusScope.of(context).unfocus();
     setState(() => _adding = true);
     try {
@@ -3273,6 +3354,7 @@ class _FriendsTabState extends State<_FriendsTab> {
   }
 
   Future<void> _remove(Friend f) async {
+    if (!requireOnline(context)) return;
     // Se dispara desde un menú contextual, así que no hay botón donde poner un
     // spinner: va overlay.
     try {
@@ -3550,9 +3632,12 @@ class _FriendsTabState extends State<_FriendsTab> {
         // Avatar de amigo: plano, borde negro y sombra dura chica.
         borderRadius: BorderRadius.circular(AppShape.rBtn),
         border: Border.all(color: AppColors.line, width: 1),
-        color: useImage ? null : color,
+        color: color, // fondo si la foto no carga (sin red)
         image: useImage
-            ? DecorationImage(image: NetworkImage(fp!.avatar), fit: BoxFit.cover)
+            ? DecorationImage(
+                image: NetworkImage(fp!.avatar),
+                fit: BoxFit.cover,
+                onError: (_, _) {})
             : null,
         boxShadow: AppFx.hardShadow(offset: const Offset(2, 2)),
       ),
@@ -3695,9 +3780,16 @@ class _FriendsTabState extends State<_FriendsTab> {
     // la red y se dispara desde un menú contextual, sin botón donde poner un
     // spinner.
     final blocked = context.read<BlockedProvider>();
+    final sync = context.read<SyncCoordinator>();
     await runBusy(context, () async {
       await blocked.block(f.friendEmail);
-      await _service.removeFriend(f.pageId).catchError((_) {});
+      try {
+        await _service.removeFriend(f.pageId);
+      } catch (_) {
+        // Sin conexión: el bloqueo ya quedó en el celu; la baja de la amistad
+        // en el servidor se reintenta en el próximo batch con red.
+        await sync.queueUnfriend(f.pageId);
+      }
     });
     if (!mounted) return;
     _refresh();

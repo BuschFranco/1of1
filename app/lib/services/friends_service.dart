@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models.dart';
 import 'api/api_client.dart';
 import 'cache/api_cache.dart';
@@ -35,6 +38,9 @@ class FriendsService {
   /// Cacheado con TTL en [ApiCache] (como el servicio es stateless y cada caller
   /// crea su instancia, el cache vive en ApiCache, no acá). `force` para el
   /// pull-to-refresh; las mutaciones invalidan.
+  ///
+  /// Además se guarda una copia en el celu: sin red (modo offline) se devuelve
+  /// la última lista conocida en vez de "no tenés amigos".
   Future<List<Friend>> listFriends(String ownerEmail, {bool force = false}) async {
     const key = 'friends';
     if (!force) {
@@ -43,10 +49,44 @@ class FriendsService {
         return cached;
       }
     }
-    final rows = await _api.friends();
-    final list = rows.map(Friend.fromApi).toList();
-    ApiCache.put(key, list);
-    return list;
+    try {
+      final rows = await _api.friends();
+      final list = rows.map(Friend.fromApi).toList();
+      ApiCache.put(key, list);
+      unawaited(_persist(ownerEmail, list));
+      return list;
+    } catch (_) {
+      final stale = ApiCache.peek<List<Friend>>(key) ?? await _readPersisted(ownerEmail);
+      if (stale != null) return stale;
+      rethrow;
+    }
+  }
+
+  static String _persistKey(String owner) =>
+      'friends_cache::${owner.trim().toLowerCase()}';
+
+  Future<void> _persist(String owner, List<Friend> list) async {
+    if (owner.trim().isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          _persistKey(owner), jsonEncode([for (final f in list) f.toJson()]));
+    } catch (_) {}
+  }
+
+  Future<List<Friend>?> _readPersisted(String owner) async {
+    if (owner.trim().isEmpty) return null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_persistKey(owner));
+      if (raw == null) return null;
+      return [
+        for (final e in jsonDecode(raw) as List)
+          Friend.fromApi((e as Map).cast<String, dynamic>())
+      ];
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Agrega un amigo (sin requerir aceptación). Devuelve el Friend creado.

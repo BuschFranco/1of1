@@ -27,6 +27,7 @@ import '../widgets/app_chip.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/court_image.dart';
 import '../widgets/court_marker_icon.dart';
+import '../widgets/offline_pill.dart';
 import '../widgets/permissions_modal.dart';
 import '../widgets/rating_badge.dart';
 import '../widgets/pressable_widget.dart';
@@ -775,6 +776,8 @@ class _HomeScreenState extends State<HomeScreen>
               ),
                _userLocationDot(),
                _courtReviewBubbles(),
+              // Offline, el buscador (Google Places, sin red no anda) se
+              // reemplaza por el botón para reconectar.
               Positioned(top: 54, left: 16, right: 16, child: _searchBar()),
               if (_showSearch && _predictions.isNotEmpty)
                 Positioned(
@@ -848,10 +851,13 @@ class _HomeScreenState extends State<HomeScreen>
                 bottom: 322,
                 child: Column(
                   children: [
-                    _rankingBtn(),
-                    const SizedBox(height: 10),
-                    _reviewToggleBtn(),
-                    const SizedBox(height: 10),
+                    // Ranking y reseñas en el mapa necesitan red.
+                    if (!context.select<Session, bool>((s) => s.offline)) ...[
+                      _rankingBtn(),
+                      const SizedBox(height: 10),
+                      _reviewToggleBtn(),
+                      const SizedBox(height: 10),
+                    ],
                     if (context.read<Session>().isAdmin) ...[
                       _devControls(),
                       const SizedBox(height: 10),
@@ -913,8 +919,12 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _searchBar() {
+    final offline = context.select<Session, bool>((s) => s.offline);
     return Row(
       children: [
+        if (offline)
+          const Expanded(child: Center(child: OfflinePill()))
+        else
         Expanded(
           child: _glassContainer(
             height: 48,
@@ -1749,8 +1759,9 @@ class _HomeScreenState extends State<HomeScreen>
         ? double.infinity
         : Geolocator.distanceBetween(
             origin.latitude, origin.longitude, pos.latitude, pos.longitude);
-    // ~un tercio de cuadra: la ruta se siente "viva" sin abusar de la API.
-    if (moved > 35) _refreshRoute(pos);
+    // ~2 cuadras. Cada recálculo es una llamada a Google Directions (paga);
+    // con 35 m eran ~28 por km caminado.
+    if (moved > 200) _refreshRoute(pos);
   }
 
   /// Sheet para elegir el modo de la marca (caminando / en auto), con la
@@ -1919,7 +1930,9 @@ class _HomeScreenState extends State<HomeScreen>
   /// Burbujas con las 2 mejores reseñas de la cancha seleccionada,
   /// posicionadas justo arriba del marcador de la cancha en el mapa.
   Widget _courtReviewBubbles() {
-    if (!_showMapReviews) return const SizedBox.shrink();
+    if (!_showMapReviews || context.read<Session>().offline) {
+      return const SizedBox.shrink();
+    }
     final court = _court;
     if (court == null) return const SizedBox.shrink();
     // Mostrar loader mientras se cargan reseñas.
@@ -2497,19 +2510,12 @@ class _CourtSwipeCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     StatusDot(status: court.status),
-                    Builder(builder: (context) {
-                      final rs = context.read<CourtRatingService>();
-                      return FutureBuilder<CourtRating>(
-                        future: rs.ratingFor(court.id),
-                        builder: (context, snap) {
-                          final cr = snap.data;
-                          return RatingBadge(
-                            value: cr?.average,
-                            size: 11,
-                          );
-                        },
-                      );
-                    }),
+                    // El rating viene con el catálogo (GET /courts): sin una
+                    // llamada por tarjeta del carrusel.
+                    RatingBadge(
+                      value: court.reviews > 0 ? court.rating : null,
+                      size: 11,
+                    ),
                   ],
                 ),
                 Text(
@@ -2638,7 +2644,7 @@ class _CourtSwipeCard extends StatelessWidget {
                   },
                 ),
                 // Crédito de autoría: "Compartida por: [usuario]" o, si la
-                // cancha es del sistema (sin autor), el logo de 1of1.
+                // cancha es del sistema o la cargó un admin, el logo de 1of1.
                 Row(
                   children: [
                     Icon(
@@ -2654,7 +2660,7 @@ class _CourtSwipeCard extends StatelessWidget {
                         color: AppColors.white(0.55),
                       ),
                     ),
-                    if (court.proposedByEmail.trim().isEmpty)
+                    if (court.isOfficial)
                       const AppLogo(height: 12)
                     else ...[
                       if (proposer.clan.isNotEmpty) ...[

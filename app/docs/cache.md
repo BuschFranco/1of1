@@ -119,6 +119,35 @@ Notas:
 - **Pull-to-refresh** fuerza la recarga (`force: true`) saltando la guarda TTL
   (crew, etc.).
 
+## Caché persistente (modo offline)
+
+`ApiCache` vive en memoria y se pierde al cerrar la app. Para el **modo offline**
+(ver `CLAUDE.md` → "Modo offline") algunas lecturas guardan además una copia en
+SharedPreferences. Siempre con el mismo criterio: con red se refresca y se
+reescribe la copia; sin red se devuelve la copia en vez de una lista vacía; y
+**nunca** se pisa una copia buena con una respuesta vacía.
+
+| Dato | Clave en prefs | Quién la escribe / lee |
+| --- | --- | --- |
+| Catálogo de canchas (con rating) | `courts_cache` + `courts_cache_at` (global) | `CourtsProvider.load`: siembra desde acá y **no pide `GET /courts` si la copia tiene < 6 h** (`force` al reconectar / agregar / borrar). El rating de una cancha se corrige con `applyRating` al ver sus reseñas. |
+| Rey y clan de todas las canchas | `court_leaders_cache` (global) | `CourtOwnerCache`: UNA llamada (`GET /clans/court-leaders`), refresco a los 30 min; `invalidate()` al resolver un partido |
+| Perfiles públicos | `profiles_cache` + `profiles_cache_at` (global) | `ProfilesProvider.load`: al arrancar no pide `GET /profiles` si la copia tiene < 10 min |
+| Fotos de canchas | disco (`CacheManager` `courtImages`, 30 días, 300 fotos) | `CourtImage` y la imagen para compartir. Seguro por URL: cada foto subida tiene URL única |
+| Amigos | `friends_cache::<email>` | `FriendsService.listFriends` |
+| Ranking de amigos | `ranking_cache::<email>::<period>` | `_RankingSheet`; solo se usa si es del **mismo** período (misma fecha de corte) y se muestra "sin conexión, datos de las hh:mm" |
+
+Otras consultas espaciadas con una marca de tiempo en prefs: `GET /courts/mine`
+(`court_decisions_at::<email>`: 12 h con una propuesta pendiente, 7 días si no)
+y `GET /sync/data` (`sync_data_at::<uk>`: 12 h, usando `sync_pushed::<uk>` como
+copia de lo que el servidor ya tiene). El chat de pickups no consulta con la app
+en segundo plano y espacia el polling 4 → 8 → 15 → 30 s sin mensajes nuevos.
+
+Lo que se **escribe** offline también persiste hasta poder subirlo: ediciones del
+perfil (`session_dirty`), sesiones (`pending_matches::<uk>`,
+`pending_sessions::<uk>`), listas cambiadas (`favorite_courts::<uk>_dirty`,
+`blocked_users::<uk>_dirty`) y bajas de amistad por bloqueo
+(`pending_unfriend::<uk>`). Ver `SyncCoordinator._flushAll`.
+
 ## Invalidación
 
 El caché se auto-refresca por TTL, pero además se invalida al instante ante

@@ -7,8 +7,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../data/achievements.dart';
 import '../data/courts.dart';
+import '../services/cache/court_image_cache.dart';
 import '../services/courts_provider.dart';
 import '../services/play_session_service.dart';
 import '../theme/app_fx.dart';
@@ -156,6 +158,11 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                           const SizedBox(height: 22),
                           statStrip,
                         ],
+                        if (s.hasFormats &&
+                            !hidden.contains(MatchSection.duracion)) ...[
+                          const SizedBox(height: 22),
+                          _formatRow(s),
+                        ],
                         // Desglose de la sesión (varios partidos).
                         if (s.isMultiGame &&
                             !hidden.contains(MatchSection.desglose)) ...[
@@ -246,9 +253,13 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
           CourtImage(
             url: court?.img ?? '',
             width: double.infinity,
-            height: 172,
+            height: 250,
             borderRadius: BorderRadius.zero,
           ),
+          // Misma receta que la imagen para compartir: máscara pareja para que
+          // el texto se lea y degradé a negro desde ~40% de la altura.
+          Positioned.fill(
+              child: ColoredBox(color: Colors.black.withAlpha(110))),
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -256,58 +267,69 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withAlpha(40),
-                    Colors.black.withAlpha(200),
+                    Colors.black.withAlpha(0),
+                    Colors.black.withAlpha(215),
                   ],
-                  stops: const [0.35, 1.0],
+                  stops: const [0.4, 1.0],
                 ),
               ),
             ),
           ),
-          // Resultado: plano y editorial (misma directiva que la story),
-          // barrita de acento a la izquierda; el scrim ya da contraste.
+          // Resultado: plano y editorial, barrita de acento a la izquierda.
           if (showResult)
             Positioned(
-              top: 14,
-              left: 16,
+              top: 18,
+              left: 20,
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Container(width: 4, height: 14, color: color),
-                  const SizedBox(width: 8),
+                  Container(width: 5, height: 26, color: color),
+                  const SizedBox(width: 10),
                   Text(label,
-                      style: AppText.archivo(
-                          size: 12,
+                      style: AppText.display(
+                          size: 26,
                           weight: FontWeight.w900,
                           color: color,
-                          letterSpacing: 0.2)),
+                          letterSpacing: 0.2,
+                          shadows: _kSoftShadow)),
                   if (_scoreLabel(s).isNotEmpty) ...[
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 12),
                     Text(_scoreLabel(s),
                         style: AppText.archivo(
-                            size: 12,
-                            weight: FontWeight.w700,
-                            color: Colors.white.withAlpha(180))),
+                            size: 18,
+                            weight: FontWeight.w800,
+                            color: Colors.white.withAlpha(220),
+                            shadows: _kSoftShadow)),
                   ],
                 ],
               ),
             ),
           // Nombre + zona.
           Positioned(
-            left: 16,
-            right: 16,
-            bottom: 14,
+            left: 20,
+            right: 20,
+            bottom: 18,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(name,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: AppText.archivo(
-                        size: 24, weight: FontWeight.w900, color: Colors.white)),
-                if (sub.isNotEmpty)
+                    style: AppText.display(
+                        size: 40,
+                        weight: FontWeight.w900,
+                        color: Colors.white,
+                        height: 1.05,
+                        shadows: _kSoftShadow)),
+                if (sub.isNotEmpty) ...[
+                  const SizedBox(height: 4),
                   Text(sub,
                       style: AppText.grotesk(
-                          size: 12.5, color: Colors.white.withAlpha(200))),
+                          size: 16,
+                          weight: FontWeight.w600,
+                          color: Colors.white.withAlpha(225),
+                          shadows: _kSoftShadow)),
+                ],
               ],
             ),
           ),
@@ -493,11 +515,13 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
   /// ganaron y cuántos entrenamientos hubo, más los puntos de cada partido si se
   /// cargaron.
   Widget _sessionBreakdown(PlaySession s) {
+    // El entrenamiento NO va en la misma fila que partidos/victorias: parecía
+    // uno más de los partidos y la puntuación se leía como si lo incluyera.
     final items = <(String, String)>[
       if (s.gamesPlayed > 0) ('PARTIDOS', '${s.gamesPlayed}'),
       if (s.gamesPlayed > 0) ('VICTORIAS', '${s.winsCount}'),
-      if (s.trainingsDone > 0) ('ENTRENAM.', '${s.trainingsDone}'),
     ];
+    final trainings = s.trainingsDone;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
@@ -508,14 +532,15 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       ),
       child: Column(
         children: [
-          Row(
-            children: [
-              for (var i = 0; i < items.length; i++) ...[
-                if (i > 0) _vDivider(),
-                Expanded(child: _inlineStat(items[i].$1, items[i].$2)),
+          if (items.isNotEmpty)
+            Row(
+              children: [
+                for (var i = 0; i < items.length; i++) ...[
+                  if (i > 0) _vDivider(),
+                  Expanded(child: _inlineStat(items[i].$1, items[i].$2)),
+                ],
               ],
-            ],
-          ),
+            ),
           // Puntos partido por partido (solo si los cargó).
           if (s.hasGamePoints) ...[
             const SizedBox(height: 14),
@@ -546,6 +571,36 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
               ],
             ),
           ],
+          // Entrenamientos: debajo de los partidos, aclarando que no suman.
+          if (trainings > 0) ...[
+            if (items.isNotEmpty) const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: AppColors.white(0.05),
+                borderRadius: BorderRadius.circular(AppShape.rChip),
+                border: Border.all(color: AppColors.white(0.12)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.fitness_center,
+                      size: 14, color: AppColors.white(0.6)),
+                  const SizedBox(width: 8),
+                  Text(
+                      '+ $trainings ${trainings == 1 ? 'entrenamiento' : 'entrenamientos'}',
+                      style: AppText.grotesk(
+                          size: 12.5,
+                          weight: FontWeight.w700,
+                          color: AppColors.white(0.85))),
+                  Text(
+                      '  ·  no ${trainings == 1 ? 'suma' : 'suman'} puntos',
+                      style: AppText.grotesk(
+                          size: 12.5, color: AppColors.white(0.5))),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -558,16 +613,16 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       children: [
         Text(has ? '+${s.points}' : '—',
             style: AppText.display(
-                size: 46,
+                size: 64,
                 weight: FontWeight.w900,
                 height: 1.0,
                 color: has ? AppColors.accent : AppColors.white(0.4))),
-        const SizedBox(height: 2),
+        const SizedBox(height: 4),
         Text('EXP GANADA',
-            style: AppText.grotesk(
-                size: 10.5,
-                weight: FontWeight.w700,
-                color: AppColors.white(0.4),
+            style: AppText.archivo(
+                size: 12,
+                weight: FontWeight.w800,
+                color: AppColors.white(0.6),
                 letterSpacing: 0.14)),
       ],
     );
@@ -583,9 +638,6 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     final items = <Widget>[
       if (!hidden.contains(MatchSection.duracion))
         _inlineStat('DURACIÓN', PlaySessionService.fmt(s.seconds)),
-      // El formato acompaña a la duración: las dos describen "cómo se jugó".
-      if (s.hasFormats && !hidden.contains(MatchSection.duracion))
-        _inlineStat('FORMATO', s.formatLabel),
       if (!hidden.contains(MatchSection.horario)) ...[
         _inlineStat('FECHA', _fmtDate(ended)),
         _inlineStat('HORA',
@@ -648,18 +700,19 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
             children: [
               Icon(Icons.sports_basketball, size: 13, color: AppColors.accent),
               const SizedBox(width: 6),
-              Text('PUNTUACIÓN',
-                  style: AppText.grotesk(
-                      size: 10.5,
-                      weight: FontWeight.w700,
-                      color: AppColors.white(0.5),
-                      letterSpacing: 0.12)),
+              Text('PUNTUACIÓN EN PARTIDOS',
+                  style: AppText.archivo(
+                      size: 12,
+                      weight: FontWeight.w800,
+                      color: AppColors.white(0.65),
+                      letterSpacing: 0.1)),
               if (pts > 0) ...[
                 const Spacer(),
                 Text('$pts',
-                    style: AppText.archivo(
-                        size: 22,
+                    style: AppText.display(
+                        size: 40,
                         weight: FontWeight.w900,
+                        height: 1.0,
                         color: AppColors.accent)),
                 const SizedBox(width: 5),
                 Padding(
@@ -706,17 +759,44 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
   Widget _inlineStat(String label, String value) {
     return Column(
       children: [
-        Text(value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppText.archivo(size: 16, weight: FontWeight.w900)),
-        const SizedBox(height: 3),
+        // scaleDown: antes la fecha se cortaba con "…" ("13/10/20...").
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(value,
+              maxLines: 1,
+              style: AppText.display(size: 24, weight: FontWeight.w900)),
+        ),
+        const SizedBox(height: 5),
         Text(label,
-            style: AppText.grotesk(
-                size: 9,
-                weight: FontWeight.w700,
-                color: AppColors.white(0.4),
+            style: AppText.archivo(
+                size: 11,
+                weight: FontWeight.w800,
+                color: AppColors.white(0.55),
                 letterSpacing: 0.1)),
+      ],
+    );
+  }
+
+  /// Formato jugado: una pastilla "4 VS 4" por formato (sin comas), igual que
+  /// en la imagen para compartir pero a menor escala.
+  Widget _formatRow(PlaySession s) {
+    return Column(
+      children: [
+        Text('FORMATO',
+            style: AppText.archivo(
+                size: 11,
+                weight: FontWeight.w800,
+                color: AppColors.white(0.55),
+                letterSpacing: 0.1)),
+        const SizedBox(height: 10),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (final n in s.formatList) _vsPill(n, scale: 0.62),
+          ],
+        ),
       ],
     );
   }
@@ -738,12 +818,17 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       if (s.steps > 0)
         _healthMetric(Icons.directions_walk, const Color(0xFF22C55E),
             '${s.steps}', 'pasos'),
-      if (s.avgHr != null)
-        _healthMetric(
-            Icons.favorite, const Color(0xFFEF4444), '${s.avgHr}', 'bpm'),
+      // Minutos en zona alta (≥70% del pulso máximo): refleja cuánto jugaste
+      // fuerte, que el promedio de la sesión no muestra (lo diluyen las esperas).
+      if (intenseMinutes(s) != null)
+        _healthMetric(Icons.local_fire_department_outlined,
+            const Color(0xFFF97316), '${intenseMinutes(s)}', 'min intensos'),
       if (s.maxHr != null && s.maxHr! > 0)
         _healthMetric(
-            Icons.monitor_heart, const Color(0xFFF43F5E), '${s.maxHr}', 'máx'),
+            Icons.monitor_heart, const Color(0xFFF43F5E), '${s.maxHr}', 'bpm máx'),
+      if (s.avgHr != null)
+        _healthMetric(
+            Icons.favorite, const Color(0xFFEF4444), '${s.avgHr}', 'bpm prom.'),
       if (s.distance > 0)
         _healthMetric(
             Icons.straighten,
@@ -751,23 +836,10 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
             '${s.distanceEstimated ? '~' : ''}'
                 '${s.distance >= 1000 ? (s.distance / 1000).toStringAsFixed(2) : s.distance.round()}',
             '${s.distance >= 1000 ? 'km' : 'm'}${s.distanceEstimated ? ' est.' : ''}'),
-      // Métricas esporádicas: solo si el reloj las midió. Null ≠ 0 — mostrar
-      // "0% de oxígeno" cuando simplemente no hubo muestra sería alarmante.
-      if (s.spo2 != null)
-        _healthMetric(Icons.bloodtype, const Color(0xFF06B6D4), '${s.spo2}',
-            '% O₂'),
-      if (s.restingHr != null)
-        _healthMetric(Icons.bedtime_outlined, const Color(0xFF8B5CF6),
-            '${s.restingHr}', 'bpm reposo'),
-      if (s.hrv != null)
-        _healthMetric(Icons.ssid_chart, const Color(0xFFA855F7), '${s.hrv}',
-            'ms HRV'),
-      if (s.respiratoryRate != null)
-        _healthMetric(Icons.air, const Color(0xFF0EA5E9),
-            '${s.respiratoryRate}', 'resp/min'),
-      if (s.speed != null && s.speed! > 0)
-        _healthMetric(Icons.directions_run, const Color(0xFF14B8A6),
-            (s.speed! * 3.6).toStringAsFixed(1), 'km/h'),
+      // Oxígeno, pulso en reposo, HRV, respiración y velocidad ya no se
+      // muestran: las primeras son mediciones diarias o esporádicas del reloj
+      // (no de la sesión) y la velocidad promediaba caminar entre partidos con
+      // correr. Se siguen guardando, por si un día se les da contexto.
     ];
     final hasZones = s.hrZones != null &&
         s.hrZones!.any((z) => z > 0);
@@ -1094,6 +1166,30 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     // exactamente lo que publica.
     final hidden = context.read<PlaySessionService>().effectiveHiddenFor(s);
 
+    // Foto de fondo: se precarga ANTES de capturar. Con la espera fija de más
+    // abajo, en red lenta el PNG saldría con el placeholder de carga. Si la
+    // oculta el usuario (la foto delata el lugar, así que "Cancha y zona" también
+    // la saca), no tiene URL o no llega a tiempo, la tarjeta queda con el fondo
+    // oscuro de siempre: compartir nunca falla por esto.
+    ImageProvider? background;
+    final photoUrl = court?.img ?? '';
+    if (photoUrl.isNotEmpty &&
+        !hidden.contains(MatchSection.fondo) &&
+        !hidden.contains(MatchSection.ubicacion)) {
+      try {
+        // Mismo caché en disco que CourtImage: si la foto ya se vio, sale del
+        // celu sin volver a bajarla.
+        final provider = CachedNetworkImageProvider(photoUrl,
+            cacheManager: courtImageCache);
+        await precacheImage(provider, context)
+            .timeout(const Duration(seconds: 6));
+        background = provider;
+      } catch (_) {
+        background = null;
+      }
+    }
+    if (!context.mounted) return;
+
     // Overlay temporal FUERA de pantalla (left: -3000) para renderizar la
     // tarjeta 1080×1920 sin que el usuario la vea. El RepaintBoundary con [key]
     // es lo que se captura (antes faltaba y el cast a RenderRepaintBoundary
@@ -1115,6 +1211,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
               label: label,
               ended: ended,
               hidden: hidden,
+              background: background,
             ),
           ),
         ),
@@ -1250,11 +1347,55 @@ List<({String label, String value})> _userStatItems(PlaySession s) {
   ];
 }
 
+/// Minutos de la sesión en zona alta (Cardio, Pico y Máximo: ≥70% del pulso
+/// máximo). null si no hay zonas o no llega a un minuto.
+int? intenseMinutes(PlaySession s) {
+  final z = s.hrZones;
+  if (z == null || z.length < 5) return null;
+  final m = (z[2] + z[3] + z[4]) ~/ 60;
+  return m > 0 ? m : null;
+}
+
+/// Sombra suave para texto sobre foto (hero del resumen). Más leve que la de la
+/// imagen para compartir porque en pantalla el scrim ya hace casi todo.
+const _kSoftShadow = [
+  Shadow(color: Color(0x66000000), blurRadius: 8, offset: Offset(0, 1)),
+];
+
+/// "4 VS 4" como pastilla: el VS en el acento, los números en blanco. La usan
+/// la imagen para compartir (escala 1) y el resumen en pantalla (escala menor).
+Widget _vsPill(int n, {double scale = 1}) {
+  final num = AppText.display(size: 46 * scale, weight: FontWeight.w900);
+  return Container(
+    padding:
+        EdgeInsets.symmetric(horizontal: 34 * scale, vertical: 16 * scale),
+    decoration: BoxDecoration(
+      color: AppColors.accent.withAlpha(40),
+      borderRadius: BorderRadius.circular(AppShape.rChip),
+      border: Border.all(color: AppColors.accent, width: 3 * scale),
+    ),
+    child: Text.rich(
+      TextSpan(
+        style: num.copyWith(color: Colors.white),
+        children: [
+          TextSpan(text: '$n'),
+          TextSpan(
+            text: '  VS  ',
+            style: num.copyWith(color: AppColors.accent, fontSize: 34 * scale),
+          ),
+          TextSpan(text: '$n'),
+        ],
+      ),
+    ),
+  );
+}
+
 /// Widget optimizado para captura como imagen (9:16, Instagram Stories).
 ///
-/// Sus títulos van SIN halo a propósito: esto se renderiza offscreen a un PNG
-/// de 1080x1920, así que el glow quedaría horneado en la imagen que el usuario
-/// comparte (y suma un saveLayer al render). El halo es para la pantalla.
+/// Sus títulos van SIN halo de color (glow) a propósito: esto se renderiza
+/// offscreen a un PNG de 1080x1920, así que el glow quedaría horneado en la
+/// imagen que el usuario comparte. Lo único que llevan es una sombra negra
+/// suave para que se lean sobre la foto de fondo.
 class _ShareCard extends StatelessWidget {
   final PlaySession session;
   final Court? court;
@@ -1263,9 +1404,12 @@ class _ShareCard extends StatelessWidget {
   final DateTime ended;
 
   /// Secciones que el usuario ocultó (ya resueltas por
-  /// `PlaySessionService.effectiveHiddenFor`). El logo, el EXP y el disclaimer
+  /// `PlaySessionService.effectiveHiddenFor`). El logo y el EXP
   /// no son ocultables, así que la tarjeta nunca queda sin contenido.
   final Set<MatchSection> hidden;
+
+  /// Foto de la cancha ya precargada (null = fondo oscuro de siempre).
+  final ImageProvider? background;
 
   const _ShareCard({
     required this.session,
@@ -1274,81 +1418,131 @@ class _ShareCard extends StatelessWidget {
     required this.label,
     required this.ended,
     required this.hidden,
+    this.background,
   });
 
   @override
   Widget build(BuildContext context) {
     final s = session;
-    return Container(
-      width: 1080,
-      height: 1920,
+    final bg = background;
+    return Stack(
+      children: [
+        SizedBox(width: 1080, height: 1920),
+        // Fondo: la foto de la cancha con dos máscaras (una pareja para que el
+        // texto blanco se lea sobre cualquier foto y un degradé a negro desde
+        // ~40% de la altura) o, sin foto, el degradé oscuro de siempre.
+        if (bg != null) ...[
+          Positioned.fill(child: Image(image: bg, fit: BoxFit.cover)),
+          Positioned.fill(
+              child: ColoredBox(color: Colors.black.withAlpha(160))),
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0x00000000), Color(0xFF000000)],
+                  stops: [0.4, 1.0],
+                ),
+              ),
+            ),
+          ),
+        ] else
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFF0A0A0A),
+                    Color(0xFF111111),
+                    Color(0xFF0A0A0A)
+                  ],
+                ),
+              ),
+            ),
+          ),
+        Positioned.fill(
+          // Sombra suave para TODOS los textos: sobre una foto el blanco solo no
+          // alcanza. Los estilos de AppText heredan `shadows` de acá.
+          child: DefaultTextStyle.merge(
+            style: const TextStyle(shadows: [
+              Shadow(color: Color(0x66000000), blurRadius: 10, offset: Offset(0, 1)),
+            ]),
+            child: Padding(
       padding: const EdgeInsets.all(80),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF0A0A0A), Color(0xFF111111), Color(0xFF0A0A0A)],
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const SizedBox(height: 24),
-          const AppLogo(height: 150),
-          const Spacer(),
+          _shareLogo(),
+          // Todo el contenido va centrado en el alto que queda y, si no entra
+          // (p. ej. con salud + desglose + puntos a la vez), se achica
+          // proporcionalmente en vez de cortarse contra el borde de la imagen.
+          Expanded(
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: SizedBox(
+                  width: 920,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+          const SizedBox(height: 40),
           // Resultado: plano y editorial (sin globo), barrita de acento arriba.
           if (!hidden.contains(MatchSection.resultado)) ...[
-            Container(width: 56, height: 5, color: color),
-            const SizedBox(height: 22),
+            Container(width: 76, height: 7, color: color),
+            const SizedBox(height: 28),
             Text(label,
                 style: AppText.display(
-                    size: 36,
+                    size: 56,
                     weight: FontWeight.w900,
                     color: color,
                     letterSpacing: 0.25)),
             if (_scoreLabel(s).isNotEmpty) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               Text('${_scoreLabel(s)} EN LA SESIÓN',
                   style: AppText.archivo(
-                      size: 24,
+                      size: 36,
                       weight: FontWeight.w700,
                       letterSpacing: 0.1,
-                      color: Colors.white.withAlpha(150))),
+                      color: Colors.white.withAlpha(200))),
             ],
-            const SizedBox(height: 40),
+            const SizedBox(height: 52),
           ],
-          // Cancha: nombre, zona y el chip de tipo se van juntos. La foto no
-          // está en la tarjeta, pero el nombre alcanza para delatar el lugar.
+          // Cancha: nombre, zona y el chip de tipo se van juntos. La foto de
+          // fondo (si la hay) se oculta con "Cancha y zona" o con "Foto de fondo".
           if (!hidden.contains(MatchSection.ubicacion)) ...[
             Text(
               court?.name ?? (s.courtName.isEmpty ? 'Cancha' : s.courtName),
               textAlign: TextAlign.center,
               style: AppText.display(
-                  size: 64, weight: FontWeight.w900, height: 1.05),
+                  size: 92, weight: FontWeight.w900, height: 1.05),
             ),
             if (court != null && court!.area.isNotEmpty) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               Text(court!.area,
                   style: AppText.grotesk(
-                      size: 32,
+                      size: 46,
                       weight: FontWeight.w600,
-                      color: AppColors.white(0.72))),
+                      color: AppColors.white(0.85))),
             ],
             // Exterior/Interior: mismo dato que ya se muestra en el detalle de
             // cancha (court.type), acá como chip con ícono para la imagen.
             if (court != null && court!.type.isNotEmpty) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 22),
               _shareTypeBadge(court!.type),
             ],
-            const SizedBox(height: 24),
+            const SizedBox(height: 30),
           ],
           if (!hidden.contains(MatchSection.horario))
             Text(
               '${_fmtDate(ended)} · ${ended.hour.toString().padLeft(2, '0')}:${ended.minute.toString().padLeft(2, '0')}',
               style: AppText.grotesk(
-                  size: 30,
+                  size: 42,
                   weight: FontWeight.w600,
-                  color: AppColors.white(0.62)),
+                  color: AppColors.white(0.8)),
             ),
           const SizedBox(height: 64),
           // Stats principales. El EXP va siempre, así que el divisor nunca queda
@@ -1359,34 +1553,57 @@ class _ShareCard extends StatelessWidget {
               if (!hidden.contains(MatchSection.duracion)) ...[
                 _shareStat('DURACIÓN', PlaySessionService.fmt(s.seconds)),
                 _shareDivider(),
-                if (s.hasFormats) ...[
-                  _shareStat('FORMATO', s.formatLabel),
-                  _shareDivider(),
-                ],
               ],
               _shareStat('EXP', s.points > 0 ? '+${s.points}' : '—',
                   color: s.points > 0 ? AppColors.accent : null),
             ],
           ),
+          // Formato en su propia fila: una pastilla por formato jugado. Unidos
+          // con comas ("1v1, 4v4") no entraban en la fila de arriba.
+          if (s.hasFormats && !hidden.contains(MatchSection.duracion)) ...[
+            const SizedBox(height: 44),
+            Text('FORMATO',
+                style: AppText.archivo(
+                    size: 30,
+                    weight: FontWeight.w900,
+                    color: AppColors.white(0.78),
+                    letterSpacing: 0.08)),
+            const SizedBox(height: 16),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 20,
+              runSpacing: 16,
+              children: [
+                for (final n in s.formatList) _shareFormatPill(n),
+              ],
+            ),
+          ],
           // Stats del usuario: total anotado (número grande) + el desglose como
           // planilla de texto plano (mismas métricas y valores que el registro).
           // Desglose de la sesión (varios partidos).
-          if (s.isMultiGame && !hidden.contains(MatchSection.desglose)) ...[
+          // Partidos y victorias, SIN el entrenamiento: puesto en la misma fila
+          // parecía uno más de los partidos, y la puntuación de abajo ("en 5
+          // partidos") se leía como si lo incluyera. El entrenamiento va aparte,
+          // después de los puntos, aclarando que no suma.
+          if (s.isMultiGame &&
+              !hidden.contains(MatchSection.desglose) &&
+              s.gamesPlayed > 0) ...[
             const SizedBox(height: 56),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (s.gamesPlayed > 0) ...[
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
                   _shareStat('PARTIDOS', '${s.gamesPlayed}'),
                   _shareDivider(),
                   _shareStat('VICTORIAS', '${s.winsCount}'),
                 ],
-                if (s.trainingsDone > 0) ...[
-                  if (s.gamesPlayed > 0) _shareDivider(),
-                  _shareStat('ENTRENAM.', '${s.trainingsDone}'),
-                ],
-              ],
+              ),
             ),
+          ],
+          if (s.isMultiGame &&
+              !hidden.contains(MatchSection.desglose) &&
+              s.gamesPlayed > 0) ...[
             if (s.hasGamePoints) ...[
               const SizedBox(height: 32),
               ConstrainedBox(
@@ -1418,6 +1635,15 @@ class _ShareCard extends StatelessWidget {
               ),
             ],
           ],
+          // Entrenamientos: debajo de partidos/victorias (y de los puntos por
+          // partido, que son de esos partidos), como pastilla aparte que aclara
+          // que no suman.
+          if (s.isMultiGame &&
+              !hidden.contains(MatchSection.desglose) &&
+              s.trainingsDone > 0) ...[
+            SizedBox(height: s.gamesPlayed > 0 ? 28 : 56),
+            _shareTrainingNote(s.trainingsDone),
+          ],
           // Total y desglose son toggles independientes, igual que en pantalla.
           if (s.hasUserStats &&
               !(hidden.contains(MatchSection.puntuacion) &&
@@ -1432,7 +1658,12 @@ class _ShareCard extends StatelessWidget {
                       color: AppColors.accent,
                       height: 0.95)),
               const SizedBox(height: 16),
-              Text('PUNTOS ANOTADOS',
+              // Los entrenamientos no suman puntos: el rótulo lo deja explícito
+              // (con la cantidad cuando hubo varios partidos).
+              Text(
+                  s.gamesPlayed > 1
+                      ? 'PUNTOS EN ${s.gamesPlayed} PARTIDOS'
+                      : 'PUNTOS EN PARTIDOS',
                   style: AppText.archivo(
                       size: 32,
                       weight: FontWeight.w900,
@@ -1468,29 +1699,20 @@ class _ShareCard extends StatelessWidget {
                       '${s.caloriesEstimated ? '~' : ''}${s.calories.round()} kcal'),
                 if (s.steps > 0)
                   _shareMiniStat(Icons.directions_walk, '${s.steps} pasos'),
-                if (s.avgHr != null)
-                  _shareMiniStat(Icons.favorite_border, '${s.avgHr} bpm'),
+                if (intenseMinutes(s) != null)
+                  _shareMiniStat(Icons.local_fire_department_outlined,
+                      '${intenseMinutes(s)} min intensos'),
                 if (s.maxHr != null && s.maxHr! > 0)
-                  _shareMiniStat(Icons.monitor_heart, '${s.maxHr} máx'),
+                  _shareMiniStat(Icons.monitor_heart, '${s.maxHr} bpm máx'),
                 if (s.distance > 0)
                   _shareMiniStat(
                     Icons.straighten,
                     '${s.distanceEstimated ? '~' : ''}'
                         '${s.distance >= 1000 ? '${(s.distance / 1000).toStringAsFixed(1)} km' : '${s.distance.round()} m'}',
                   ),
-                // Solo las que el reloj llegó a medir (ver la franja del detalle).
-                if (s.spo2 != null)
-                  _shareMiniStat(Icons.bloodtype, '${s.spo2}% O₂'),
-                if (s.restingHr != null)
-                  _shareMiniStat(
-                      Icons.bedtime_outlined, '${s.restingHr} bpm reposo'),
-                if (s.hrv != null)
-                  _shareMiniStat(Icons.ssid_chart, '${s.hrv} ms HRV'),
-                if (s.respiratoryRate != null)
-                  _shareMiniStat(Icons.air, '${s.respiratoryRate} resp/min'),
-                if (s.speed != null && s.speed! > 0)
-                  _shareMiniStat(Icons.directions_run,
-                      '${(s.speed! * 3.6).toStringAsFixed(1)} km/h'),
+                // Igual que en pantalla: sin oxígeno, reposo, HRV, respiración
+                // ni velocidad (no son de la sesión o no dicen nada en ella), y
+                // sin el pulso promedio, que en una sesión diluyen las esperas.
               ],
             ),
             // Mini barra de zonas cardíacas.
@@ -1499,18 +1721,19 @@ class _ShareCard extends StatelessWidget {
               _shareZoneBar(s.hrZones!),
             ],
           ],
-          const Spacer(),
-          // Disclaimer de origen de datos.
-          Text('Estadísticas de la sesión provistas por 1of1',
-              textAlign: TextAlign.center,
-              style: AppText.grotesk(
-                  size: 20,
-                  weight: FontWeight.w500,
-                  color: AppColors.white(0.3),
-                  letterSpacing: 0.06)),
-          const SizedBox(height: 24),
+          const SizedBox(height: 40),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
+          ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1520,28 +1743,51 @@ class _ShareCard extends StatelessWidget {
   Widget _shareTypeBadge(String type) {
     final isOutdoor = type.toLowerCase() == 'exterior';
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 14),
       decoration: BoxDecoration(
-        color: AppColors.white(0.06),
+        color: AppColors.white(0.08),
         borderRadius: BorderRadius.circular(AppShape.rChip),
-        border: Border.all(color: AppColors.white(0.14)),
+        border: Border.all(color: AppColors.white(0.22)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(isOutdoor ? Icons.wb_sunny_outlined : Icons.home_outlined,
-              size: 26, color: AppColors.white(0.7)),
-          const SizedBox(width: 10),
+              size: 38, color: AppColors.white(0.85)),
+          const SizedBox(width: 14),
           Text(type.toUpperCase(),
               style: AppText.grotesk(
-                  size: 24,
+                  size: 34,
                   weight: FontWeight.w700,
-                  color: AppColors.white(0.7),
+                  color: AppColors.white(0.85),
                   letterSpacing: 0.08)),
         ],
       ),
     );
   }
+
+  /// Logo con una sombra suave detrás (copia negra desenfocada): al ser una
+  /// imagen no le llega el `shadows` de los textos.
+  Widget _shareLogo() {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Opacity(
+          opacity: 0.4,
+          child: ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: ColorFiltered(
+              colorFilter: const ColorFilter.mode(Colors.black, BlendMode.srcIn),
+              child: const AppLogo(height: 150),
+            ),
+          ),
+        ),
+        const AppLogo(height: 150),
+      ],
+    );
+  }
+
+  Widget _shareFormatPill(int n) => _vsPill(n);
 
   Widget _shareDivider() => Container(
         width: 2,
@@ -1593,6 +1839,35 @@ class _ShareCard extends StatelessWidget {
           Text(value,
               style: AppText.display(
                   size: 44, weight: FontWeight.w900, color: Colors.white)),
+        ],
+      ),
+    );
+  }
+
+  /// "+ 1 ENTRENAMIENTO · NO SUMA PUNTOS": separado de los partidos a propósito.
+  Widget _shareTrainingNote(int n) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 16),
+      decoration: BoxDecoration(
+        color: AppColors.white(0.06),
+        borderRadius: BorderRadius.circular(AppShape.rChip),
+        border: Border.all(color: AppColors.white(0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.fitness_center, size: 34, color: AppColors.white(0.8)),
+          const SizedBox(width: 16),
+          Text(
+            '+ $n ${n == 1 ? 'ENTRENAMIENTO' : 'ENTRENAMIENTOS'}',
+            style: AppText.archivo(
+                size: 30, weight: FontWeight.w900, color: Colors.white),
+          ),
+          Text(
+            '  ·  NO ${n == 1 ? 'SUMA' : 'SUMAN'} PUNTOS',
+            style: AppText.archivo(
+                size: 26, weight: FontWeight.w700, color: AppColors.white(0.6)),
+          ),
         ],
       ),
     );

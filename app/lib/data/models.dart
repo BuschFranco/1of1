@@ -260,6 +260,14 @@ class Friend {
     );
   }
 
+  /// Mismas claves que lee [Friend.fromApi] (caché local del modo offline).
+  Map<String, dynamic> toJson() => {
+        'pageId': pageId,
+        'ownerEmail': ownerEmail,
+        'friendHandle': friendHandle,
+        'friendName': friendName,
+        'friendEmail': friendEmail,
+      };
 }
 
 /// Recompensa de un pickup (opcional). El creador elige 1 o varios tipos a la

@@ -448,15 +448,16 @@ Detalles que importan:
 - **La sesión activa persistida no se borra en el logout**: es namespaced por
   usuario y se readopta al volver a loguearse (si tiene menos de 6 h).
 
-### 7.2 Arranque sin red con un partido sin terminar
+### 7.2 Arranque sin red (modo offline)
 
 Al arrancar, `Session._verifyStartupSession()` valida la sesión cacheada con
-`GET /me` (timeout 4 s) y, si falla, manda al login. **Excepción**: si el fallo
-es por falta de red (o el server no responde bien: 5xx / cold start de Render) y
-`_hasUnfinishedMatch()` encuentra un partido en curso (< 6 h), pendiente de
-resultado (< 48 h) o encolado sin subir, se entra con el **perfil cacheado** y se
-marca `startedOffline` → `MainShell` muestra el aviso "Sin conexión. Tu partido
-se registra igual…".
+`GET /me` (timeout 4 s). Si falla por falta de red, timeout o 5xx (cold start de
+Render) se entra **igual** con el perfil cacheado en **modo offline**
+(`Session.offline`): la detección y el registro de sesiones siguen funcionando
+con el catálogo de canchas cacheado (`courts_cache`), y lo registrado se sube al
+reconectar. Antes solo se entraba así si había un partido sin terminar; si no,
+mandaba al login y la detección quedaba apagada. Detalle del modo en
+`CLAUDE.md` → "Modo offline".
 
 Un **401 siempre expulsa**: ahí la sesión está realmente vencida.
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:native_geofence/native_geofence.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -29,7 +30,7 @@ import 'session_alarms.dart';
 ///
 /// No es un widget: no depende del árbol de UI. Se crea una sola vez al arrancar
 /// la app (main.dart) y vive mientras la app esté abierta.
-class SyncCoordinator {
+class SyncCoordinator with WidgetsBindingObserver {
   SyncCoordinator({
     required Session session,
     required PlaySessionService play,
@@ -86,6 +87,13 @@ class SyncCoordinator {
   /// Si el aviso de reenganche está programado. Igual que `_radarOn`, el flag
   /// se enciende DESPUÉS de que la programación haya terminado bien.
   bool _nudgeOn = false;
+
+  /// Último valor visto de `Session.offline`, para detectar la reconexión.
+  bool _wasOffline = false;
+
+  /// Bloqueos hechos sin conexión cuyo `DELETE /friends/:id` falló: se
+  /// reintentan en cada flush hasta que entren.
+  static String _unfriendKey(String uk) => 'pending_unfriend::$uk';
 
   void _wire() {
     // Presencia "Jugando" → Notion (best-effort, con reintento vía batch).
@@ -194,26 +202,7 @@ class SyncCoordinator {
     // Batch: cuando el service lo pide (cada 2 min / al pausar / cerrar),
     // stageamos las stats actuales y subimos TODO el perfil en una sola
     // petición (incluye nivel, logros, tiempo y ediciones de perfil pendientes).
-    _play.onFlush = () async {
-      await _session.stageStats(
-        games: _play.totalPlays,
-        courts: _play.uniqueCourtsCount,
-        streak: _play.streak,
-        points: _play.points,
-        level: _play.level.toString(),
-        unlockedBadges: _play.unlockedBadges.toList(),
-        playSeconds: _play.committedSeconds,
-        playTimeByCourt: _play.totalsJson,
-      );
-      await _session.flush();
-      await _flushPendingMatches();
-      await _flushPendingSessions();
-      // Si el restore no pudo correr al arrancar (sin red), reintenta acá.
-      if (!_historyReady && !_syncingHistory && _historyUserKey.isNotEmpty) {
-        unawaited(_syncHistory(_historyUserKey));
-      }
-      await _pushLists();
-    };
+    _play.onFlush = _flushAll;
 
     // El catálogo de canchas alimenta la detección de cercanía.
     _courts.addListener(_pushCourts);
@@ -222,6 +211,85 @@ class SyncCoordinator {
     // Arranca/detiene el tracking según haya o no sesión activa.
     _session.addListener(_onSessionChanged);
     _onSessionChanged();
+
+    // Modo offline: al volver a primer plano se reintenta la conexión.
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _session.offline) {
+      unawaited(_session.reconnect());
+    }
+  }
+
+  /// Volvió la conexión: subir YA todo lo pendiente (sin esperar el timer de
+  /// 2 min) y retomar lo que el arranque offline salteó.
+  void _onReconnected(String userKey) {
+    unawaited(_courts.load(force: true));
+    unawaited(_flushAll());
+    unawaited(_backfillMatchLog(userKey));
+    unawaited(_pickups
+        .loadForUser(userKey)
+        .then((_) => _checkRescheduledPickups(userKey)));
+    unawaited(_checkCourtDecisions(userKey));
+  }
+
+  Future<void> _flushAll() async {
+    await _session.stageStats(
+      games: _play.totalPlays,
+      courts: _play.uniqueCourtsCount,
+      streak: _play.streak,
+      points: _play.points,
+      level: _play.level.toString(),
+      unlockedBadges: _play.unlockedBadges.toList(),
+      playSeconds: _play.committedSeconds,
+      playTimeByCourt: _play.totalsJson,
+    );
+    await _session.flush();
+    await _flushPendingMatches();
+    await _flushPendingSessions();
+    await _flushPendingUnfriends();
+    // Si el restore no pudo correr al arrancar (sin red), reintenta acá.
+    if (!_historyReady && !_syncingHistory && _historyUserKey.isNotEmpty) {
+      unawaited(_syncHistory(_historyUserKey));
+    }
+    await _pushLists();
+  }
+
+  /// Encola el `DELETE /friends/:id` de un bloqueo hecho sin conexión.
+  Future<void> queueUnfriend(String friendshipId) async {
+    final uk = _historyUserKey;
+    if (uk.isEmpty || friendshipId.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_unfriendKey(uk)) ?? <String>[];
+    if (!list.contains(friendshipId)) list.add(friendshipId);
+    await prefs.setStringList(_unfriendKey(uk), list);
+  }
+
+  Future<void> _flushPendingUnfriends() async {
+    final uk = _historyUserKey;
+    final api = ApiClient();
+    if (uk.isEmpty || !api.isConfigured || !api.hasToken) return;
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_unfriendKey(uk)) ?? const <String>[];
+    if (list.isEmpty) return;
+    final left = <String>[];
+    for (final id in list) {
+      try {
+        await api.removeFriend(id);
+      } on ApiException catch (e) {
+        // 404: la amistad ya no existe, no hay nada que reintentar.
+        if (e.statusCode != 404) left.add(id);
+      } catch (_) {
+        left.add(id);
+      }
+    }
+    if (left.isEmpty) {
+      await prefs.remove(_unfriendKey(uk));
+    } else {
+      await prefs.setStringList(_unfriendKey(uk), left);
+    }
   }
 
   /// Sube EN UN LOTE los partidos pendientes al backend (POST /matches, para
@@ -251,9 +319,9 @@ class SyncCoordinator {
         final ok = i < results.length && (results[i] as Map)['ok'] == true;
         if (!ok) failed.add(pending[i]);
       }
-      // El server respondió: volvió la red, así que el aviso de "sin conexión"
-      // (si entramos offline con un partido sin terminar) ya no corresponde.
-      _session.clearOfflineFlag();
+      // El server respondió: volvió la red. Salir del modo offline siempre por
+      // el mismo camino (perfil fresco + UI desbloqueada).
+      if (_session.offline) unawaited(_session.reconnect());
     } catch (_) {
       failed.addAll(pending); // sin red: reintento completo en el próximo flush
     }
@@ -426,11 +494,21 @@ class SyncCoordinator {
       return;
     }
     _alarmsCleared = false; // hay sesión: al cerrarla hay que volver a limpiar
+    // Pulso máximo de referencia para las zonas cardíacas (220 − edad).
+    _play.setUserBirthdate(p.birthdate);
     // No sembrar detección con una sesión que todavía se está verificando: si el
     // GET /me devuelve 401 vamos a cerrar sesión enseguida. El notify del
     // finally de _verifyStartupSession nos vuelve a llamar ya confirmada.
     if (_session.verifying) return;
-    if (_trackingStarted) return;
+    final offline = _session.offline;
+    final reconnected = _wasOffline && !offline;
+    _wasOffline = offline;
+    if (_trackingStarted) {
+      if (reconnected && _historyUserKey.isNotEmpty) {
+        _onReconnected(_historyUserKey);
+      }
+      return;
+    }
     _trackingStarted = true;
     // Clave por usuario: aísla los datos locales de cada cuenta en el dispositivo.
     final userKey = (_session.email ?? p.userEmail).trim().toLowerCase();
@@ -536,6 +614,22 @@ class SyncCoordinator {
 
   static const _kSyncBatch = 50; // el servidor rechaza lotes mayores
 
+  /// Cada cuánto se vuelven a bajar las listas de respaldo (`GET /sync/data`)
+  /// una vez restaurado el equipo.
+  static const _kSyncDataEvery = Duration(hours: 12);
+  static String _syncAtKey(String uk) => 'sync_data_at::$uk';
+  static String _pushedKey(String uk) => 'sync_pushed::$uk';
+
+  /// Guarda qué tiene el servidor de cada lista (ver `_lastPushedData`).
+  Future<void> _savePushed() async {
+    final uk = _historyUserKey;
+    if (uk.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_pushedKey(uk), jsonEncode(_lastPushedData));
+    } catch (_) {}
+  }
+
   /// Sube lo pendiente: sesiones que se cerraron (o cambiaron) desde la última
   /// vez. Es un upsert por (email, endedAtMs) del lado del servidor, así que
   /// reintentar NUNCA duplica, incluso si la respuesta se perdió.
@@ -596,9 +690,31 @@ class SyncCoordinator {
       await _favorites.load();
       await _blocked.loadForUser(userKey);
 
+      // Ya restaurado en este equipo y sincronizado hace poco: no hace falta
+      // volver a bajar las listas del servidor en cada arranque. Lo que el
+      // servidor tiene sale de la copia guardada de `_lastPushedData`, y lo
+      // cambiado acá se sube igual por `_pushLists`. Solo se pierde ver antes
+      // los cambios hechos desde OTRO celular (llegan en el próximo ciclo).
+      final restored = prefs.getBool(restoredFlag) ?? false;
+      final lastAt = prefs.getInt(_syncAtKey(userKey));
+      final pushedRaw = prefs.getString(_pushedKey(userKey));
+      if (restored &&
+          lastAt != null &&
+          pushedRaw != null &&
+          DateTime.now()
+                  .difference(DateTime.fromMillisecondsSinceEpoch(lastAt)) <
+              _kSyncDataEvery) {
+        _lastPushedData
+          ..clear()
+          ..addAll((jsonDecode(pushedRaw) as Map).cast<String, String>());
+        _historyReady = true;
+        await _pushLists();
+        return;
+      }
+
       // 1) Sesiones.
       var remoteSessions = <PlaySession>[];
-      if (!(prefs.getBool(restoredFlag) ?? false)) {
+      if (!restored) {
         final res = await api.mySyncedSessions(limit: kMaxLocalSessions);
         for (final e in (res['sessions'] as List? ?? const [])) {
           final m = (e as Map).cast<String, dynamic>();
@@ -615,8 +731,14 @@ class SyncCoordinator {
         for (final e in list('streak_history'))
           StreakEntry.fromJson((e as Map).cast<String, dynamic>())
       ];
-      await _favorites.mergeFrom(list('favorites').map((e) => '$e'));
-      await _blocked.mergeFrom(list('blocked').map((e) => '$e'));
+      // Una lista cambiada en el celu y sin subir NO se une: lo quitado sin
+      // conexión volvería. Gana la local y `_pushLists` la sube entera.
+      if (!await _favorites.hasLocalChanges()) {
+        await _favorites.mergeFrom(list('favorites').map((e) => '$e'));
+      }
+      if (!await _blocked.hasLocalChanges()) {
+        await _blocked.mergeFrom(list('blocked').map((e) => '$e'));
+      }
       await _play.restoreHistoryFromBackup(remoteSessions, remoteStreaks);
 
       // Lo que el servidor YA tiene, para no re-subirlo. Un kind ausente queda
@@ -631,7 +753,10 @@ class SyncCoordinator {
       await _backfillSessions(userKey, prefs);
 
       await prefs.setBool(restoredFlag, true);
+      await prefs.setInt(
+          _syncAtKey(userKey), DateTime.now().millisecondsSinceEpoch);
       _historyReady = true;
+      await _savePushed();
       await _pushLists();
     } catch (_) {
       // Sin red / servidor dormido: queda `_historyReady = false` y se reintenta
@@ -675,15 +800,25 @@ class SyncCoordinator {
       'favorites': _favorites.ids.toList()..sort(),
       'blocked': _blocked.blocked.toList()..sort(),
     };
+    Future<void> markSynced(String kind) async {
+      if (kind == 'favorites') await _favorites.markSynced();
+      if (kind == 'blocked') await _blocked.markSynced();
+    }
+
     for (final entry in lists.entries) {
       final json = jsonEncode(entry.value);
-      if (_lastPushedData[entry.key] == json) continue;
+      if (_lastPushedData[entry.key] == json) {
+        await markSynced(entry.key);
+        continue;
+      }
       // Una lista que el servidor nunca tuvo y que acá está vacía no hace falta
       // crearla: "ausente" y "vacía" significan lo mismo hasta que haya algo.
       if (!_lastPushedData.containsKey(entry.key) && entry.value.isEmpty) continue;
       try {
         await api.putSyncData(entry.key, entry.value);
         _lastPushedData[entry.key] = json;
+        await markSynced(entry.key);
+        await _savePushed();
       } catch (_) {/* se reintenta en el próximo flush */}
     }
   }
@@ -726,6 +861,7 @@ class SyncCoordinator {
   }
 
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _courts.removeListener(_pushCourts);
     _session.removeListener(_onSessionChanged);
   }

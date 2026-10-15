@@ -359,7 +359,11 @@ class HealthService {
   /// Agrega las métricas de salud en la ventana [start, end] del partido.
   /// Devuelve null si no hay permiso o falla la lectura (el llamador lo trata
   /// como "sin datos", sin romper el flujo).
-  Future<HealthMetrics?> metricsFor(DateTime start, DateTime end) async {
+  ///
+  /// [maxHrRef] es el pulso máximo de referencia del usuario (220 − edad) para
+  /// las zonas cardíacas; sin él se usa el máximo observado en la ventana.
+  Future<HealthMetrics?> metricsFor(DateTime start, DateTime end,
+      {int? maxHrRef}) async {
     if (end.isBefore(start)) return null;
     try {
       await _ensureConfigured();
@@ -522,7 +526,7 @@ class HealthService {
       final tsOrd = [for (final i in idx) hrTimestamps[i]];
       avgHr = (hrsOrd.reduce((a, b) => a + b) / hrsOrd.length).round();
       maxHr = hrsOrd.reduce((a, b) => a > b ? a : b).round();
-      hrZones = _computeHrZones(hrsOrd, tsOrd, maxHr);
+      hrZones = _computeHrZones(hrsOrd, tsOrd, maxHrRef ?? maxHr);
     }
 
     // 3) La sesión manda para calorías/distancia (coincide con lo que muestra
@@ -555,9 +559,11 @@ class HealthService {
   }
 
   /// Calcula la distribución de tiempo en zonas cardíacas a partir de las
-  /// muestras crutas y sus timestamps. Zonas basadas en % del HR máximo
-  /// observado: Calentamiento (<60%), Quema de grasa (60-70%), Cardio (70-80%),
-  /// Pico (80-90%), Máximo (>90%). Devuelve lista de 5 enteros (segundos).
+  /// muestras crudas y sus timestamps. Zonas por % de [maxHr] (el de referencia
+  /// del usuario si lo hay): Calentamiento (50-60%), Quema de grasa (60-70%),
+  /// Cardio (70-80%), Pico (80-90%), Máximo (>90%). Lo que queda por debajo del
+  /// 50% es reposo (esperas entre partidos en una sesión de juego) y no cuenta
+  /// en ninguna zona: antes inflaba "Calentamiento". Devuelve 5 enteros (seg).
   static List<int> _computeHrZones(
       List<double> hrs, List<DateTime> timestamps, int maxHr) {
     final zones = List.filled(5, 0);
@@ -586,6 +592,7 @@ class HealthService {
         sec = maxHueco;
       }
       final pct = hrs[i] / maxHr;
+      if (pct < 0.5) continue; // reposo
       final zi = pct < 0.6
           ? 0
           : (pct < 0.7

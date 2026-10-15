@@ -100,6 +100,13 @@ class Court {
   /// (el provider filtra); se lee para detectar la decisión sobre las propias.
   final String approval;
 
+  /// La propuso una cuenta admin (lo calcula el backend en `GET /courts`).
+  final bool proposedByAdmin;
+
+  /// Se acredita a 1of1 (logo) en vez de a un usuario: canchas del sistema
+  /// (sin autor) y las que cargó un admin.
+  bool get isOfficial => proposedByEmail.trim().isEmpty || proposedByAdmin;
+
   const Court({
     required this.id,
     required this.name,
@@ -127,6 +134,7 @@ class Court {
     this.proposedByClan = '',
     this.proposedByEmail = '',
     this.approval = '',
+    this.proposedByAdmin = false,
   });
 
   /// Horario de apertura efectivo: los campos estructurados y, si están vacíos,
@@ -230,8 +238,42 @@ class Court {
       proposedByClan: json['proposedByClan'] as String? ?? '',
       proposedByEmail: json['proposedByEmail'] as String? ?? '',
       approval: json['approval'] as String? ?? '',
+      proposedByAdmin: json['proposedByAdmin'] == true,
     );
   }
+
+  /// Copia completa para el caché local del catálogo (modo offline). Escribe
+  /// todas las claves que lee [Court.fromApi], así la ida y vuelta no pierde
+  /// nada. No confundir con [toApiJson], que es el payload de alta.
+  Map<String, dynamic> toCacheJson() => {
+        'id': id,
+        'name': name,
+        'area': area,
+        'dist': dist,
+        'img': img,
+        'rating': rating,
+        'reviews': reviews,
+        'type': type,
+        'free': free,
+        'lit': lit,
+        'hoops': hoops,
+        'surface': surface,
+        'status': rawStatus.name,
+        'players': players,
+        'vibe': vibe,
+        'hours': hours,
+        'openTime': openTime,
+        'closeTime': closeTime,
+        'badges': badges,
+        'desc': desc,
+        'lat': lat,
+        'lng': lng,
+        'proposedBy': proposedBy,
+        'proposedByClan': proposedByClan,
+        'proposedByEmail': proposedByEmail,
+        'approval': approval,
+        'proposedByAdmin': proposedByAdmin,
+      };
 
   /// Payload para POST /courts. El autor (handle/clan/email) y la moderación
   /// los pone el server a partir del token; acá van solo los datos de la cancha.

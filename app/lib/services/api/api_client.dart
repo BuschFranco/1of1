@@ -508,6 +508,11 @@ class ApiClient {
   /// {king: {name, handle, points} | null}.
   Future<Map<String, dynamic>> courtKing(String courtId) =>
       _map(_send('GET', '/matches/court-king', query: {'courtId': courtId}));
+
+  /// Rey y clan dueño de TODAS las canchas (temporada actual), en una llamada:
+  /// `{leaders: {courtId: {king, clan}}}`.
+  Future<Map<String, dynamic>> courtLeaders() =>
+      _map(_send('GET', '/clans/court-leaders'));
 }
 
 class ApiException implements Exception {

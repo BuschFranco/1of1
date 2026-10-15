@@ -55,5 +55,21 @@ class FavoritesProvider extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_key, _ids.toList());
+    await prefs.setBool(_dirtyKey, true);
+  }
+
+  // Cambiada en el celu y todavía sin subir. Mientras lo esté, el restore NO
+  // une con la lista del servidor: un favorito quitado sin conexión volvería.
+  String get _dirtyKey => '${_key}_dirty';
+
+  Future<bool> hasLocalChanges() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_dirtyKey) ?? false;
+  }
+
+  /// El servidor ya tiene la lista local.
+  Future<void> markSynced() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_dirtyKey);
   }
 }

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../data/courts.dart';
-import '../services/court_rating_service.dart';
 import '../services/location_service.dart';
 import '../services/profiles_provider.dart';
 import '../services/session.dart';
@@ -279,7 +278,7 @@ class _CourtListItem extends StatelessWidget {
                       ],
                       const Spacer(),
                       // Crédito de autoría: "Compartida por: [usuario]" o el
-                      // logo de 1of1 si la cancha es del sistema (sin autor).
+                      // logo de 1of1 si la cancha es del sistema o de un admin.
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                         // Autor sobre la foto: fondo oscuro plano, el acento
@@ -301,7 +300,7 @@ class _CourtListItem extends StatelessWidget {
                                 color: AppColors.white(0.7),
                               ),
                             ),
-                            if (court.proposedByEmail.trim().isEmpty)
+                            if (court.isOfficial)
                               const AppLogo(height: 11)
                             else ...[
                               if (proposer.clan.isNotEmpty) ...[
@@ -376,19 +375,12 @@ class _CourtListItem extends StatelessWidget {
                           ],
                         ),
                       ),
-                      Builder(builder: (context) {
-                        final rs = context.read<CourtRatingService>();
-                        return FutureBuilder<CourtRating>(
-                          future: rs.ratingFor(court.id),
-                          builder: (context, snap) {
-                            final cr = snap.data;
-                            return RatingBadge(
-                              value: cr?.average,
-                              size: 13,
-                            );
-                          },
-                        );
-                      }),
+                      // El rating viene con el catálogo (GET /courts): sin
+                      // una llamada por tarjeta.
+                      RatingBadge(
+                        value: court.reviews > 0 ? court.rating : null,
+                        size: 13,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),

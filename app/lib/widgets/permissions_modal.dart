@@ -499,7 +499,7 @@ class _PermissionsModalState extends State<PermissionsModal>
                 const SizedBox(height: 2),
                 Text(
                   'Registra calorías, pulso y pasos de tus sesiones desde tu '
-                  'reloj o anillo. Superar tu récord de calorías suma EXP.',
+                  'reloj o anillo.',
                   style:
                       AppText.grotesk(size: 11, color: AppColors.white(0.5)),
                 ),

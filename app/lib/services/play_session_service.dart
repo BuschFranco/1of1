@@ -11,6 +11,7 @@ import '../data/achievements.dart';
 import '../data/courts.dart';
 import 'api/api_config.dart';
 import 'cache/api_cache.dart';
+import 'court_owner_cache.dart';
 import '../theme/app_theme.dart';
 import 'health_service.dart';
 import 'session_alarms.dart';
@@ -345,8 +346,27 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   // porque también se siembra desde Notion.
   double _calorieRecord = 0;
   double get calorieRecord => _calorieRecord;
-  // Bonus fijo de puntos al batir el récord de calorías.
-  static const int calorieRecordBonus = 25;
+
+  /// Pulso máximo de referencia del usuario (220 − edad), para que las zonas
+  /// cardíacas sean comparables entre sesiones. null sin fecha de nacimiento:
+  /// las zonas caen al máximo observado en la sesión. Lo setea SyncCoordinator.
+  int? _userMaxHr;
+  void setUserBirthdate(String birthdate) {
+    final d = DateTime.tryParse(birthdate.trim());
+    if (d == null) {
+      _userMaxHr = null;
+      return;
+    }
+    final now = DateTime.now();
+    var age = now.year - d.year;
+    if (now.month < d.month || (now.month == d.month && now.day < d.day)) age--;
+    _userMaxHr = (age >= 10 && age <= 90) ? 220 - age : null;
+  }
+
+  /// Calorías estimadas por paso cuando el reloj no las manda. Se estima desde
+  /// los PASOS (lo que realmente te moviste) y no desde la duración: con la
+  /// duración, 3 h en la cancha con 2 partidos daban ~1.300 kcal inventadas.
+  static const double _kcalPerStep = 0.05;
 
   // ── Visibilidad del detalle del partido ──────────────────────────────────
   // Secciones que el usuario oculta POR DEFECTO en todos sus partidos (y en la
@@ -636,26 +656,20 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   double get totalDistanceMeters =>
       _log.fold(0.0, (sum, s) => sum + s.distance);
 
-  /// Promedio de frecuencia cardíaca (solo partidos que tienen avgHr).
-  int? get avgHeartRate {
-    final withHr = _log.where((s) => s.avgHr != null).toList();
-    if (withHr.isEmpty) return null;
-    final sum = withHr.fold(0, (acc, s) => acc + s.avgHr!);
-    return (sum / withHr.length).round();
-  }
-
   /// Frecuencia cardíaca máxima registrada.
   int get maxHeartRate =>
       _log.fold(0, (m, s) => s.maxHr != null && s.maxHr! > m ? s.maxHr! : m);
 
-  /// Calorías promedio por SESIÓN (sobre las sesiones con datos de salud).
-  ///
-  /// Reemplaza al viejo "calorías por minuto": dividir por el tiempo de la
-  /// estadía mezclaba el esfuerzo con las esperas y descansos entre partidos, así
-  /// que una tarde con mucho tiempo muerto "quemaba menos por minuto" sin haber
-  /// jugado peor. El total por sesión no se diluye con las pausas.
-  double get avgCaloriesPerSession =>
-      healthMatches > 0 ? totalCalories / healthMatches : 0;
+  /// Minutos en zona alta (≥70% del pulso máximo) sumados en todas las
+  /// sesiones. Reemplaza en el perfil al pulso promedio (un promedio de
+  /// promedios que diluían las esperas) y a "calorías por sesión" (crecía con el
+  /// tiempo muerto). Antes ya se había sacado "calorías por minuto" por lo
+  /// mismo: dividir por la estadía mezcla esfuerzo con descansos.
+  int get totalIntenseMinutes => _log.fold(0, (sum, s) {
+        final z = s.hrZones;
+        if (z == null || z.length < 5) return sum;
+        return sum + (z[2] + z[3] + z[4]) ~/ 60;
+      });
 
 
   /// True si hay stats de salud para mostrar (health activo + al menos un partido con datos).
@@ -2324,34 +2338,30 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     final streakBonus = (timePoints * streakPct).round();
 
     // ── Salud: enriquecer con datos del wearable (si el usuario conectó Salud).
-    // Se lee la ventana [inicio, fin] del partido del store del OS (retiene el
-    // histórico, así que sirve aunque respondas más tarde). Puntos SOLO si las
-    // calorías superan tu récord personal; ahí se suma el bonus y se sube el
-    // récord. El primer dato válido fija la base sin bonus. Sin datos (sin
-    // wearable) no pasa nada.
+    // Se lee la ventana [inicio, fin] de la sesión del store del OS (retiene el
+    // histórico, así que sirve aunque respondas más tarde). El récord de
+    // calorías queda solo como DATO: ya no da puntos, porque las calorías de
+    // una sesión crecen con el tiempo que te quedás en la cancha (esperas
+    // incluidas), no con lo que jugaste. El primer dato válido fija la base.
     HealthMetrics? hm;
-    int healthBonus = 0;
     bool newCalorieRecord = false;
     if (_healthEnabled && p.seconds > 0) {
       final end = DateTime.fromMillisecondsSinceEpoch(p.endedAtMillis);
       final start = end.subtract(Duration(seconds: p.seconds));
-      hm = await _health.metricsFor(start, end);
+      hm = await _health.metricsFor(start, end, maxHrRef: _userMaxHr);
       if (hm != null && hm.calories > 0) {
         if (_calorieRecord > 0 && hm.calories > _calorieRecord) {
-          healthBonus = calorieRecordBonus;
           newCalorieRecord = true;
         }
         if (hm.calories > _calorieRecord) _calorieRecord = hm.calories;
       }
     }
 
-    // Total: tiempo + bonus por resultado (%) + racha (%) + cancha nueva +
-    // récord de salud.
+    // Total: tiempo + bonus por resultado (%) + racha (%) + cancha nueva.
     final gained = timePoints +
         resultBonus +
         streakBonus +
-        (isNewCourt ? 30 : 0) +
-        healthBonus;
+        (isNewCourt ? 30 : 0);
     _points += gained;
 
     // Guardamos el partido con los puntos que sumó y los datos de salud, para
@@ -2413,6 +2423,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       ApiCache.invalidate('king::${p.courtId}');
       ApiCache.invalidate('clanowner::${p.courtId}');
       ApiCache.invalidate('mypoints::${p.courtId}');
+      CourtOwnerCache.invalidate();
     }
     ApiCache.invalidatePrefix('ranking');
     ApiCache.invalidatePrefix('globalranking');
@@ -2723,7 +2734,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _healthRefreshing.add(s.endedAtMillis);
     notifyListeners();
     try {
-      hm = await _health.metricsFor(start, end);
+      hm = await _health.metricsFor(start, end, maxHrRef: _userMaxHr);
     } catch (_) {
       hm = null;
     } finally {
@@ -2752,9 +2763,8 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       _log[idx] = cur.withEstimates(
         // Zancada media ~0.76 m por paso.
         distance: cur.distance > 0 ? null : cur.steps * 0.76,
-        // Gasto por MET: básquet recreativo ≈ 6.5 MET × 70 kg × horas.
-        calories:
-            cur.calories > 0 ? null : 6.5 * 70 * (cur.seconds / 3600),
+        // Desde los pasos, no desde la duración (ver _kcalPerStep).
+        calories: cur.calories > 0 ? null : cur.steps * _kcalPerStep,
       );
       changed = true;
     }
@@ -2875,6 +2885,12 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         final list = jsonDecode(rawLog) as List;
         _log = list
             .map((e) => PlaySession.fromJson(e as Map<String, dynamic>))
+            // MIGRACIÓN: las calorías estimadas viejas salían de la duración
+            // (6.5 MET × 70 kg × horas) y se inflaban con el tiempo muerto. Se
+            // recalculan desde los pasos; idempotente, no hace falta flag.
+            .map((s) => s.caloriesEstimated && s.steps > 0
+                ? s.withEstimates(calories: s.steps * _kcalPerStep)
+                : s)
             .toList();
       } catch (_) {/* ignorar cache corrupto */}
     }
@@ -3127,6 +3143,9 @@ extension PlayResultX on PlayResult {
 /// se comparte en redes (así lo que ve en pantalla es exactamente lo que va a
 /// publicar). El EXP ganado no está acá a propósito: siempre se muestra, y eso
 /// garantiza que la tarjeta nunca quede sin contenido.
+///
+/// Excepción: [fondo] solo gobierna la imagen para redes (la foto de la cancha
+/// detrás de la tarjeta); el detalle en pantalla ya tiene su propio banner.
 enum MatchSection {
   resultado,
   ubicacion,
@@ -3136,6 +3155,7 @@ enum MatchSection {
   puntuacion,
   desglosePuntos,
   salud,
+  fondo,
 }
 
 extension MatchSectionX on MatchSection {
@@ -3148,6 +3168,7 @@ extension MatchSectionX on MatchSection {
         MatchSection.puntuacion => 'Puntuación total',
         MatchSection.desglosePuntos => 'Desglose de la puntuación',
         MatchSection.salud => 'Datos de salud',
+        MatchSection.fondo => 'Foto de fondo',
       };
 
   /// Qué implica ocultarla, para el subtítulo de cada fila del sheet.
@@ -3161,6 +3182,7 @@ extension MatchSectionX on MatchSection {
         MatchSection.desglosePuntos =>
           'De dónde vinieron: puntos de 1, de 2 y de 3',
         MatchSection.salud => 'Calorías, pulso, pasos y distancia',
+        MatchSection.fondo => 'La foto de la cancha detrás de la imagen para redes',
       };
 
   static MatchSection? fromName(String? n) {
@@ -3413,11 +3435,14 @@ class PlaySession {
 
   /// Etiqueta de formato para mostrar: "3v3" si todos los partidos fueron
   /// iguales, "3v3, 1v1" si fueron distintos. Vacío si no se cargó.
-  String get formatLabel {
+  String get formatLabel => formatList.map((n) => '${n}v$n').join(', ');
+
+  /// Formatos distintos jugados, ordenados (p. ej. `[1, 4]`). La imagen para
+  /// compartir dibuja uno por pastilla en vez de unirlos con comas.
+  List<int> get formatList {
     final f = gameFormats;
-    if (f == null || f.isEmpty) return '';
-    final unicos = f.toSet().toList()..sort();
-    return unicos.map((n) => '${n}v$n').join(', ');
+    if (f == null || f.isEmpty) return const [];
+    return f.toSet().toList()..sort();
   }
 
   /// Señal de que hubo un WEARABLE: el celular no mide pulso, solo un reloj lo

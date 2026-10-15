@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show SocketException;
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' show ClientException;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models.dart';
 import 'api/api_client.dart';
 import 'friends_service.dart';
-// Claves base del partido persistido (fuente única, compartida con el isolate
-// de las alarmas): las lee _hasUnfinishedMatch.
-import 'session_alarms.dart';
 
 /// Estado de sesión del usuario. Maneja signup/login/logout contra el backend
 /// propio (JWT) y persiste la sesión en SharedPreferences para restaurarla al
@@ -30,6 +29,10 @@ class Session extends ChangeNotifier {
   // AppColors.profileBgs). Local y cosmético, como la posición.
   static const _kProfileBg = 'profile_bg_color';
   static const _kDefaultTab = 'default_start_tab';
+  // Campos del perfil editados y todavía sin subir. Persistido para que una
+  // edición hecha offline sobreviva a que se mate la app (antes vivía solo en
+  // memoria y se perdía, y el próximo /me la pisaba).
+  static const _kDirty = 'session_dirty';
 
   Profile? _profile;
   String? _email;
@@ -38,15 +41,16 @@ class Session extends ChangeNotifier {
   String _defaultTab = 'home';
   bool _restoring = true;
   // Verificando la sesión cacheada contra el backend al arrancar. Mientras es
-  // true la app se queda en el splash: ya no se entra en modo offline.
+  // true la app se queda en el splash.
   bool _verifying = false;
-  // Mensaje si la verificación de arranque falló (sin conexión / error del
-  // server / sesión vencida). La UI manda al login y lo muestra.
+  // Mensaje si la sesión vencida obliga a volver al login. La UI lo muestra.
   String? _startupError;
-  // Entramos sin haber podido verificar contra el backend (sin red) porque hay
-  // un partido sin terminar. La UI muestra un aviso: explica por qué las listas
-  // están vacías y que el partido se sube cuando vuelva la conexión.
-  bool _startedOffline = false;
+  // MODO OFFLINE: hay sesión guardada pero no se pudo hablar con el backend
+  // (sin red, timeout, server caído). Se entra igual con el perfil cacheado;
+  // la UI bloquea lo que necesita red y ofrece reconectar ([reconnect]). Lo
+  // registrado mientras tanto queda en las colas locales y se sube al volver.
+  bool _offline = false;
+  bool _reconnecting = false;
   // Campos del perfil modificados localmente sin subir. El batch los sube
   // juntos en flush(). Usar un Set en vez de bool permite enviar solo los
   // campos que realmente cambiaron (PATCH parcial), reduciendo el payload.
@@ -75,15 +79,14 @@ class Session extends ChangeNotifier {
   bool get restoring => _restoring;
   bool get verifying => _verifying;
   String? get startupError => _startupError;
-  bool get startedOffline => _startedOffline;
+  /// Modo offline (ver [_offline]).
+  bool get offline => _offline;
 
-  /// La UI llama a esto cuando una carga con red funcionó: el aviso de "sin
-  /// conexión" ya no corresponde.
-  void clearOfflineFlag() {
-    if (!_startedOffline) return;
-    _startedOffline = false;
-    notifyListeners();
-  }
+  /// Hay un intento de [reconnect] en vuelo (spinner del botón).
+  bool get reconnecting => _reconnecting;
+
+  /// Hay ediciones del perfil sin subir (para avisar antes de cerrar sesión).
+  bool get hasPendingChanges => _dirtyFields.isNotEmpty;
   /// La consume la pantalla de login para no repetir el mensaje en rebuilds.
   void clearStartupError() => _startupError = null;
   bool get isLoggedIn => _profile != null;
@@ -102,7 +105,42 @@ class Session extends ChangeNotifier {
       return 'Error del servidor (${e.statusCode}).';
     }
     if (e is TimeoutException) return 'No se pudo conectar con el servidor.';
+    if (e is SocketException || e is ClientException) {
+      return 'Sin conexión a internet.';
+    }
     return 'Error inesperado: $e';
+  }
+
+  /// Marca campos del perfil para el próximo [flush] y persiste el set.
+  void _markDirty(Iterable<String> fields) {
+    _dirtyFields.addAll(fields);
+    unawaited(_saveDirty());
+  }
+
+  Future<void> _saveDirty() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_dirtyFields.isEmpty) {
+      await prefs.remove(_kDirty);
+    } else {
+      await prefs.setStringList(_kDirty, _dirtyFields.toList());
+    }
+  }
+
+  /// Perfil del servidor con los campos todavía no subidos del perfil local
+  /// encima: lo editado sin conexión gana sobre lo que trae `/me`.
+  Profile _withPending(Profile fresh) {
+    final local = _profile;
+    if (local == null || _dirtyFields.isEmpty) return fresh;
+    final merged = fresh.toJson();
+    final mine = local.toJson();
+    for (final f in _dirtyFields) {
+      if (mine.containsKey(f)) merged[f] = mine[f];
+    }
+    try {
+      return _withAdmin(Profile.fromJson(merged));
+    } catch (_) {
+      return fresh;
+    }
   }
 
   /// Aplica el flag admin del token al perfil (no viaja en el Profile del
@@ -122,8 +160,8 @@ class Session extends ChangeNotifier {
       return 'Respuesta inválida del servidor.';
     }
     await _api.setToken(token);
-    // Login exitoso = hubo red: el aviso de "sin conexión" ya no corresponde.
-    _startedOffline = false;
+    // Login exitoso = hubo red.
+    _offline = false;
     final prof = _withAdmin(
       Profile.fromJson(profJson.cast<String, dynamic>()),
     );
@@ -153,6 +191,7 @@ class Session extends ChangeNotifier {
     }
     final em = prefs.getString(_kEmail);
     final cached = prefs.getString(_kProfile);
+    _dirtyFields.addAll(prefs.getStringList(_kDirty) ?? const []);
     // Sin JWT no hay sesión contra el backend (p. ej. venir de una versión
     // vieja de la app, o token borrado): forzar login.
     if (em != null && cached != null && _api.hasToken) {
@@ -163,8 +202,8 @@ class Session extends ChangeNotifier {
         _email = em;
       } catch (_) {/* cache corrupto: ignorar */}
     }
-    // Con sesión cacheada la VERIFICAMOS contra el backend antes de entrar: ya
-    // no se permite explorar la app sin conexión. Sin backend configurado
+    // Con sesión cacheada la verificamos contra el backend antes de entrar. Si
+    // no hay red se entra igual, en modo offline. Sin backend configurado
     // (build sin API_BASE_URL) no hay nada que verificar → se entra con cache.
     if (_profile != null && _api.isConfigured) {
       _verifying = true;
@@ -177,102 +216,60 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// ¿Este usuario tiene un partido EN CURSO, esperando resultado, o resuelto
-  /// pero sin subir? Se usa para decidir si, sin red, entramos con el perfil
-  /// cacheado en vez de mandar al login: el registro de partidos es
-  /// offline-resiliente, y expulsarlo lo deja sin saber dónde quedó su partido.
-  ///
-  /// Namespace igual que PlaySessionService: `base::$userKey`, con
-  /// userKey = email en minúsculas.
-  Future<bool> _hasUnfinishedMatch(String email) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      // Imprescindible: el partido pudo haberlo escrito el isolate de las
-      // alarmas mientras la app estaba muerta, y esta copia no lo vería.
-      await prefs.reload();
-      final uk = email.trim().toLowerCase();
-      final now = DateTime.now();
-
-      // Partido en curso. Misma ventana de 6 h que usa PlaySessionService al
-      // restaurar: más viejo se descarta igual, así que no cuenta.
-      final activeRaw = prefs.getString(bgNsKey(kActiveSessionBase, uk));
-      if (activeRaw != null) {
-        final start = (jsonDecode(activeRaw) as Map<String, dynamic>)['startMillis'];
-        if (start is num &&
-            now
-                    .difference(
-                        DateTime.fromMillisecondsSinceEpoch(start.toInt()))
-                    .inHours <
-                6) {
-          return true;
-        }
-      }
-
-      // Partido esperando que el usuario cargue el resultado. Acotado a 48 h
-      // para que un pendiente olvidado no saltee la verificación para siempre.
-      final pendingRaw = prefs.getString(bgNsKey(kPendingResultBase, uk));
-      if (pendingRaw != null) {
-        final ended = (jsonDecode(pendingRaw) as Map<String, dynamic>)['endedAtMillis'];
-        if (ended is num &&
-            now
-                    .difference(
-                        DateTime.fromMillisecondsSinceEpoch(ended.toInt()))
-                    .inHours <
-                48) {
-          return true;
-        }
-      }
-
-      // Partidos ya resueltos que esperan subir a la DB.
-      final queued = prefs.getStringList('pending_matches::$uk') ?? const [];
-      return queued.isNotEmpty;
-    } catch (_) {
-      // Nunca romper el arranque por esto.
-      return false;
-    }
-  }
-
   /// Verifica la sesión cacheada contra el backend al arrancar y de paso refresca
-  /// el perfil. Éxito → entra. 401 → sesión vencida, al login. Sin conexión /
-  /// server caído → al login, SALVO que haya un partido sin terminar (ahí entra
-  /// con el cache y avisa). Timeout corto para no dejar el splash colgado.
+  /// el perfil. Éxito → entra. 401 → sesión vencida, al login. Sin red, timeout
+  /// o server caído (5xx, cold start de Render) → entra en MODO OFFLINE con el
+  /// perfil cacheado: eso no es "tu sesión venció". Timeout corto para no dejar
+  /// el splash colgado.
   Future<void> _verifyStartupSession(String email) async {
     try {
-      final json = await _api.me().timeout(const Duration(seconds: 4));
-      final fresh = _withAdmin(Profile.fromJson(json));
-      // Nunca pisar el cache bueno con un perfil vacío/malformado.
-      if (fresh.pageId.isNotEmpty && _email == email) {
-        _profile = fresh;
-        await _persist(email, fresh);
-      }
-    } on ApiException catch (e) {
-      if (e.statusCode == 401) {
-        // Sesión realmente vencida: SIEMPRE al login, haya partido o no.
-        _startupError = 'Tu sesión expiró. Iniciá sesión de nuevo.';
-        await logout(flushFirst: false);
-      } else if (await _hasUnfinishedMatch(email)) {
-        // El server no responde bien (5xx, cold start de Render). Eso no es
-        // "tu sesión venció": mismo trato que la falta de red.
-        _startedOffline = true;
-      } else {
-        _startupError =
-            'No pudimos conectar con el servidor. Revisá tu conexión e iniciá sesión de nuevo.';
-        await logout(flushFirst: false);
-      }
-    } catch (_) {
-      // Sin red / timeout. Con un partido sin terminar entramos con el perfil
-      // cacheado: el registro funciona offline y echarlo al login lo deja sin
-      // saber dónde quedó su partido.
-      if (await _hasUnfinishedMatch(email)) {
-        _startedOffline = true;
-      } else {
-        _startupError =
-            'No hay conexión. Revisá tu internet e iniciá sesión de nuevo.';
-        await logout(flushFirst: false);
-      }
+      final r = await _fetchMe(email, const Duration(seconds: 4));
+      _offline = r != _MeResult.ok;
     } finally {
       _verifying = false;
       notifyListeners();
+    }
+  }
+
+  /// Reintenta hablar con el backend estando en modo offline (botón "Iniciar
+  /// sesión" y vuelta a primer plano). True si la conexión volvió.
+  Future<bool> reconnect() async {
+    if (!_offline || _reconnecting) return !_offline;
+    final email = _email;
+    if (email == null || !_api.isConfigured) return false;
+    _reconnecting = true;
+    notifyListeners();
+    try {
+      final r = await _fetchMe(email, const Duration(seconds: 6));
+      if (r == _MeResult.ok) _offline = false;
+      return r == _MeResult.ok;
+    } finally {
+      _reconnecting = false;
+      notifyListeners();
+    }
+  }
+
+  /// `GET /me`. OK → refresca el perfil (con lo pendiente encima, ver
+  /// [_withPending]). 401 → sesión vencida: logout con aviso. Los datos de juego
+  /// quedan en disco namespaced por email y se readoptan al volver a entrar.
+  Future<_MeResult> _fetchMe(String email, Duration timeout) async {
+    try {
+      final json = await _api.me().timeout(timeout);
+      final fresh = _withPending(_withAdmin(Profile.fromJson(json)));
+      // Nunca pisar el cache bueno con un perfil vacío/malformado.
+      if (fresh.pageId.isNotEmpty && _email == email) {
+        await _persist(email, fresh);
+      }
+      return _MeResult.ok;
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) {
+        _startupError = 'Tu sesión expiró. Iniciá sesión de nuevo.';
+        await logout(flushFirst: false);
+        return _MeResult.expired;
+      }
+      return _MeResult.unreachable;
+    } catch (_) {
+      return _MeResult.unreachable;
     }
   }
 
@@ -424,7 +421,7 @@ class Session extends ChangeNotifier {
     if (c.length > 4) return 'La insignia no puede superar los 4 caracteres.';
 
     // Se guarda localmente y se sube en el próximo batch.
-    _dirtyFields.addAll(['clan', 'avatarColor', 'clanTextColor', 'clanFont', 'avatarFrame']);
+    _markDirty(['clan', 'avatarColor', 'clanTextColor', 'clanFont', 'avatarFrame']);
     await _persist(
       email,
       prof.copyWith(
@@ -444,7 +441,7 @@ class Session extends ChangeNotifier {
     final prof = _profile;
     final email = _email;
     if (prof == null || email == null) return 'No hay sesión activa.';
-    _dirtyFields.add('title');
+    _markDirty(['title']);
     await _persist(email, prof.copyWith(title: title));
     return null;
   }
@@ -460,10 +457,12 @@ class Session extends ChangeNotifier {
     final prof = _profile;
     final email = _email;
     if (prof == null || email == null) return 'No hay sesión activa.';
-    if (shareStatus != null) _dirtyFields.add('shareStatus');
-    if (shareCourt != null) _dirtyFields.add('shareCourt');
-    if (shareTime != null) _dirtyFields.add('shareTime');
-    if (showLastPlayed != null) _dirtyFields.add('showLastPlayed');
+    _markDirty([
+      if (shareStatus != null) 'shareStatus',
+      if (shareCourt != null) 'shareCourt',
+      if (shareTime != null) 'shareTime',
+      if (showLastPlayed != null) 'showLastPlayed',
+    ]);
     await _persist(
       email,
       prof.copyWith(
@@ -486,7 +485,7 @@ class Session extends ChangeNotifier {
     final prof = _profile;
     final email = _email;
     if (prof == null || email == null) return;
-    _dirtyFields.addAll(['lastPlayedCourtId', 'lastPlayedAt']);
+    _markDirty(['lastPlayedCourtId', 'lastPlayedAt']);
     await _persist(
       email,
       prof.copyWith(
@@ -527,7 +526,7 @@ class Session extends ChangeNotifier {
     } catch (_) {
       // Falló la subida inmediata → marcamos dirty para que flush() la reintente
       // cada 2 min (solo los campos de presencia) hasta que entre.
-      _dirtyFields.addAll(['playing', 'playingCourtId', 'playingSince']);
+      _markDirty(['playing', 'playingCourtId', 'playingSince']);
     }
   }
 
@@ -590,7 +589,7 @@ class Session extends ChangeNotifier {
         prof.playTimeByCourt == playTimeByCourt &&
         listEquals(prof.unlockedBadges, unlockedBadges);
     if (unchanged) return;
-    _dirtyFields.addAll([
+    _markDirty([
       'games', 'courts', 'streak', 'points', 'level',
       'unlockedBadges', 'playSeconds', 'playTimeByCourt',
     ]);
@@ -619,16 +618,20 @@ class Session extends ChangeNotifier {
     if (prof == null || !_api.isConfigured || !_api.hasToken) return;
     _flushing = true;
     try {
-      // Enviar solo los campos que cambiaron (PATCH parcial).
+      // Enviar solo los campos que cambiaron (PATCH parcial). Se manda una foto
+      // del set y se borra SOLO eso: un campo marcado mientras volaba el PATCH
+      // queda para el próximo flush.
+      final sent = {..._dirtyFields};
       final patch = <String, dynamic>{};
       final json = prof.toJson();
-      for (final field in _dirtyFields) {
+      for (final field in sent) {
         if (json.containsKey(field)) patch[field] = json[field];
       }
       if (patch.isNotEmpty) {
         await _api.updateMe(patch);
       }
-      _dirtyFields.clear();
+      _dirtyFields.removeAll(sent);
+      await _saveDirty();
     } catch (_) {
       /* sin red: dirtyFields queda intacto → se reintenta en el próximo flush */
     } finally {
@@ -644,16 +647,20 @@ class Session extends ChangeNotifier {
     final prof = _profile;
     final email = _email;
     if (prof == null || email == null) return 'No hay sesión activa.';
-    if (!_api.isConfigured) return 'No se puede eliminar sin conexión.';
+    if (!_api.isConfigured || _offline) {
+      return 'Necesitás conexión para eliminar la cuenta.';
+    }
 
-    String? firstError;
-    // Cortamos el batch para que no re-suba el perfil que vamos a borrar.
-    _dirtyFields.clear();
     try {
       await _api.deleteMe();
     } catch (e) {
-      firstError = _apiError(e);
+      // Sin confirmar el borrado en el servidor NO se limpia nada local: antes
+      // te deslogueaba igual y la cuenta seguía existiendo.
+      return _apiError(e);
     }
+    // Cortamos el batch para que no re-suba el perfil que acabamos de borrar.
+    _dirtyFields.clear();
+    await _saveDirty();
 
     // Limpiar la sesión local (sin flush: la cuenta ya no existe).
     await _api.clearToken();
@@ -669,7 +676,7 @@ class Session extends ChangeNotifier {
     _profileBg = '';
     _defaultTab = 'home';
     notifyListeners();
-    return firstError;
+    return null;
   }
 
   Future<void> logout({bool flushFirst = true}) async {
@@ -677,7 +684,8 @@ class Session extends ChangeNotifier {
       await flush(); // subir lo que haya quedado pendiente antes de cerrar
     }
     _dirtyFields.clear();
-    _startedOffline = false;
+    await _saveDirty();
+    _offline = false;
     await _api.clearToken();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kEmail);
@@ -702,3 +710,5 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+enum _MeResult { ok, expired, unreachable }

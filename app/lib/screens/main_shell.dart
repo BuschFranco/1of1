@@ -13,6 +13,7 @@ import '../widgets/app_loader.dart';
 import '../widgets/app_tab_bar.dart';
 import '../widgets/form_style.dart';
 import '../widgets/match_status_pill.dart';
+import '../widgets/offline_pill.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/reward_banner.dart';
 import 'create_screen.dart';
@@ -63,6 +64,9 @@ class _MainShellState extends State<MainShell> {
     // Usar la pestaña de inicio elegida por el usuario (Personalización).
     final defaultTab = context.read<Session>().defaultTab;
     _tab = _tabFromName(defaultTab);
+    if (context.read<Session>().offline && _offlineBlocked.contains(_tab)) {
+      _tab = AppTab.home;
+    }
     _previousTab = _tab;
     _loaderTimer = Timer(const Duration(seconds: 6), () {
       if (mounted) setState(() => _loaderTimedOut = true);
@@ -175,8 +179,23 @@ class _MainShellState extends State<MainShell> {
           AppColors.profileBg(context.watch<Session>().profileBg),
       };
 
+  /// Pestañas que necesitan red: en modo offline no se puede entrar.
+  static const Set<AppTab> _offlineBlocked = {AppTab.plus, AppTab.chat};
+
+  bool get _offline => context.read<Session>().offline;
+
   void _selectTab(AppTab t) {
     if (t == _tab) return;
+    if (_offline && _offlineBlocked.contains(t)) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text('Disponible cuando tengas conexión.',
+              style: AppText.grotesk(size: 13)),
+          backgroundColor: AppColors.bgElev,
+        ));
+      return;
+    }
     setState(() {
       _tabHistory.add(_tab);
       if (_tabHistory.length > 20) _tabHistory.removeAt(0);
@@ -275,12 +294,16 @@ class _MainShellState extends State<MainShell> {
       _selectTab(AppTab.home);
       return;
     }
-    final idx = _swipeTabs.indexOf(_tab);
+    // Offline, el swipe saltea las pestañas bloqueadas.
+    final tabs = _offline
+        ? [for (final t in _swipeTabs) if (!_offlineBlocked.contains(t)) t]
+        : _swipeTabs;
+    final idx = tabs.indexOf(_tab);
     if (idx < 0) return; // estamos en el mapa: no aplica
-    if (v < 0 && idx < _swipeTabs.length - 1) {
-      _selectTab(_swipeTabs[idx + 1]); // swipe a la izquierda → siguiente
+    if (v < 0 && idx < tabs.length - 1) {
+      _selectTab(tabs[idx + 1]); // swipe a la izquierda → siguiente
     } else if (v > 0 && idx > 0) {
-      _selectTab(_swipeTabs[idx - 1]); // swipe a la derecha → anterior
+      _selectTab(tabs[idx - 1]); // swipe a la derecha → anterior
     }
   }
 
@@ -393,6 +416,7 @@ class _MainShellState extends State<MainShell> {
     final courtsProvider = context.watch<CourtsProvider>();
     final courts = courtsProvider.courts;
     final hideTabs = _detailCourtId != null || _filtersOpen;
+    final offline = context.select<Session, bool>((s) => s.offline);
 
     // Loader de arranque: visible hasta que el mapa esté listo, haya primer GPS
     // y las canchas hayan cargado (o se agote el tope de seguridad).
@@ -540,6 +564,7 @@ class _MainShellState extends State<MainShell> {
                   onChange: _selectTab,
                   crewHasActivity: crewActivityNotifier.value,
                   homeGlow: matchGlow,
+                  disabled: offline ? _offlineBlocked : const {},
                 ),
               ),
             ),
@@ -554,15 +579,16 @@ class _MainShellState extends State<MainShell> {
                 child: MatchStatusPill(onTap: () => _selectTab(AppTab.home)),
               ),
             ),
-          // Entramos sin poder verificar contra el backend (sin red) porque hay
-          // un partido sin terminar: hay que decirlo. Si no, el usuario ve
-          // listas vacías y no entiende dónde se está registrando su partido.
-          if (context.watch<Session>().startedOffline && !hideTabs)
+          // Modo offline: botón flotante para reconectar, siguiendo al usuario
+          // por las pestañas. En el mapa ocupa el lugar del buscador (que sin
+          // red no funciona), así que lo pinta HomeScreen; acá va arriba de la
+          // barra de pestañas.
+          if (offline && !hideTabs && _tab != AppTab.home)
             Positioned(
-              top: MediaQuery.of(context).viewPadding.top,
               left: 0,
               right: 0,
-              child: _offlineBanner(),
+              bottom: MediaQuery.of(context).viewPadding.bottom + 92,
+              child: const Center(child: OfflinePill()),
             ),
           // Banner de recompensas (logro/título/nivel) por encima de todo.
           // Va dentro de un Positioned para no alterar el tamaño del Stack.
@@ -580,33 +606,6 @@ class _MainShellState extends State<MainShell> {
           Positioned.fill(child: AppLoader(visible: loaderVisible)),
         ],
       ),
-      ),
-    );
-  }
-
-  /// Aviso de que entramos sin conexión (hay un partido sin terminar). Tranquiliza
-  /// sobre lo importante: el partido no se pierde. Se va solo al recuperar la red.
-  Widget _offlineBanner() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.bgElev,
-        borderRadius: BorderRadius.circular(AppShape.rCard),
-        border: Border.all(color: AppColors.busy.withAlpha(90)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.cloud_off, size: 16, color: AppColors.busy),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Sin conexión. Tu sesión se registra igual y se sube cuando vuelva el internet.',
-              style: AppText.grotesk(
-                  size: 12, color: AppColors.white(0.75), height: 1.35),
-            ),
-          ),
-        ],
       ),
     );
   }

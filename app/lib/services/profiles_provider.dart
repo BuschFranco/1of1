@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/courts.dart';
 import '../data/models.dart';
 import 'api/api_client.dart';
@@ -56,17 +59,36 @@ class ProfilesProvider extends ChangeNotifier {
   /// `force: true` para el pull-to-refresh. La marca se limpia en el logout con
   /// `ApiCache.clear()`.
   Future<void> load({bool force = false}) async {
+    // Sin red (modo offline) se ve lo último conocido: amigos, niveles, clanes.
+    if (_byEmail.isEmpty) {
+      final cached = await _readCache();
+      if (cached.isNotEmpty) {
+        _byEmail = cached;
+        notifyListeners();
+      }
+    }
     if (!_api.isConfigured || !_api.hasToken) return;
     if (!force &&
         _byEmail.isNotEmpty &&
         ApiCache.isFresh('profiles', ApiCache.ttlProfiles)) {
       return;
     }
+    // Al arrancar, una copia guardada de hace menos de [_kStartupTtl] alcanza
+    // (antes se pedía siempre). La presencia "Jugando ahora" se refresca igual
+    // al abrir una cancha, porque ahí ya rige la guarda corta de arriba.
+    if (!force && !_loadedThisRun && _byEmail.isNotEmpty && await _cacheIsFresh()) {
+      _loadedThisRun = true;
+      ApiCache.put('profiles', true);
+      return;
+    }
+    _loadedThisRun = true;
     _loading = true;
     notifyListeners();
     try {
+      // `shareCourt` y `points` faltaban: sin ellos "Jugando ahora" nunca
+      // mostraba a otros jugadores y el ranking Total de amigos daba 0.
       final rows = await _api.profiles(
-        fields: 'userEmail,handle,clan,name,avatarColor,clanTextColor,clanFont,avatarFrame,playing,playingCourtId,playingSince,lastPlayedAt,lastPlayedCourtId,showLastPlayed,title',
+        fields: 'userEmail,handle,clan,name,avatarColor,clanTextColor,clanFont,avatarFrame,playing,playingCourtId,playingSince,shareCourt,points,lastPlayedAt,lastPlayedCourtId,showLastPlayed,title',
       );
       final map = <String, Profile>{};
       for (final row in rows) {
@@ -75,11 +97,56 @@ class ProfilesProvider extends ChangeNotifier {
       }
       _byEmail = map;
       ApiCache.put('profiles', true); // marca de tiempo para la guarda TTL
+      if (map.isNotEmpty) unawaited(_writeCache(map));
     } catch (_) {
       // mantener el cache previo si falla la red
     } finally {
       _loading = false;
       notifyListeners();
     }
+  }
+
+  // Global: son los mismos datos públicos que ve cualquier usuario logueado.
+  static const _kCache = 'profiles_cache';
+  static const _kCacheAt = 'profiles_cache_at';
+  static const _kStartupTtl = Duration(minutes: 10);
+  bool _loadedThisRun = false;
+
+  Future<bool> _cacheIsFresh() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final at = prefs.getInt(_kCacheAt);
+      if (at == null) return false;
+      return DateTime.now()
+              .difference(DateTime.fromMillisecondsSinceEpoch(at)) <
+          _kStartupTtl;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<Map<String, Profile>> _readCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kCache);
+      if (raw == null) return const {};
+      final out = <String, Profile>{};
+      for (final e in jsonDecode(raw) as List) {
+        final p = Profile.fromJson((e as Map).cast<String, dynamic>());
+        if (p.userEmail.isNotEmpty) out[p.userEmail.toLowerCase()] = p;
+      }
+      return out;
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  Future<void> _writeCache(Map<String, Profile> map) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          _kCache, jsonEncode([for (final p in map.values) p.toJson()]));
+      await prefs.setInt(_kCacheAt, DateTime.now().millisecondsSinceEpoch);
+    } catch (_) {}
   }
 }

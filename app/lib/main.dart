@@ -225,9 +225,8 @@ class _RootState extends State<_Root> {
       return session.needsHandle ? const HandleSetupScreen() : const MainShell();
     }
 
-    // Falló la verificación de una sesión cacheada (sin conexión / server /
-    // sesión vencida): al login con el mensaje, en vez de dejar explorar
-    // offline con todo vacío.
+    // La sesión cacheada venció (401): al login con el mensaje. La falta de red
+    // ya no llega acá: entra en modo offline (ver Session.offline).
     final startupError = session.startupError;
     if (startupError != null) {
       return AuthScreen(
@@ -254,19 +253,22 @@ class _Splash extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Mismo fondo, logo y spinner que AppLoader: se suceden al arrancar y antes
+    // se notaba el cambio de color entre una y otra.
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: AppColors.brand,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // Marca plana (neobrutalismo): el logo va limpio, sin caja ni glow.
-            const AppLogo(height: 96),
-            const SizedBox(height: 20),
+            const AppLogo(height: 120),
+            const SizedBox(height: 24),
             SizedBox(
               width: 22,
               height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.white(0.4)),
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppColors.accent.withAlpha(180)),
             ),
           ],
         ),

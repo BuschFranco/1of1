@@ -39,10 +39,12 @@ class PlayerAvatar extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppShape.rBtn),
         border: Border.all(color: AppColors.line, width: 1),
-        color: useImage ? null : color,
+        color: color, // fondo si la foto no carga (sin red)
         image: useImage
             ? DecorationImage(
-                image: NetworkImage(p!.avatar), fit: BoxFit.cover)
+                image: NetworkImage(p!.avatar),
+                fit: BoxFit.cover,
+                onError: (_, _) {})
             : null,
         boxShadow: AppFx.hardShadow(offset: const Offset(2, 2)),
       ),

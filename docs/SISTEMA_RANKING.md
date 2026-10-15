@@ -31,7 +31,6 @@ puntos = puntosPorTiempo
        + bonusResultado      (% de puntosPorTiempo)
        + bonusRacha          (% de puntosPorTiempo)
        + bonusCanchaNueva    (+30 fijo)
-       + bonusRecordCalorias (+25 fijo)
 ```
 
 ### 2.1 Puntos por tiempo (la base)
@@ -71,18 +70,17 @@ Victoria y derrota valen **igual** a propósito: el resultado es autorreportado 
 
 **+30 puntos fijos** la primera vez que jugás en una cancha (se detecta contra el mapa local de tiempo-por-cancha, antes de registrar el partido).
 
-### 2.5 Bonus de salud (récord de calorías)
+### 2.5 Salud: no suma puntos
 
-Solo si el usuario conectó Salud (Health Connect / HealthKit, opt-in):
-
-- Se leen las calorías activas de la ventana del partido desde el store del OS.
-- Si superan el **récord personal**, se suman **+25 puntos** (`calorieRecordBonus`) y el récord se actualiza.
-- El **primer dato válido fija la base sin bonus** (récord inicial = 0 → primera medición no paga).
-- Sin wearable / sin datos: no pasa nada, no penaliza.
+Hasta oct-2026 superar el récord de calorías daba +25. **Se sacó**: las
+calorías se miden sobre toda la sesión de juego (esperas y descansos
+incluidos), así que el récord premiaba quedarse más tiempo en la cancha, no
+jugar más. El récord sigue existiendo solo como dato (badge "RÉCORD" en el
+detalle de la sesión).
 
 ### Ejemplo completo
 
-Partido de 60 min, victoria, 3ra victoria seguida, cancha ya conocida, sin récord de calorías:
+Partido de 60 min, victoria, 3ra victoria seguida, cancha ya conocida:
 
 ```
 multiplicador  = 1.0 + 0.8 × (60/90)   = ×1.533
@@ -180,5 +178,5 @@ El detalle de cada cancha muestra "Puntos acá" (total del usuario en esa cancha
 
 - **Nunca baja**: no hay penalizaciones; perder suma lo mismo que ganar (+30 % sobre la base). Mide *dedicación* más que *skill*.
 - **El tiempo domina**: la base por tiempo es el 100 % de referencia; los bonus de resultado/racha son porcentajes de ella. Un partido largo perdido puede valer más que uno corto ganado.
-- **Anti-farmeo**: mínimo 13 min para contar, cap de 2 h puntuables, pregunta de confirmación a las 2 h, multiplicador topado a los 90 min, cancha nueva paga una sola vez, récord de calorías solo al superarlo.
+- **Anti-farmeo**: mínimo 13 min para contar, cap de 2 h puntuables, pregunta de confirmación a las 2 h, multiplicador topado a los 90 min, cancha nueva paga una sola vez; la salud no suma puntos.
 - **Autoreportado**: el resultado (ganó/perdió) lo declara el usuario sin verificación. Victoria y derrota pagan lo mismo en puntos, así que mentir no rinde en el rating; el único incentivo residual es el bonus de racha (hasta +25 % de la base) y los logros por victorias.

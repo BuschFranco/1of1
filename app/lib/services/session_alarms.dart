@@ -1507,10 +1507,10 @@ Future<void> _closeActiveToPending(
   await cancelConfirmAlarm();
   await cancelConfirmTimeoutAlarm();
   await cancelHardEndAlarm();
-  await _setNotionPresence(prefs, playing: false, courtId: '', sinceIso: '');
-  await NotificationsService.instance.init();
-  await NotificationsService.instance.cancelContinueCheck();
 
+  // El resultado pendiente se escribe ANTES de cualquier llamada de red: la
+  // presencia puede tardar hasta 12 s con mala señal, y si el SO corta el tick
+  // en el medio (el plugin no espera al callback) la sesión se perdía.
   if (seconds >= _kMinMatchSeconds) {
     // Partido válido → pendiente de resultado (mismo formato que PlaySession).
     await prefs.setString(
@@ -1524,6 +1524,11 @@ Future<void> _closeActiveToPending(
         'points': 0,
       }),
     );
+  }
+  await NotificationsService.instance.init();
+  await NotificationsService.instance.cancelContinueCheck();
+
+  if (seconds >= _kMinMatchSeconds) {
     await NotificationsService.instance.show(
       notifTitle ??
           (lowBattery
@@ -1537,6 +1542,7 @@ Future<void> _closeActiveToPending(
     );
   }
   await NotificationsService.instance.cancelSession();
+  await _setNotionPresence(prefs, playing: false, courtId: '', sinceIso: '');
 }
 
 // ── Helpers del callback ─────────────────────────────────────────────────────

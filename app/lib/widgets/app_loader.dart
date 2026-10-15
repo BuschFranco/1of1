@@ -34,7 +34,8 @@ class _AppLoaderState extends State<AppLoader> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            const PopBackground(color: AppColors.lilac),
+            // Color del ícono de la app (igual que el splash de main.dart).
+            const PopBackground(color: AppColors.brand),
             Align(
               alignment: Alignment.center,
               child: Column(

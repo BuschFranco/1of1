@@ -135,7 +135,7 @@ class PickupsProvider extends ChangeNotifier {
       ApiCache.put('pickups', true); // marca de tiempo para la guarda TTL
       // Fire-and-forget: no bloquear la pantalla por la limpieza. Si falla,
       // igual quedan ocultos y se reintenta en la próxima carga.
-      if (expired.isNotEmpty) unawaited(_cleanupExpired(expired));
+      if (expired.isNotEmpty) unawaited(_cleanupExpired(expired, _email));
     } catch (_) {
       // Silencioso: no romper la pantalla.
     }
@@ -409,16 +409,19 @@ class PickupsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Limpia de la BDD los pickups vencidos (24h después del partido). El
-  /// DELETE del server es solo-creador: en los clientes de los invitados da
-  /// 403 y se ignora (el creador lo limpia en su próxima carga). El server
-  /// también archiva el chat asociado.
-  Future<void> _cleanupExpired(List<Pickup> expired) async {
+  /// Limpia de la BDD los pickups vencidos (24h después del partido). Hoy lo
+  /// hace el backend al listar (ya ni llegan acá); esto queda para un backend
+  /// viejo. Solo los propios (el DELETE es solo-creador: a los invitados les
+  /// daba 403 en cada carga) y una vez por pickup en esta ejecución.
+  final Set<String> _cleanupTried = {};
+
+  Future<void> _cleanupExpired(List<Pickup> expired, String email) async {
     for (final p in expired) {
+      if (!p.isCreator(email) || !_cleanupTried.add(p.pageId)) continue;
       try {
         await _api.deletePickup(p.pageId);
       } catch (_) {
-        // Best-effort: 403 de no-creador o sin red; se reintenta luego.
+        // Best-effort: sin red; se reintenta en la próxima ejecución.
       }
     }
   }

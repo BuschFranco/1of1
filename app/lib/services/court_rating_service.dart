@@ -26,11 +26,7 @@ class CourtRatingService {
   /// instantáneamente. Si no, consulta el backend, promedia y cachea.
   Future<CourtRating> ratingFor(String courtId) async {
     if (_cache.containsKey(courtId)) return _cache[courtId]!;
-    if (!_api.isConfigured || !_api.hasToken) {
-      const r = CourtRating();
-      _cache[courtId] = r;
-      return r;
-    }
+    if (!_api.isConfigured || !_api.hasToken) return const CourtRating();
     try {
       final reviews = await listReviews(courtId);
       if (reviews.isEmpty) {
@@ -44,9 +40,9 @@ class CourtRatingService {
       _cache[courtId] = r;
       return r;
     } catch (_) {
-      const r = CourtRating();
-      _cache[courtId] = r;
-      return r;
+      // Sin cachear: un fallo de red (modo offline) no puede dejar la cancha
+      // sin rating para siempre una vez que vuelva la conexión.
+      return const CourtRating();
     }
   }
 
