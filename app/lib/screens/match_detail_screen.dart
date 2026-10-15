@@ -34,6 +34,11 @@ class MatchDetailScreen extends StatefulWidget {
 class _MatchDetailScreenState extends State<MatchDetailScreen> {
   ValueChanged<String>? get onSelectCourt => widget.onSelectCourt;
 
+  /// Mientras se arma la imagen para compartir (precarga de la foto + captura),
+  /// el botón muestra un loader y no acepta otro toque: tarda un par de segundos
+  /// y sin feedback se tocaba dos veces y salían dos share sheets.
+  bool _sharing = false;
+
   /// Versión más fresca del partido: si la re-lectura de salud actualizó el
   /// historial (los datos del reloj llegan tarde a Health Connect), usamos esa
   /// entrada; si no, el snapshot recibido.
@@ -1099,7 +1104,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
 
   Widget _shareButton(BuildContext context) {
     return PressableWidget(
-      onTap: () => _captureAndShare(context),
+      onTap: _sharing ? null : () => _captureAndShare(context),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1110,9 +1115,13 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.camera_alt_outlined, size: 16, color: AppColors.ink),
+            if (_sharing)
+              const BusySpinner(size: 16, color: AppColors.ink)
+            else
+              const Icon(Icons.camera_alt_outlined,
+                  size: 16, color: AppColors.ink),
             const SizedBox(width: 8),
-            Text('COMPARTIR RESULTADO',
+            Text(_sharing ? 'GENERANDO IMAGEN…' : 'COMPARTIR RESULTADO',
                 style: AppText.archivo(
                     size: 12,
                     weight: FontWeight.w800,
@@ -1147,6 +1156,16 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
   }
 
   Future<void> _captureAndShare(BuildContext context) async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
+    try {
+      await _generateAndShare(context);
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
+  Future<void> _generateAndShare(BuildContext context) async {
     // Crear un widget replicable para captura.
     final key = GlobalKey();
     final s = session;
@@ -1238,6 +1257,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       await file.writeAsBytes(buffer);
 
       entry.remove();
+      if (mounted) setState(() => _sharing = false);
 
       await Share.shareXFiles(
         [XFile(file.path)],
