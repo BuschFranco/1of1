@@ -256,7 +256,7 @@ class _Splash extends StatelessWidget {
     // Mismo fondo, logo y spinner que AppLoader: se suceden al arrancar y antes
     // se notaba el cambio de color entre una y otra.
     return Scaffold(
-      backgroundColor: AppColors.brand,
+      backgroundColor: AppColors.splash,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,

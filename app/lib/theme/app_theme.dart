@@ -32,8 +32,12 @@ class AppColors {
 
   /// Fondo del ícono de la app (`adaptive_icon_background` en pubspec y
   /// `ic_launcher_background` en Android). Lo usan las pantallas de carga del
-  /// arranque, para que abrir la app continúe el color del ícono.
+  /// arranque (en versión algo más oscura, ver [splash]).
   static const Color brand = Color(0xFF1E1B4B);
+
+  /// Fondo de las pantallas de carga (`splash_background` en Android): el tono
+  /// de [brand] un poco más oscuro. El ícono conserva [brand].
+  static const Color splash = Color(0xFF161438);
 
   // Aliases históricos de fondo de PANTALLA (no de card): se conservan para no
   // romper call-sites, pero no tienen color propio.
