@@ -13,12 +13,48 @@ import { PrismaService } from '../prisma/prisma.module';
 export class CourtsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Canchas aprobadas (las que ve la app en el mapa/lista). */
+  /** Canchas aprobadas (las que ve la app en el mapa/lista), con el rating
+   * promedio y la cantidad de reseñas calculados acá. Antes la app bajaba
+   * TODAS las reseñas de cada cancha por tarjeta solo para dibujar las
+   * estrellas; las columnas rating/reviews de la tabla nunca se actualizaban. */
   async listApproved(): Promise<Court[]> {
-    const rows = await this.prisma.court.findMany({
-      where: { approval: COURT_APPROVAL.approved, archived: false },
+    const [rows, agg, admins] = await Promise.all([
+      this.prisma.court.findMany({
+        where: { approval: COURT_APPROVAL.approved, archived: false },
+      }),
+      this.prisma.review.groupBy({
+        by: ['courtId'],
+        where: { archived: false },
+        _avg: { rating: true },
+        _count: { _all: true },
+      }),
+      // Las canchas que cargó un admin se acreditan a 1of1, no al usuario.
+      this.prisma.user.findMany({
+        where: { isAdmin: true, archived: false },
+        select: { email: true },
+      }),
+    ]);
+    const adminEmails = new Set(
+      admins.map((u) => u.email.trim().toLowerCase()),
+    );
+    const byCourt = new Map(
+      agg.map((a) => [
+        a.courtId,
+        { rating: a._avg.rating ?? 0, reviews: a._count._all },
+      ]),
+    );
+    return rows.map((r) => {
+      const w = courtWire(r);
+      const s = byCourt.get(r.id);
+      return {
+        ...w,
+        rating: s?.rating ?? 0,
+        reviews: s?.reviews ?? 0,
+        proposedByAdmin: adminEmails.has(
+          r.proposedByEmail.trim().toLowerCase(),
+        ),
+      };
     });
-    return rows.map(courtWire);
   }
 
   /** Canchas propuestas por el usuario, en CUALQUIER estado de aprobación.

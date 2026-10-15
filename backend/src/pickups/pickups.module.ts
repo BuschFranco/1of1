@@ -186,7 +186,10 @@ class PickupsService {
     return (Math.floor(Math.random() * 90000) + 10000).toString();
   }
 
-  /** Pickups donde el usuario es creador o miembro de un equipo. */
+  /** Pickups donde el usuario es creador o miembro de un equipo, sin los
+   * vencidos (24 h después del partido). Los vencidos que creó el usuario se
+   * archivan acá mismo (pickup + chats + mensajes): antes lo hacía la app con
+   * un DELETE por pickup en cada carga, y los invitados recibían 403 siempre. */
   async listForUser(email: string): Promise<Pickup[]> {
     const e = email.trim().toLowerCase();
     const rows = await this.prisma.pickup.findMany({
@@ -199,7 +202,28 @@ class PickupsService {
         ],
       },
     });
-    return rows.map(pickupWire);
+    const expired = (p: (typeof rows)[number]) =>
+      p.dateTime != null && Date.now() > p.dateTime.getTime() + PICKUP_TTL_MS;
+    const mineExpired = rows
+      .filter((p) => expired(p) && this.eq(p.createdBy, e))
+      .map((p) => p.id);
+    if (mineExpired.length) {
+      await this.prisma.$transaction([
+        this.prisma.chat.updateMany({
+          where: { pickupId: { in: mineExpired }, archived: false },
+          data: { archived: true },
+        }),
+        this.prisma.message.updateMany({
+          where: { pickupId: { in: mineExpired }, archived: false },
+          data: { archived: true },
+        }),
+        this.prisma.pickup.updateMany({
+          where: { id: { in: mineExpired } },
+          data: { archived: true },
+        }),
+      ]);
+    }
+    return rows.filter((p) => !expired(p)).map(pickupWire);
   }
 
   private async getById(pageId: string): Promise<Pickup> {

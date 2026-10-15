@@ -68,6 +68,9 @@ export interface Court {
   proposedByClan: string;
   proposedByEmail: string;
   approval: string;
+  /** La propuso una cuenta admin: la app la acredita a 1of1 (logo), igual
+   * que las canchas del sistema. Solo viene en `GET /courts`. */
+  proposedByAdmin?: boolean;
 }
 
 export function courtWire(c: DbCourt): Court {

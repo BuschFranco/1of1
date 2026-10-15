@@ -17,6 +17,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { invalidateCourtLeaders } from '../clans/clans.module';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser } from '../auth/jwt.strategy';
 import { parseUtc } from '../domain/wire';
@@ -71,6 +72,18 @@ class MatchesService {
       try {
         const endedAt = parseUtc(m.endedAt);
         if (!endedAt) throw new Error('endedAt inválido');
+        // Idempotente por (email, endedAt): la app reintenta el lote entero si
+        // se pierde la respuesta (mala señal, modo offline, cold start) y sin
+        // esto el reintento duplicaba ranking, rey de cancha y puntos de clan.
+        // Sin índice único a propósito: fallaría con duplicados ya existentes.
+        const exists = await this.prisma.match.findFirst({
+          where: { email, endedAt, archived: false },
+          select: { id: true },
+        });
+        if (exists) {
+          results.push({ ok: true });
+          continue;
+        }
         await this.prisma.match.create({
           data: {
             email,
@@ -88,6 +101,8 @@ class MatchesService {
         results.push({ ok: false });
       }
     }
+    // Puede haber cambiado el rey o el clan dueño de alguna cancha.
+    if (results.some((r) => r.ok)) invalidateCourtLeaders();
     return { results };
   }
 

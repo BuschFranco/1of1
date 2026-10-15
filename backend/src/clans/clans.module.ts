@@ -17,6 +17,20 @@ import { seasonStart } from '../season';
 
 type ClanRow = { clan: string; points: number; members: number };
 
+type CourtLeaders = {
+  king: { name: string; handle: string; points: number } | null;
+  clan: ClanRow | null;
+};
+
+// Caché en memoria de `courtLeaders`: lo piden todos los usuarios al abrir el
+// mapa, y solo cambia cuando se suben partidos (MatchesService lo invalida).
+let leadersCache: { at: number; value: Record<string, CourtLeaders> } | null =
+  null;
+
+export function invalidateCourtLeaders(): void {
+  leadersCache = null;
+}
+
 // ── Service ─────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -119,6 +133,84 @@ class ClansService {
     return ClansService.toSorted(points, members);
   }
 
+  private static readonly LEADERS_TTL_MS = 5 * 60 * 1000;
+
+  /** Rey (jugador) y clan dueño de TODAS las canchas en la temporada actual,
+   * en una sola pasada. Mismas reglas que [courtOwner] y `courtKing` de
+   * matches; reemplaza las dos llamadas que la app hacía por cada tarjeta. */
+  async courtLeaders(): Promise<Record<string, CourtLeaders>> {
+    const hit = leadersCache;
+    if (hit && Date.now() - hit.at < ClansService.LEADERS_TTL_MS) {
+      return hit.value;
+    }
+
+    const { byEmail, members } = await this.clanMap();
+    const rows = await this.prisma.match.findMany({
+      where: { endedAt: { gte: seasonStart() }, archived: false },
+      select: { courtId: true, email: true, clan: true, exp: true },
+    });
+
+    // courtId → (email → puntos) y courtId → (clan → puntos).
+    const byPlayer = new Map<string, Map<string, number>>();
+    const byClan = new Map<string, Map<string, number>>();
+    for (const r of rows) {
+      if (!r.courtId) continue;
+      const email = r.email.trim().toLowerCase();
+      const players = byPlayer.get(r.courtId) ?? new Map<string, number>();
+      players.set(email, (players.get(email) ?? 0) + r.exp);
+      byPlayer.set(r.courtId, players);
+
+      const clan = ClansService.clanKey(r.clan) || byEmail.get(email);
+      if (clan) {
+        const clans = byClan.get(r.courtId) ?? new Map<string, number>();
+        clans.set(clan, (clans.get(clan) ?? 0) + r.exp);
+        byClan.set(r.courtId, clans);
+      }
+    }
+
+    // Rey por cancha (el de más puntos) y un solo lookup de sus nombres.
+    const kingOf = new Map<string, { email: string; points: number }>();
+    for (const [courtId, players] of byPlayer) {
+      let best: { email: string; points: number } | null = null;
+      for (const [email, points] of players) {
+        if (!best || points > best.points) best = { email, points };
+      }
+      if (best && best.points > 0) kingOf.set(courtId, best);
+    }
+    const emails = [...new Set([...kingOf.values()].map((k) => k.email))];
+    const profiles = emails.length
+      ? await this.prisma.profile.findMany({
+          where: { userEmail: { in: emails }, archived: false },
+          select: { userEmail: true, name: true, handle: true },
+        })
+      : [];
+    const nameOf = new Map(
+      profiles.map((p) => [p.userEmail.trim().toLowerCase(), p]),
+    );
+
+    const out: Record<string, CourtLeaders> = {};
+    const courtIds = new Set([...byPlayer.keys(), ...byClan.keys()]);
+    for (const courtId of courtIds) {
+      const k = kingOf.get(courtId);
+      const p = k ? nameOf.get(k.email) : undefined;
+      const clans = byClan.get(courtId);
+      const top = clans ? ClansService.toSorted(clans, members)[0] : undefined;
+      out[courtId] = {
+        king: k
+          ? {
+              name: p?.name || k.email.split('@')[0],
+              handle: p?.handle ?? '',
+              points: k.points,
+            }
+          : null,
+        clan: top && top.points > 0 ? top : null,
+      };
+    }
+
+    leadersCache = { at: Date.now(), value: out };
+    return out;
+  }
+
   /** Clan que "conquistó" la cancha: el de más puntos acumulados ahí EN LA
    * TEMPORADA ACTUAL (la conquista se reinicia cada temporada). */
   async courtOwner(courtId: string): Promise<{ owner: ClanRow | null }> {
@@ -148,6 +240,12 @@ class ClansController {
   @Get('court-owner')
   courtOwner(@Query('courtId') courtId: string) {
     return this.clans.courtOwner((courtId ?? '').trim());
+  }
+
+  /** Rey y clan dueño de todas las canchas (temporada actual). */
+  @Get('court-leaders')
+  async courtLeaders() {
+    return { leaders: await this.clans.courtLeaders() };
   }
 }
 
