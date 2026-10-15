@@ -20,6 +20,7 @@ import '../services/profiles_provider.dart';
 import '../services/court_owner_cache.dart';
 import '../services/session.dart';
 import 'ranking_screen.dart';
+import '../services/dev_reset.dart';
 import '../services/session_alarms.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
@@ -30,6 +31,7 @@ import '../widgets/court_marker_icon.dart';
 import '../widgets/offline_pill.dart';
 import '../widgets/permissions_modal.dart';
 import '../widgets/rating_badge.dart';
+import '../widgets/app_tour.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/status_dot.dart';
 import 'pickup_create_screen.dart';
@@ -404,9 +406,8 @@ class _HomeScreenState extends State<HomeScreen>
     // DEV: si el servicio restauró una ubicación simulada tras un reinicio del
     // proceso, retomamos el modo prueba en la UI (el pin sigue gobernando).
     _syncMockMode();
-    // Modal de permisos sobre el mapa: UNA sola vez por usuario (tras el primer
-    // login/registro). Después se abre a mano desde el perfil.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowPerms());
+    // El modal de permisos del primer ingreso ya no se pide acá: lo pide
+    // MainShell en orden (bienvenida → permisos → tour) para que no se pisen.
     // Rasterizar los íconos custom de marcador (necesitan el dpr del device,
     // por eso post-frame). Mientras tanto se ve el pin default.
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadMarkerIcons());
@@ -842,7 +843,12 @@ class _HomeScreenState extends State<HomeScreen>
                _courtReviewBubbles(),
               // Offline, el buscador (Google Places, sin red no anda) se
               // reemplaza por el botón para reconectar.
-              Positioned(top: 54, left: 16, right: 16, child: _searchBar()),
+              Positioned(
+                top: 54,
+                left: 16,
+                right: 16,
+                child: KeyedSubtree(key: TourKeys.search, child: _searchBar()),
+              ),
               if (_showSearch && _predictions.isNotEmpty)
                 Positioned(
                   top: 112,
@@ -876,7 +882,9 @@ class _HomeScreenState extends State<HomeScreen>
                           // partido); fuera del radio queda inactivo pero visible.
                           // El cambio de estado (empieza → jugando → reposo) se
                           // funde progresivamente en vez de saltar de golpe.
-                          AnimatedSwitcher(
+                          KeyedSubtree(
+                            key: TourKeys.timer,
+                            child: AnimatedSwitcher(
                             duration: const Duration(milliseconds: 380),
                             switchInCurve: Curves.easeOut,
                             switchOutCurve: Curves.easeIn,
@@ -890,6 +898,7 @@ class _HomeScreenState extends State<HomeScreen>
                                           ? _manualStartBanner(context)
                                           : _idleTimer(context),
                             ),
+                          ),
                           ),
                           if (!active) ...[
                             const SizedBox(height: 10),
@@ -917,7 +926,8 @@ class _HomeScreenState extends State<HomeScreen>
                   children: [
                     // Ranking y reseñas en el mapa necesitan red.
                     if (!context.select<Session, bool>((s) => s.offline)) ...[
-                      _rankingBtn(),
+                      KeyedSubtree(
+                          key: TourKeys.ranking, child: _rankingBtn()),
                       const SizedBox(height: 10),
                       _reviewToggleBtn(),
                       const SizedBox(height: 10),
@@ -964,6 +974,18 @@ class _HomeScreenState extends State<HomeScreen>
                               weight: FontWeight.w600,
                             ),
                           ),
+                          const SizedBox(width: 10),
+                          PressableWidget(
+                            onTap: _toggleMockMode,
+                            child: Text(
+                              'SALIR',
+                              style: AppText.archivo(
+                                size: 11,
+                                weight: FontWeight.w900,
+                                color: AppColors.accent,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -973,7 +995,10 @@ class _HomeScreenState extends State<HomeScreen>
                 bottom: 128,
                 left: 0,
                 right: 0,
-                child: _filtered.isEmpty ? _emptyFilterCard() : _bottomSwipe(),
+                child: _filtered.isEmpty
+                    ? _emptyFilterCard()
+                    : KeyedSubtree(
+                        key: TourKeys.courtCard, child: _bottomSwipe()),
               ),
             ],
           );
@@ -2247,31 +2272,158 @@ class _HomeScreenState extends State<HomeScreen>
     ));
   }
 
+  /// Un solo botón de debug (solo admins): abre el menú de herramientas. Antes
+  /// las opciones se desplegaban como más botones en la columna, que crecía
+  /// hacia arriba hasta meterse debajo de los filtros, y el de salir del modo
+  /// prueba era un ícono que no se entendía.
   Widget _devControls() {
-    return Column(
-      children: [
-        _devBtn(Icons.gps_fixed, AppColors.white(0.7), _showBgDiagnostics),
-        const SizedBox(height: 10),
-        if (_mockMode) ...[
-          // Botón de prueba de notificación: si aparece la notificación,
-          // el permiso está concedido y el canal funciona.
-          _devBtn(
-            Icons.notifications_active,
-            AppColors.open,
-            () => NotificationsService.instance.show(
-              'Prueba',
-              'Las notificaciones funcionan ✅',
-            ),
-          ),
-          const SizedBox(height: 10),
-        ],
-        _devBtn(
-          _mockMode ? Icons.wrong_location : Icons.bug_report,
-          _mockMode ? AppColors.accent : AppColors.white(0.7),
-          _toggleMockMode,
-        ),
-      ],
+    return _devBtn(
+      Icons.bug_report,
+      _mockMode ? AppColors.accent : AppColors.white(0.7),
+      _openDevTools,
     );
+  }
+
+  void _openDevTools() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppShape.rCard)),
+      ),
+      builder: (sheetCtx) {
+        Widget option(IconData icon, String title, String sub,
+            VoidCallback onTap,
+            {Color? color}) {
+          return PressableWidget(
+            onTap: () {
+              Navigator.of(sheetCtx).pop();
+              onTap();
+            },
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Row(
+                children: [
+                  Icon(icon, size: 22, color: color ?? AppColors.accent),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title,
+                            style: AppText.grotesk(
+                                size: 14,
+                                weight: FontWeight.w700,
+                                color: color ?? AppColors.ink)),
+                        const SizedBox(height: 2),
+                        Text(sub,
+                            style: AppText.grotesk(
+                                size: 12, color: AppColors.white(0.5))),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+                child: Text('HERRAMIENTAS DE ADMIN',
+                    style: AppText.archivo(
+                        size: 12,
+                        weight: FontWeight.w800,
+                        letterSpacing: 0.06)),
+              ),
+              option(
+                _mockMode ? Icons.wrong_location : Icons.touch_app,
+                _mockMode ? 'Salir del modo prueba' : 'Modo prueba de ubicación',
+                _mockMode
+                    ? 'Volver al GPS real'
+                    : 'Tocá el mapa para moverte y probar la detección',
+                _toggleMockMode,
+              ),
+              option(
+                Icons.gps_fixed,
+                'Diagnóstico de background',
+                'Permiso de ubicación y último fix en segundo plano',
+                _showBgDiagnostics,
+              ),
+              option(
+                Icons.notifications_active,
+                'Probar notificación',
+                'Si aparece, el permiso y el canal funcionan',
+                () => NotificationsService.instance
+                    .show('Prueba', 'Las notificaciones funcionan ✅'),
+              ),
+              Container(height: 1, color: AppColors.white(0.06)),
+              option(
+                Icons.restart_alt,
+                'Borrar datos locales',
+                'Flags, tours, caché e historial local. Seguís logueado',
+                () => _confirmWipe(keepSession: true),
+                color: AppColors.accentDark,
+              ),
+              option(
+                Icons.delete_forever_outlined,
+                'Reiniciar como recién instalada',
+                'Lo mismo y además cierra la sesión',
+                () => _confirmWipe(keepSession: false),
+                color: AppColors.accentDark,
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _confirmWipe({required bool keepSession}) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bgElev,
+        title: Text(
+            keepSession ? 'Borrar datos locales' : 'Reiniciar como nueva',
+            style: AppText.archivo(size: 17, weight: FontWeight.w900)),
+        content: Text(
+          'Se borra todo lo que la app guarda en el celu (flags, tours, caché, '
+          'historial y salud locales) y se reinicia. Lo que está respaldado en '
+          'el servidor vuelve al loguear.'
+          '${keepSession ? '' : ' También se cierra la sesión.'}\n\n'
+          'Los permisos del sistema no se tocan.',
+          style: AppText.grotesk(
+              size: 13.5, color: AppColors.white(0.8), height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('CANCELAR',
+                style: AppText.archivo(
+                    size: 12, color: AppColors.white(0.6))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('BORRAR Y REINICIAR',
+                style: AppText.archivo(
+                    size: 12,
+                    weight: FontWeight.w900,
+                    color: AppColors.accentDark)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await wipeLocalDataAndRestart(keepSession: keepSession);
   }
 
   Widget _devBtn(IconData icon, Color color, VoidCallback onTap) {
@@ -2770,12 +2922,15 @@ class _CourtSwipeCard extends StatelessWidget {
                         label: 'PICKUP',
                         icon: Icons.add,
                         filled: false,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                PickupCreateScreen(initialCourt: court),
-                          ),
-                        ),
+                        onTap: () {
+                          if (!requireOnline(context)) return;
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  PickupCreateScreen(initialCourt: court),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -2825,11 +2980,16 @@ class _CourtSwipeCard extends StatelessWidget {
       child: Container(
         height: 30,
         alignment: Alignment.center,
-        // Botones planos: primario = acento pleno; secundario = fill sutil con
-        // texto de acento (sin bordes).
+        // Primario = acento pleno; secundario = fill sutil con texto y borde
+        // de acento.
         decoration: BoxDecoration(
           color: filled ? AppColors.accent : AppColors.white(0.08),
           borderRadius: BorderRadius.circular(8),
+          // El secundario (PICKUP) con borde de acento: sin borde se perdía
+          // al lado del primario.
+          border: filled
+              ? null
+              : Border.all(color: AppColors.accent, width: 1.2),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

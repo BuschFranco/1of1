@@ -29,6 +29,7 @@ import 'services/session.dart';
 import 'services/sync_coordinator.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_logo.dart';
+import 'widgets/offline_pill.dart';
 import 'widgets/permissions_modal.dart';
 
 /// Navegador raíz: permite navegar desde fuera del árbol de widgets (p.ej. al
@@ -42,6 +43,11 @@ void main() async {
   if (mapsImpl is GoogleMapsFlutterAndroid) {
     mapsImpl.useAndroidViewSurface = true;
   }
+
+  // Solo vertical, aunque el usuario tenga la rotación automática activada: la
+  // app no tiene layouts horizontales. El manifest (screenOrientation) cubre
+  // el splash nativo; esto, a Flutter.
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
@@ -176,6 +182,8 @@ class _RootState extends State<_Root> {
     // chat"). Al asignarlo se drena un pickup pendiente si la app se abrió
     // desde la notificación con el proceso muerto.
     NotificationsService.instance.onOpenPickupChat = (pickupId) {
+      final ctx = navigatorKey.currentContext;
+      if (ctx != null && !requireOnline(ctx)) return;
       navigatorKey.currentState?.push(
         MaterialPageRoute(
           builder: (_) => PickupChatScreen(pickupId: pickupId),

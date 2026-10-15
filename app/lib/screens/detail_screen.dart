@@ -26,6 +26,7 @@ import '../widgets/court_image.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/pop_button.dart';
 import '../widgets/busy_overlay.dart';
+import '../widgets/offline_pill.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/section_title.dart';
 import '../widgets/status_dot.dart';
@@ -312,11 +313,15 @@ class DetailScreen extends StatelessWidget {
                 // Crear un pickup con esta cancha ya seleccionada.
                 Builder(
                   builder: (context) => PressableWidget(
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => PickupCreateScreen(initialCourt: court),
-                      ),
-                    ),
+                    onTap: () {
+                      if (!requireOnline(context)) return;
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              PickupCreateScreen(initialCourt: court),
+                        ),
+                      );
+                    },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 10),
@@ -944,9 +949,12 @@ class _PublicPickupRow extends StatelessWidget {
           if (inIt)
             _actionButton(
               label: 'ABRIR',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => PickupChatScreen(pickupId: pickup.pageId),
-              )),
+              onTap: () {
+                if (!requireOnline(context)) return;
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => PickupChatScreen(pickupId: pickup.pageId),
+                ));
+              },
             )
           else if (full)
             _actionButton(label: 'LLENO', onTap: null)

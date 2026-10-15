@@ -91,6 +91,17 @@ class MainActivity : FlutterFragmentActivity() {
                         }
                         result.success(null)
                     }
+                    // Herramienta de admin: reinicia la app en un proceso nuevo
+                    // (después de borrar los datos locales desde Flutter).
+                    "restartApp" -> {
+                        val launch = packageManager.getLaunchIntentForPackage(packageName)
+                        val component = launch?.component
+                        if (component != null) {
+                            startActivity(Intent.makeRestartActivityTask(component))
+                        }
+                        result.success(null)
+                        Runtime.getRuntime().exit(0)
+                    }
                     else -> result.notImplemented()
                 }
             }

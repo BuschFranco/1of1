@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:native_geofence/native_geofence.dart';
@@ -214,10 +215,60 @@ class SyncCoordinator with WidgetsBindingObserver {
 
     // Modo offline: al volver a primer plano se reintenta la conexión.
     WidgetsBinding.instance.addObserver(this);
+
+    // Modo offline EN VIVO (antes solo se decidía al arrancar). Dos señales:
+    // el SO (se apagó wifi/datos, modo avión) y las propias requests (wifi
+    // conectado pero sin salida a internet, que el SO no ve).
+    ApiClient.onNetworkError = _session.goOffline;
+    ApiClient.onNetworkOk = () {
+      if (_session.offline) unawaited(_session.reconnect());
+    };
+    _connSub = Connectivity().onConnectivityChanged.listen(_onConnectivity);
+  }
+
+  StreamSubscription<List<ConnectivityResult>>? _connSub;
+  Timer? _noNetTimer;
+  Timer? _retryTimer;
+  bool _foreground = true;
+
+  /// Cada cuánto se reintenta mientras está offline y en primer plano: cubre
+  /// el wifi sin internet que vuelve y el server que se despierta.
+  static const _kRetryEvery = Duration(seconds: 30);
+
+  void _onConnectivity(List<ConnectivityResult> r) {
+    final none = r.isEmpty || r.every((c) => c == ConnectivityResult.none);
+    _noNetTimer?.cancel();
+    if (none) {
+      // Margen corto: al pasar de wifi a datos el SO avisa "sin red" un
+      // instante y no queremos parpadear el modo offline.
+      _noNetTimer = Timer(const Duration(seconds: 2), () async {
+        final now = await Connectivity().checkConnectivity();
+        if (now.isEmpty || now.every((c) => c == ConnectivityResult.none)) {
+          _session.goOffline();
+        }
+      });
+    } else if (_session.offline) {
+      unawaited(_session.reconnect());
+    }
+  }
+
+  /// Reintento periódico mientras dure el modo offline (solo en primer plano).
+  void _syncRetryTimer() {
+    final want = _session.offline && _foreground;
+    if (want && _retryTimer == null) {
+      _retryTimer = Timer.periodic(_kRetryEvery, (_) {
+        if (_session.offline) unawaited(_session.reconnect());
+      });
+    } else if (!want) {
+      _retryTimer?.cancel();
+      _retryTimer = null;
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    _syncRetryTimer();
     if (state == AppLifecycleState.resumed && _session.offline) {
       unawaited(_session.reconnect());
     }
@@ -319,9 +370,6 @@ class SyncCoordinator with WidgetsBindingObserver {
         final ok = i < results.length && (results[i] as Map)['ok'] == true;
         if (!ok) failed.add(pending[i]);
       }
-      // El server respondió: volvió la red. Salir del modo offline siempre por
-      // el mismo camino (perfil fresco + UI desbloqueada).
-      if (_session.offline) unawaited(_session.reconnect());
     } catch (_) {
       failed.addAll(pending); // sin red: reintento completo en el próximo flush
     }
@@ -451,6 +499,7 @@ class SyncCoordinator with WidgetsBindingObserver {
   }
 
   void _onSessionChanged() {
+    _syncRetryTimer();
     final p = _session.profile;
     if (p == null) {
       // Ventana de arranque: todavía no sabemos si hay sesión (restore/verify en
@@ -863,6 +912,11 @@ class SyncCoordinator with WidgetsBindingObserver {
 
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _connSub?.cancel();
+    _noNetTimer?.cancel();
+    _retryTimer?.cancel();
+    ApiClient.onNetworkError = null;
+    ApiClient.onNetworkOk = null;
     _courts.removeListener(_pushCourts);
     _session.removeListener(_onSessionChanged);
   }

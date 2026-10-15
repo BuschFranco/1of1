@@ -7,6 +7,8 @@ import '../services/pickups_provider.dart';
 import '../services/session.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
+import '../widgets/offline_pill.dart';
+import '../widgets/app_tour.dart';
 import '../widgets/pressable_widget.dart';
 import '../widgets/under_construction.dart';
 import 'add_court_screen.dart';
@@ -50,6 +52,7 @@ class CreateScreen extends StatelessWidget {
         _warnActivePickup(context, activo);
         return;
       }
+      if (!requireOnline(context)) return;
       Navigator.of(
         context,
       ).push(MaterialPageRoute(builder: (_) => const PickupCreateScreen()));
@@ -79,11 +82,14 @@ class CreateScreen extends StatelessWidget {
         action: SnackBarAction(
           label: 'VER',
           textColor: AppColors.accent,
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => PickupChatScreen(pickupId: activo.pageId),
-            ),
-          ),
+          onPressed: () {
+            if (!requireOnline(context)) return;
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => PickupChatScreen(pickupId: activo.pageId),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -285,6 +291,12 @@ class CreateScreen extends StatelessWidget {
                 for (var i = 0; i < _options.length; i++) ...[
                   if (i > 0) Container(height: 1, color: AppColors.white(0.06)),
                   PressableWidget(
+                    key: switch (i) {
+                      0 => TourKeys.createPickup,
+                      1 => TourKeys.joinPickup,
+                      2 => TourKeys.addCourt,
+                      _ => null,
+                    },
                     onTap: () => _onTap(context, i),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(

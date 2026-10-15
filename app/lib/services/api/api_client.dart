@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show SocketException;
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,6 +24,17 @@ class ApiClient {
   /// carga con [loadToken] desde prefs.
   static String? _token;
   static const Duration _timeout = Duration(seconds: 12);
+
+  /// Una request falló por falta de red (no hay ruta, DNS, conexión cortada).
+  /// Lo cablea `SyncCoordinator` para pasar al modo offline en vivo. Un
+  /// TIMEOUT no cuenta: el cold start de Render tarda 30-60 s y eso no es
+  /// "sin internet". Estático como [_token]: en el isolate de background queda
+  /// sin cablear y no pasa nada.
+  static void Function()? onNetworkError;
+
+  /// El backend respondió (cualquier status): hay red. Sirve para salir del
+  /// modo offline apenas una request cualquiera vuelve a funcionar.
+  static void Function()? onNetworkOk;
 
   bool get isConfigured => ApiConfig.isConfigured;
   bool get hasToken => _token != null && _token!.isNotEmpty;
@@ -102,6 +114,25 @@ class ApiClient {
     final uri = _uri(path, query);
     final encoded = body == null ? null : jsonEncode(body);
     late http.Response res;
+    try {
+      res = await _request(method, uri, encoded);
+    } on SocketException {
+      onNetworkError?.call();
+      rethrow;
+    } on http.ClientException {
+      onNetworkError?.call();
+      rethrow;
+    }
+    onNetworkOk?.call();
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw ApiException(res.statusCode, _errorMessage(res.body), path);
+    }
+    if (res.body.isEmpty) return null;
+    return jsonDecode(res.body);
+  }
+
+  Future<http.Response> _request(String method, Uri uri, String? encoded) async {
+    late http.Response res;
     switch (method) {
       case 'GET':
         res = await http.get(uri, headers: _headers).timeout(_timeout);
@@ -122,11 +153,7 @@ class ApiClient {
       default:
         throw ArgumentError('método $method');
     }
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw ApiException(res.statusCode, _errorMessage(res.body), path);
-    }
-    if (res.body.isEmpty) return null;
-    return jsonDecode(res.body);
+    return res;
   }
 
   /// Extrae el `message` de un error de Nest (string o lista de validación).

@@ -10,6 +10,8 @@ import '../services/profiles_provider.dart';
 import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_loader.dart';
+import '../widgets/app_tour.dart';
+import '../widgets/permissions_modal.dart';
 import '../widgets/app_tab_bar.dart';
 import '../widgets/form_style.dart';
 import '../widgets/match_status_pill.dart';
@@ -107,17 +109,267 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
     });
     _loadCrewActivity();
     crewActivityNotifier.addListener(_onCrewActivityChanged);
-    // Mensaje de bienvenida tras un login/registro explícito (una sola vez).
-    if (context.read<Session>().consumeJustAuthenticated()) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _showWelcome());
+    // Bienvenida tras un login/registro explícito (una sola vez). Se muestra
+    // dentro de la secuencia del primer ingreso, no suelta.
+    _welcomePending = context.read<Session>().consumeJustAuthenticated();
+    appTourRequest.addListener(_onTourRequested);
+  }
+
+  // ── Primer ingreso: bienvenida → permisos → tour ─────────────────────────
+  // Antes la bienvenida y el pedido de permisos salían a la vez y se pisaban;
+  // el tour habría sido un tercero encima. Ahora van en fila, y recién cuando
+  // el loader del arranque ya se fue (el tour necesita el mapa a la vista).
+
+  bool _welcomePending = false;
+  bool _firstRunStarted = false;
+  bool _tourRunning = false;
+
+  void _onTourRequested() => unawaited(_runTour());
+
+  // Tour corto por pestaña (Crear, Social, Perfil): la primera vez que el
+  // usuario entra a cada una, DESPUÉS del tour principal. Flag por pestaña y
+  // por usuario (`tour_seen_<tab>::uk`).
+  AppTab? _tabTourChecked;
+
+  void _maybeTabTour() {
+    final tab = _tab;
+    if (_tabTourChecked == tab) return;
+    _tabTourChecked = tab;
+    final steps = _tabTourSteps[tab];
+    if (steps == null || !_firstRunDone) return;
+    unawaited(() async {
+      // Que termine la animación de entrada de la pestaña.
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      if (!mounted || _tab != tab || _tourRunning) return;
+      final uk = (context.read<Session>().email ?? '').trim().toLowerCase();
+      if (uk.isEmpty) return;
+      final key = 'tour_seen_${tab.name}::$uk';
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(key) ?? false) return;
+      if (!mounted || _tab != tab || _tourRunning) return;
+      _tourRunning = true;
+      try {
+        await runAppTour(context, steps);
+      } finally {
+        _tourRunning = false;
+      }
+      // El tour del Perfil baja hasta los Logros: devolverlo arriba.
+      final sc = TourKeys.profileScroll;
+      if (tab == AppTab.profile && sc != null && sc.hasClients) {
+        unawaited(sc.animateTo(0,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeInOut));
+      }
+      await prefs.setBool(key, true);
+    }());
+  }
+
+  // Recién cuando terminó la secuencia del primer ingreso (con o sin tour
+  // principal) pueden salir los de cada pestaña: si no, se apilarían.
+  bool _firstRunDone = false;
+
+  static final Map<AppTab, List<TourStep>> _tabTourSteps = {
+    AppTab.plus: [
+      TourStep(
+        TourKeys.createPickup,
+        'Armá un pickup',
+        'Elegí la cancha, el día y el horario, el formato (de 1v1 a 5v5) y a '
+            'cuántos puntos se juega. Puede ser público, para que se sume '
+            'cualquiera, o privado, solo con el código de invitación. Al '
+            'crearlo se abre un chat para coordinar con tu crew.',
+      ),
+      TourStep(
+        TourKeys.joinPickup,
+        'Unite con un código',
+        '¿Te pasaron el código de un pickup? Ingresalo acá y entrás directo '
+            'al chat.',
+      ),
+      TourStep(
+        TourKeys.addCourt,
+        'Sumá una cancha',
+        'Si conocés una que no está en el mapa, proponela. La revisamos y te '
+            'avisamos cuando se aprueba.',
+      ),
+    ],
+    AppTab.chat: [
+      TourStep(
+        TourKeys.socialTabs,
+        'Crew y Noticias',
+        'En Crew están los chats de tus pickups; en Noticias, lo último de la '
+            'NBA, la WNBA, la Liga Nacional y el 3x3.',
+      ),
+      TourStep(
+        TourKeys.crewList,
+        'Tus pickups',
+        'Acá aparecen los pickups que creaste o aceptaste. Tocá uno para abrir '
+            'el chat y coordinar. Las invitaciones nuevas te llegan a la '
+            'campanita del Perfil.',
+      ),
+    ],
+    AppTab.profile: [
+      TourStep(
+        TourKeys.profileTabs,
+        'Amigos',
+        'Buscá jugadores por su usuario, agregalos y mirá cuándo están '
+            'jugando.',
+        scroll: () => TourKeys.profileScroll,
+      ),
+      TourStep(
+        TourKeys.profileNotif,
+        'Notificaciones',
+        'Invitaciones a pickups y avisos de la app.',
+        scroll: () => TourKeys.profileScroll,
+      ),
+      TourStep(
+        TourKeys.profileSettings,
+        'Ajustes',
+        'Privacidad, permisos y salud, personalización, y este tutorial si '
+            'querés volver a verlo.',
+        scroll: () => TourKeys.profileScroll,
+      ),
+      TourStep(
+        TourKeys.profileLevel,
+        'Tu nivel',
+        'Sumás EXP con cada sesión de juego: por el tiempo en la cancha, los '
+            'partidos ganados, las rachas y las canchas nuevas.',
+        scroll: () => TourKeys.profileScroll,
+      ),
+      TourStep(
+        TourKeys.profileStats,
+        'Tus números',
+        'Partidos, canchas, racha y ranking. Tocá la racha o el ranking para '
+            'ver el detalle.',
+        scroll: () => TourKeys.profileScroll,
+      ),
+      TourStep(
+        TourKeys.profileClan,
+        'Tu clan',
+        'Elegí la insignia de tu clan. El clan que más puntos suma en una '
+            'cancha la conquista, y su insignia aparece en el mapa.',
+        scroll: () => TourKeys.profileScroll,
+      ),
+      TourStep(
+        TourKeys.profileTitles,
+        'Títulos',
+        'Se desbloquean completando logros y tienen rareza: común, raro, épico '
+            'y legendario. Equipá uno y se muestra debajo de tu nombre.',
+        scroll: () => TourKeys.profileScroll,
+      ),
+      TourStep(
+        TourKeys.profileAchievements,
+        'Logros',
+        'Desafíos que se cumplen jugando: sesiones, canchas distintas, rachas '
+            'y más. Cada logro te acerca a un título nuevo.',
+        scroll: () => TourKeys.profileScroll,
+      ),
+    ],
+  };
+
+  Future<void> _firstRunSequence() async {
+    // Que termine el fade del loader.
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
+    if (_welcomePending) {
+      _welcomePending = false;
+      await _showWelcome();
+      if (!mounted) return;
+    }
+    await PermissionsModal.showOnceIfNeeded(context);
+    if (!mounted) return;
+    final uk = (context.read<Session>().email ?? '').trim().toLowerCase();
+    if (uk.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('tour_seen::$uk') ?? false) return;
+    // El sheet de cierre de una sesión de juego tiene prioridad: el tour queda
+    // para la próxima apertura (sin marcar el flag).
+    if (_resultPromptOpen || !mounted) return;
+    await _runTour();
+    await prefs.setBool('tour_seen::$uk', true);
+  }
+
+  /// Envuelve la secuencia para marcar el final pase lo que pase (un return
+  /// temprano también cuenta: no hay nada más que esperar).
+  Future<void> _runFirstRun() async {
+    try {
+      await _firstRunSequence();
+    } finally {
+      _firstRunDone = true;
+      // Si el usuario ya estaba en una pestaña con tour propio, mostrarlo.
+      _tabTourChecked = null;
+      if (mounted) _maybeTabTour();
     }
   }
 
+  Future<void> _runTour() async {
+    if (_tourRunning || !mounted) return;
+    _tourRunning = true;
+    try {
+      // El tour arranca en el mapa (ahí está casi todo lo que recorre).
+      if (_tab != AppTab.home) {
+        _selectTab(AppTab.home);
+        await Future<void>.delayed(const Duration(milliseconds: 450));
+        if (!mounted) return;
+      }
+      await runAppTour(context, _tourSteps);
+    } finally {
+      _tourRunning = false;
+    }
+  }
+
+  // Textos del tour. Vocabulario de app/CLAUDE.md: lo que se detecta es una
+  // "sesión de juego"; un "partido" es uno de los juegos de adentro.
+  static final List<TourStep> _tourSteps = [
+    TourStep(
+      TourKeys.timer,
+      'Tus sesiones se registran solas',
+      'Llegá a una cancha y a los 6 minutos arranca tu sesión de juego, '
+          'aunque tengas la app cerrada. Cuando te vas, cargás cómo te fue.',
+    ),
+    TourStep(
+      TourKeys.courtCard,
+      'Canchas cerca tuyo',
+      'Deslizá para ver más. En "Ver detalle" tenés reseñas, el rey y el clan '
+          'de la cancha; con "Pickup" armás un partido ahí.',
+    ),
+    TourStep(
+      TourKeys.search,
+      'Buscá por barrio',
+      'Escribí un barrio o una zona y el mapa te lleva ahí. Con los filtros '
+          '(el botón de al lado y los chips de abajo) ves solo las abiertas '
+          'ahora, iluminadas, gratis o techadas.',
+    ),
+    TourStep(
+      TourKeys.ranking,
+      'Ranking',
+      'Los mejores jugadores y clanes de 1of1. Jugá para escalar.',
+    ),
+    TourStep(
+      TourKeys.tab(AppTab.list),
+      'Todas las canchas',
+      'La lista completa, ordenada por cercanía, rating o actividad.',
+    ),
+    TourStep(
+      TourKeys.tab(AppTab.plus),
+      'Armá un pickup',
+      'Elegí cancha y horario, invitá a tus amigos y coordiná en el chat.',
+    ),
+    TourStep(
+      TourKeys.tab(AppTab.chat),
+      'Social',
+      'Tu crew, los chats de tus pickups y noticias de básquet.',
+    ),
+    TourStep(
+      TourKeys.tab(AppTab.profile),
+      'Tu perfil',
+      'Tu nivel, EXP, rachas, logros y el historial de tus sesiones.',
+    ),
+  ];
+
   /// Agradecimiento de bienvenida (fase temprana pero estable). Se muestra una
   /// vez, justo después de que el usuario entra por login o registro.
-  void _showWelcome() {
+  Future<void> _showWelcome() async {
     if (!mounted) return;
-    showDialog<void>(
+    await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.bgElev,
@@ -154,6 +406,7 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
   @override
   void dispose() {
     crewActivityNotifier.removeListener(_onCrewActivityChanged);
+    appTourRequest.removeListener(_onTourRequested);
     _loaderTimer?.cancel();
     _savedTab.dispose();
     _savedProfileTab.dispose();
@@ -220,6 +473,27 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
   static const Set<AppTab> _offlineBlocked = {AppTab.plus, AppTab.chat};
 
   bool get _offline => context.read<Session>().offline;
+
+  // Último estado de conexión visto en build (null = primer build), para
+  // avisar solo en los cambios.
+  bool? _lastOffline;
+
+  /// Aviso al cortarse / volver la red. Va por el ScaffoldMessenger de la app,
+  /// así se ve también dentro de pantallas abiertas encima (chat, detalle).
+  void _showConnectivityNotice(bool offline) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(
+            offline
+                ? 'Te quedaste sin conexión. Lo que registres se guarda en el '
+                    'celu y se sube cuando vuelva.'
+                : 'Volvió la conexión.',
+            style: AppText.grotesk(size: 13)),
+        backgroundColor: AppColors.bgElev,
+      ));
+  }
 
   void _selectTab(AppTab t) {
     if (t == _tab) return;
@@ -455,12 +729,18 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
     final hideTabs = _detailCourtId != null || _filtersOpen;
     final offline = context.select<Session, bool>((s) => s.offline);
     _saveTabs();
-    // `GET /me` corre en paralelo al arranque: el modo offline puede llegar con
-    // el shell ya montado en una pestaña que necesita red.
-    if (offline && _offlineBlocked.contains(_tab)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _offlineBlocked.contains(_tab)) _selectTab(AppTab.home);
-      });
+    // El modo offline puede llegar con la app en uso (se cortó la red, o el
+    // `GET /me` del arranque falló con el shell ya montado). NO se echa al
+    // usuario de la pestaña en la que está (p. ej. escribiendo en un chat): se
+    // avisa, y lo que necesita red queda bloqueado si sale y quiere volver
+    // (`_selectTab`, `requireOnline`).
+    if (offline != _lastOffline) {
+      final was = _lastOffline;
+      _lastOffline = offline;
+      if (was != null) {
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _showConnectivityNotice(offline));
+      }
     }
 
     // Loader de arranque: visible hasta que el mapa esté listo, haya primer GPS
@@ -469,6 +749,16 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
     final loaderReady =
         loading.mapReady && loading.gpsReady && !courtsProvider.loading;
     final loaderVisible = !loaderReady && !_loaderTimedOut;
+    if (!loaderVisible && !_firstRunStarted) {
+      _firstRunStarted = true;
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => unawaited(_runFirstRun()));
+    }
+    if (_tabTourChecked != _tab) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _maybeTabTour();
+      });
+    }
 
     // Estado del partido (para el aura del ícono del mapa y la píldora que
     // sigue al usuario fuera del Home). Mismos colores que el banner del mapa.

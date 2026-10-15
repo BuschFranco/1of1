@@ -5,6 +5,8 @@ import '../services/pickups_provider.dart';
 import '../services/session.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
+import '../widgets/offline_pill.dart';
+import '../widgets/app_tour.dart';
 import '../widgets/pressable_widget.dart';
 import 'pickup_chat_screen.dart';
 
@@ -108,37 +110,42 @@ class _CrewScreenState extends State<CrewScreen> {
               style: AppText.grotesk(size: 13, color: AppColors.white(0.6)),
             ),
             const SizedBox(height: 20),
-            if (provider.loading)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(40),
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.white(0.4),
-                  ),
-                ),
-              )
-            else if (pickups.isEmpty)
-              _emptyState()
-            else
-              // Una sola card con los pickups como filas planas separadas
-              // por hairlines (mismo lenguaje editorial que el perfil).
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(AppShape.rCard),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  children: [
-                    for (var i = 0; i < pickups.length; i++) ...[
-                      if (i > 0)
-                        Container(height: 1, color: AppColors.white(0.06)),
-                      _pickupCard(pickups[i], myEmail),
-                    ],
-                  ],
-                ),
-              ),
+            KeyedSubtree(
+              key: TourKeys.crewList,
+              child: provider.loading
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(40),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.white(0.4),
+                        ),
+                      ),
+                    )
+                  : pickups.isEmpty
+                  ? _emptyState()
+                  // Una sola card con los pickups como filas planas separadas
+                  // por hairlines (mismo lenguaje editorial que el perfil).
+                  : Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        borderRadius: BorderRadius.circular(AppShape.rCard),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        children: [
+                          for (var i = 0; i < pickups.length; i++) ...[
+                            if (i > 0)
+                              Container(
+                                height: 1,
+                                color: AppColors.white(0.06),
+                              ),
+                            _pickupCard(pickups[i], myEmail),
+                          ],
+                        ],
+                      ),
+                    ),
+            ),
           ],
         ),
       ),
@@ -189,9 +196,14 @@ class _CrewScreenState extends State<CrewScreen> {
 
     // Fila plana (va dentro de la card única con hairlines).
     return PressableWidget(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => PickupChatScreen(pickupId: p.pageId)),
-      ),
+      onTap: () {
+        if (!requireOnline(context)) return;
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PickupChatScreen(pickupId: p.pageId),
+          ),
+        );
+      },
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(

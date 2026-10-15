@@ -33,6 +33,7 @@ import 'match_detail_screen.dart';
 import 'game_stats_screen.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
+import '../widgets/app_tour.dart';
 import '../widgets/permissions_modal.dart';
 import '../widgets/pop_background.dart';
 import '../widgets/pop_panel.dart';
@@ -103,6 +104,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    TourKeys.profileScroll = _scrollCtrl; // el tour del Perfil scrollea
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadRankFriends());
   }
 
@@ -120,6 +122,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
+    if (identical(TourKeys.profileScroll, _scrollCtrl)) {
+      TourKeys.profileScroll = null;
+    }
     _scrollCtrl.dispose();
     super.dispose();
   }
@@ -362,6 +367,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _tabs() {
     // Selector pill retro-pop: papel + borde negro + sombra dura.
     return Container(
+      key: TourKeys.profileTabs,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: AppColors.paper,
@@ -429,10 +435,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               Row(
                 children: [
-                  _notifButton(context),
+                  KeyedSubtree(
+                      key: TourKeys.profileNotif,
+                      child: _notifButton(context)),
                   const SizedBox(width: 8),
                     if (context.read<Session>().isLoggedIn)
                     PressableWidget(
+                      key: TourKeys.profileSettings,
                       onTap: () => _openSettings(context, profile),
                       child: Container(
                         width: 40,
@@ -535,6 +544,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: PressableWidget(
+                    key: TourKeys.profileClan,
                     onTap: () => _editClanBadge(context, profile),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -570,14 +580,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
         RevealOnScroll(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: _levelWithHistory(),
+            child: KeyedSubtree(
+                key: TourKeys.profileLevel, child: _levelWithHistory()),
           ),
         ),
         const SizedBox(height: 10),
         RevealOnScroll(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: _statsGrid(),
+            child: KeyedSubtree(
+                key: TourKeys.profileStats, child: _statsGrid()),
           ),
         ),
         if (ps.hasHealthStats) ...[
@@ -624,23 +636,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              RevealOnScroll(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SectionTitle(title: 'Títulos'),
-                    _titlesSection(profile),
-                  ],
+              // Key AFUERA del RevealOnScroll (ver el comentario del ancla del
+              // historial más abajo): adentro, la posición pintada miente.
+              KeyedSubtree(
+                key: TourKeys.profileTitles,
+                child: RevealOnScroll(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SectionTitle(title: 'Títulos'),
+                      _titlesSection(profile),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
-              RevealOnScroll(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SectionTitle(title: 'Logros'),
-                    _achievementsSection(),
-                  ],
+              KeyedSubtree(
+                key: TourKeys.profileAchievements,
+                child: RevealOnScroll(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SectionTitle(title: 'Logros'),
+                      _achievementsSection(),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -2406,6 +2426,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
             PermissionsModal.show(context);
           },
           trailingOn: health,
+        ),
+        _settingsRow(
+          ctx,
+          Icons.school_outlined,
+          'Ver tutorial',
+          'El recorrido rápido por la app',
+          () {
+            Navigator.pop(ctx);
+            appTourRequest.value++;
+          },
         ),
         _settingsRow(
           ctx,

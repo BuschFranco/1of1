@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import 'app_tour.dart';
 
 enum AppTab { home, list, plus, chat, profile }
 
@@ -192,14 +193,17 @@ class _AppTabBarState extends State<AppTabBar>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       for (final t in _slots)
-                        t == AppTab.plus
-                            ? _PlusButton(
-                                key: _plusKey,
-                                color: widget.disabled.contains(t)
-                                    ? _indicatorColor.withAlpha(70)
-                                    : _indicatorColor,
-                                onTap: () => widget.onChange(t))
-                            : _TabCircle(onTap: () => widget.onChange(t)),
+                        KeyedSubtree(
+                          key: TourKeys.tab(t),
+                          child: t == AppTab.plus
+                              ? _PlusButton(
+                                  key: _plusKey,
+                                  color: widget.disabled.contains(t)
+                                      ? _indicatorColor.withAlpha(70)
+                                      : _indicatorColor,
+                                  onTap: () => widget.onChange(t))
+                              : _TabCircle(onTap: () => widget.onChange(t)),
+                        ),
                     ],
                   ),
                   // Capa 2: indicador pill deslizante + estiramiento.

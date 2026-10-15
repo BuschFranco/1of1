@@ -40,8 +40,8 @@ class Session extends ChangeNotifier {
   String _profileBg = '';
   String _defaultTab = 'home';
   bool _restoring = true;
-  // Verificando la sesión cacheada contra el backend al arrancar. Mientras es
-  // true la app se queda en el splash.
+  // Verificando la sesión cacheada contra el backend al arrancar. Corre en
+  // paralelo: la UI ya no espera esto (ver _Root en main.dart).
   bool _verifying = false;
   // Mensaje si la sesión vencida obliga a volver al login. La UI lo muestra.
   String? _startupError;
@@ -231,6 +231,15 @@ class Session extends ChangeNotifier {
       _verifying = false;
       notifyListeners();
     }
+  }
+
+  /// Se cortó la red con la app en uso (lo detecta `SyncCoordinator`: el SO
+  /// avisa que no hay red, o una request falló por falta de conexión). Solo
+  /// cambia el estado: el perfil y lo local siguen, como en el arranque offline.
+  void goOffline() {
+    if (_offline || _profile == null) return;
+    _offline = true;
+    notifyListeners();
   }
 
   /// Reintenta hablar con el backend estando en modo offline (botón "Iniciar

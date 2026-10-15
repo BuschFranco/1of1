@@ -229,6 +229,25 @@ Render redeploya solo (lee `render.yaml` en la raíz del repo).
 - El **swipe horizontal** entre pestañas (todas menos el mapa) está en `main_shell`
   (`_handleTabSwipe` + `_swipeTabs`). Si sumás una pestaña, decidí si entra en
   `_swipeTabs`.
+- **Primer ingreso: bienvenida → permisos → tour, en fila.** Lo ordena
+  `MainShell._firstRunSequence`, que arranca cuando se va el loader. No dispares
+  diálogos sueltos en el arranque (se pisaban). El tour (coach marks,
+  [`lib/widgets/app_tour.dart`](lib/widgets/app_tour.dart)) se ve una vez por
+  usuario (`tour_seen::uk`) y se repite desde Perfil → Ajustes → "Ver tutorial".
+  Para sumar un paso: colgá una key de `TourKeys` del widget y agregá el
+  `TourStep` en `_tourSteps`. Un paso cuyo elemento no está en pantalla se
+  saltea solo. Crear, Social y Perfil tienen además un tour corto propio la
+  primera vez que se entra a cada una (`_tabTourSteps`, flag `tour_seen_<tab>::uk`),
+  recién después del tour principal.
+  Si el elemento puede estar fuera de pantalla (Perfil), el paso lleva
+  `scroll:` y el tour baja hasta encontrarlo; la key va AFUERA de
+  `RevealOnScroll`. En los textos, "1of1" se pinta como logo y "EXP" en acento.
+- **Herramientas de admin** (botón de debug del mapa, solo admins): modo prueba
+  de ubicación, diagnóstico, probar notificación y borrar datos locales
+  (`services/dev_reset.dart`, reinicia el proceso vía `restartApp` en
+  `MainActivity`) para volver a probar lo que sale una sola vez.
+- **Solo vertical:** `screenOrientation="portrait"` en el manifest y
+  `setPreferredOrientations` en `main.dart`. No hay layouts horizontales.
 - **Restauración de estado:** Samsung mata el proceso seguido con la app atrás.
   `MaterialApp` tiene `restorationScopeId` y `MainShell` guarda pestaña y
   subpestañas (`RestorationMixin`), así que al volver seguís donde estabas. Si
@@ -263,6 +282,18 @@ arrancar `GET /me` falla por red, timeout o 5xx, `Session` **no desloguea**:
 entra con el perfil cacheado y `Session.offline = true` (solo el 401 manda al
 login). Una instalación nueva igual necesita conectarse una vez.
 
+- **Se detecta en vivo**, no solo al arrancar. Dos señales, cableadas en
+  `SyncCoordinator`: el SO (`connectivity_plus`: sin wifi/datos por 2 s →
+  `Session.goOffline()`) y las requests (`ApiClient.onNetworkError` ante
+  `SocketException`/`ClientException`, que cubre el wifi sin internet). **Un
+  timeout NO cuenta**: es el cold start de Render, no falta de red. Para salir:
+  vuelve la red del SO, cualquier request responde (`onNetworkOk`), vuelta a
+  primer plano, la píldora, o el reintento cada 30 s en primer plano; todos
+  pasan por `Session.reconnect()`.
+- **Cortarse la red no te saca de donde estás** (decisión de producto): se
+  avisa con un SnackBar y lo que necesita red se bloquea al querer *entrar*
+  (`_selectTab`, `requireOnline` antes de abrir chat o crear pickup). Si sumás
+  una pantalla que necesita red, poné `requireOnline` donde se abre.
 - **`GET /me` no bloquea el arranque.** Con perfil y JWT cacheados se entra
   directo al mapa y la verificación corre en paralelo (`_Root` solo espera
   `restoring`, y `SyncCoordinator` arranca el tracking sin esperar `verifying`).

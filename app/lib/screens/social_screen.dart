@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_tour.dart';
 import '../widgets/segmented_tabs.dart';
 import 'crew_screen.dart';
 import 'news_screen.dart';
@@ -33,6 +34,7 @@ class SocialScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: SegmentedTabs(
+                key: TourKeys.socialTabs,
                 labels: const ['Crew', 'Noticias'],
                 activeIndex: activeTab,
                 onChange: onTabChange,
