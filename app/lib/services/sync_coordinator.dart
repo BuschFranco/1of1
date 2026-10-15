@@ -496,10 +496,11 @@ class SyncCoordinator with WidgetsBindingObserver {
     _alarmsCleared = false; // hay sesión: al cerrarla hay que volver a limpiar
     // Pulso máximo de referencia para las zonas cardíacas (220 − edad).
     _play.setUserBirthdate(p.birthdate);
-    // No sembrar detección con una sesión que todavía se está verificando: si el
-    // GET /me devuelve 401 vamos a cerrar sesión enseguida. El notify del
-    // finally de _verifyStartupSession nos vuelve a llamar ya confirmada.
-    if (_session.verifying) return;
+    // Se arranca con el perfil cacheado aunque `GET /me` siga en vuelo: el
+    // tracking es local (historial, sesión en curso, alarmas) y lo de red es
+    // best-effort con reintento. Antes se esperaba la verificación, y eso
+    // atrasaba el banner de una sesión en curso hasta 4 s al abrir la app. Si
+    // `/me` da 401, el logout pasa por la rama de arriba y limpia todo.
     final offline = _session.offline;
     final reconnected = _wasOffline && !offline;
     _wasOffline = offline;

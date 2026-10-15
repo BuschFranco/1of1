@@ -37,8 +37,42 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell> with RestorationMixin {
   AppTab _tab = AppTab.home;
+
+  // Pestaña y subpestañas para la restauración de estado (ver
+  // `restorationScopeId` en main.dart). -1 = nada que restaurar.
+  final RestorableInt _savedTab = RestorableInt(-1);
+  final RestorableInt _savedProfileTab = RestorableInt(0);
+  final RestorableInt _savedSocialTab = RestorableInt(0);
+
+  @override
+  String get restorationId => 'main_shell';
+
+  @override
+  void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
+    registerForRestoration(_savedTab, 'tab');
+    registerForRestoration(_savedProfileTab, 'profile_tab');
+    registerForRestoration(_savedSocialTab, 'social_tab');
+    final i = _savedTab.value;
+    if (i < 0 || i >= AppTab.values.length) return;
+    final t = AppTab.values[i];
+    // Sin red no se puede volver a una pestaña que la necesita.
+    if (context.read<Session>().offline && _offlineBlocked.contains(t)) return;
+    _tab = t;
+    _previousTab = t;
+    _profileTab = _savedProfileTab.value;
+    _socialTab = _savedSocialTab.value;
+  }
+
+  /// Guarda dónde está el usuario. Se llama en cada build en vez de en cada
+  /// cambio de pestaña porque `_tab` se asigna en varios lugares (tap, swipe,
+  /// back, offline); escribir un valor igual no hace nada.
+  void _saveTabs() {
+    _savedTab.value = _tab.index;
+    _savedProfileTab.value = _profileTab;
+    _savedSocialTab.value = _socialTab;
+  }
   AppTab _previousTab = AppTab.home;
 
   // Subpestaña del Perfil (0 = Perfil, 1 = Amigos). Vive acá para que el swipe
@@ -121,6 +155,9 @@ class _MainShellState extends State<MainShell> {
   void dispose() {
     crewActivityNotifier.removeListener(_onCrewActivityChanged);
     _loaderTimer?.cancel();
+    _savedTab.dispose();
+    _savedProfileTab.dispose();
+    _savedSocialTab.dispose();
     super.dispose();
   }
 
@@ -417,6 +454,14 @@ class _MainShellState extends State<MainShell> {
     final courts = courtsProvider.courts;
     final hideTabs = _detailCourtId != null || _filtersOpen;
     final offline = context.select<Session, bool>((s) => s.offline);
+    _saveTabs();
+    // `GET /me` corre en paralelo al arranque: el modo offline puede llegar con
+    // el shell ya montado en una pestaña que necesita red.
+    if (offline && _offlineBlocked.contains(_tab)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _offlineBlocked.contains(_tab)) _selectTab(AppTab.home);
+      });
+    }
 
     // Loader de arranque: visible hasta que el mapa esté listo, haya primer GPS
     // y las canchas hayan cargado (o se agote el tope de seguridad).

@@ -111,6 +111,11 @@ class OneOfOneApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: '1of1',
+        // Restauración de estado: cuando Android mata el proceso con la app en
+        // segundo plano (pasa seguido en Samsung al abrir otras apps), al volver
+        // se recupera la pestaña en la que estabas. Solo aplica a ESE caso: si
+        // el usuario cierra la app a mano, arranca en su pestaña de inicio.
+        restorationScopeId: 'app',
         debugShowCheckedModeBanner: false,
         navigatorKey: navigatorKey,
         theme: buildAppTheme(),
@@ -213,10 +218,12 @@ class _RootState extends State<_Root> {
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
 
-    // Splash: mientras se restaura, se verifica la sesión, o se espera el
-    // bootstrap local. Si hay timeout (5 s), forzar salida del splash.
-    if ((_bootstrapping || session.restoring || session.verifying) &&
-        !_splashTimeout) {
+    // Splash: solo mientras se lee lo LOCAL (prefs, perfil cacheado). La
+    // verificación contra el backend (`GET /me`) ya no se espera acá: con Render
+    // dormido eran 4 s de splash antes de que el mapa empezara siquiera a
+    // crearse. Se entra con el perfil cacheado y, si `/me` devuelve 401, la
+    // sesión se cierra y este build manda al login con el aviso.
+    if ((_bootstrapping || session.restoring) && !_splashTimeout) {
       return const _Splash();
     }
 

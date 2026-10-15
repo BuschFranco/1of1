@@ -202,9 +202,11 @@ class Session extends ChangeNotifier {
         _email = em;
       } catch (_) {/* cache corrupto: ignorar */}
     }
-    // Con sesión cacheada la verificamos contra el backend antes de entrar. Si
-    // no hay red se entra igual, en modo offline. Sin backend configurado
-    // (build sin API_BASE_URL) no hay nada que verificar → se entra con cache.
+    // Con sesión cacheada se entra YA y se verifica contra el backend en
+    // paralelo (la UI no espera `verifying`, ver _Root en main.dart). Si no hay
+    // red queda en modo offline; si el token venció, `_fetchMe` cierra la
+    // sesión. Sin backend configurado (build sin API_BASE_URL) no hay nada que
+    // verificar → se entra con cache.
     if (_profile != null && _api.isConfigured) {
       _verifying = true;
       _restoring = false;

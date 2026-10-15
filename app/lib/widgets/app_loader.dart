@@ -26,7 +26,7 @@ class _AppLoaderState extends State<AppLoader> {
       ignoring: !widget.visible,
       child: AnimatedOpacity(
         opacity: widget.visible ? 1 : 0,
-        duration: const Duration(milliseconds: 450),
+        duration: const Duration(milliseconds: 250),
         curve: Curves.easeOut,
         onEnd: () {
           if (!widget.visible && mounted) setState(() => _gone = true);

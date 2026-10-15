@@ -229,6 +229,11 @@ Render redeploya solo (lee `render.yaml` en la raíz del repo).
 - El **swipe horizontal** entre pestañas (todas menos el mapa) está en `main_shell`
   (`_handleTabSwipe` + `_swipeTabs`). Si sumás una pestaña, decidí si entra en
   `_swipeTabs`.
+- **Restauración de estado:** Samsung mata el proceso seguido con la app atrás.
+  `MaterialApp` tiene `restorationScopeId` y `MainShell` guarda pestaña y
+  subpestañas (`RestorationMixin`), así que al volver seguís donde estabas. Si
+  el usuario cierra la app a mano, arranca en su pestaña de inicio. Una
+  subpestaña nueva que valga la pena recordar se suma en `_saveTabs`.
 
 ### Escrituras: SIEMPRE con feedback de carga
 
@@ -257,6 +262,14 @@ Quien **ya inició sesión en el celu** puede usar la app sin internet. Si al
 arrancar `GET /me` falla por red, timeout o 5xx, `Session` **no desloguea**:
 entra con el perfil cacheado y `Session.offline = true` (solo el 401 manda al
 login). Una instalación nueva igual necesita conectarse una vez.
+
+- **`GET /me` no bloquea el arranque.** Con perfil y JWT cacheados se entra
+  directo al mapa y la verificación corre en paralelo (`_Root` solo espera
+  `restoring`, y `SyncCoordinator` arranca el tracking sin esperar `verifying`).
+  Antes el splash esperaba la respuesta: con Render dormido eran 4 s. Por eso
+  el modo offline puede llegar con el shell ya montado (`MainShell` saca al
+  usuario de una pestaña bloqueada). Tampoco se espera un GPS fresco: el loader
+  se libera con la última posición conocida.
 
 - **Qué funciona:** mapa y lista de canchas (catálogo cacheado en `courts_cache`),
   detección y registro de sesiones con su puntuación (siempre fue local), y el

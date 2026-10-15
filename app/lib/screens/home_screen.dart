@@ -152,7 +152,20 @@ class _HomeScreenState extends State<HomeScreen>
   // resolvía con getScreenCoordinate (async, platform channel) en cada
   // onCameraMove: la respuesta llegaba tarde y se descartaban llamadas en
   // vuelo, así que el punto quedaba congelado y "saltaba" detrás del mapa.
-  CameraPosition _lastCam = _kInitialCam;
+  late CameraPosition _lastCam;
+
+  // Cámara con la que se crea el mapa: sobre el usuario si ya se conoce su
+  // última posición (LocationService.warmUp corre al arrancar la app), así el
+  // mapa abre centrado sin esperar ningún fix ni animar desde el default.
+  late final CameraPosition _initialCam;
+  // Ya se centró en el usuario una vez (no volver a mover la cámara después).
+  bool _centeredOnUser = false;
+  // Si ese centrado salió de una posición VIEJA (la última conocida), el primer
+  // fix fresco recentra cuando se alejó bastante: p. ej. la última posición
+  // era de ayer en otro barrio.
+  Position? _staleCenter;
+  // Centro pendiente si la posición llegó antes de que el mapa exista.
+  LatLng? _pendingCenter;
   Size? _mapSize;
 
   // Canchas visibles tras aplicar los filtros activos. Alimenta tanto los
@@ -286,19 +299,24 @@ class _HomeScreenState extends State<HomeScreen>
           perm == LocationPermission.deniedForever) {
         return;
       }
+      // Primero la última posición que conoce el sistema (instantánea): con eso
+      // ya se ordena "Cerca" y se libera el loader. Antes se esperaba un fix
+      // fresco (1-3 s) con el mapa tapado. El fresco llega igual por el stream
+      // de _startLocationUpdates y reordena si hace falta.
+      final last = _locSvc?.last ?? await Geolocator.getLastKnownPosition();
+      if (last != null && mounted) {
+        _setInitialPosition(last, fresh: false);
+        _loading.markGpsReady();
+      }
+      // Sin última posición: un fix fresco, con tope para no colgar el loader.
       final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
+        locationSettings: LocationSettings(
           accuracy: LocationAccuracy.medium,
+          timeLimit: last == null ? const Duration(milliseconds: 1500) : null,
         ),
       );
       if (!mounted) return;
-      setState(() {
-        _userPos = pos;
-        _applyFilters();
-      });
-      context.read<LocationService>().update(pos);
-      _syncPageToIndex();
-      _updateUserScreenPos();
+      _setInitialPosition(pos, fresh: true);
     } catch (_) {
       // Ignoramos el error: el loader no debe quedarse esperando el GPS.
     } finally {
@@ -307,9 +325,55 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  void _setInitialPosition(Position pos, {required bool fresh}) {
+    _centerOnUser(pos, fresh: fresh);
+    setState(() {
+      _userPos = pos;
+      _applyFilters();
+    });
+    context.read<LocationService>().update(pos);
+    _syncPageToIndex();
+    _updateUserScreenPos();
+  }
+
+  /// Centra la cámara en el usuario la primera vez que se conoce su posición
+  /// (sin animar: es el arranque). Viniendo desde el detalle de una cancha o en
+  /// modo prueba no se toca: ahí manda la cancha / el pin.
+  void _centerOnUser(Position pos, {required bool fresh}) {
+    if (_mockMode || widget.focusCourtId != null) return;
+    final target = LatLng(pos.latitude, pos.longitude);
+    if (!_centeredOnUser) {
+      _centeredOnUser = true;
+      _staleCenter = fresh ? null : pos;
+      if (_mapCtrl == null) {
+        _pendingCenter = target;
+      } else {
+        _mapCtrl!.moveCamera(CameraUpdate.newLatLngZoom(target, 14));
+      }
+      return;
+    }
+    final stale = _staleCenter;
+    if (fresh && stale != null) {
+      _staleCenter = null;
+      final moved = Geolocator.distanceBetween(stale.latitude,
+          stale.longitude, pos.latitude, pos.longitude);
+      if (moved > 200) _mapCtrl?.animateCamera(CameraUpdate.newLatLng(target));
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    final last = context.read<LocationService>().last;
+    if (last != null && widget.focusCourtId == null) {
+      _initialCam = CameraPosition(
+          target: LatLng(last.latitude, last.longitude), zoom: 14);
+      _centeredOnUser = true;
+      _staleCenter = last;
+    } else {
+      _initialCam = _kInitialCam;
+    }
+    _lastCam = _initialCam;
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
@@ -442,14 +506,9 @@ class _HomeScreenState extends State<HomeScreen>
             _updateUserScreenPos();
             _onPositionForWaypoint(pos);
             _autoSelectNearCourt(pos);
+            // Centra la primera vez (o corrige un centrado con posición vieja).
+            _centerOnUser(pos, fresh: true);
             if (firstFix) {
-              // Primer fix: centrar el mapa en la ubicación del usuario.
-              _mapCtrl?.animateCamera(
-                CameraUpdate.newLatLngZoom(
-                  LatLng(pos.latitude, pos.longitude),
-                  14,
-                ),
-              );
               // Aplicar el orden "Cerca" una única vez.
               setState(_applyFilters);
               _syncPageToIndex();
@@ -731,6 +790,11 @@ class _HomeScreenState extends State<HomeScreen>
                 style: _kMapStyle,
                 onMapCreated: (ctrl) {
                   _mapCtrl = ctrl;
+                  final pending = _pendingCenter;
+                  if (pending != null) {
+                    _pendingCenter = null;
+                    ctrl.moveCamera(CameraUpdate.newLatLngZoom(pending, 14));
+                  }
                   final c = _court;
                   if (widget.focusCourtId != null && c != null) {
                     ctrl.animateCamera(
@@ -748,7 +812,7 @@ class _HomeScreenState extends State<HomeScreen>
                   _updateUserScreenPos();
                 },
                 onTap: _mockMode ? _onMockTap : null,
-                initialCameraPosition: _kInitialCam,
+                initialCameraPosition: _initialCam,
                 markers: _markers,
                 circles: _circles,
                 // Ruta de la marca activa (waypoint): violeta estilo GTA. Si
