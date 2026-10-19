@@ -51,7 +51,12 @@ QUÉ DATOS RECOLECTAMOS
   frecuencia cardíaca en reposo, variabilidad cardíaca y ritmo respiratorio de
   tus sesiones de juego, además de las sesiones de ejercicio que registre tu reloj.
   SOLO los leemos (nunca escribimos en tu historial de salud), quedan
-  ÚNICAMENTE en tu dispositivo y no se suben a nuestros servidores.
+  ÚNICAMENTE en tu dispositivo y no se suben a nuestros servidores. Usamos
+  solo lo que registra tu reloj, anillo o pulsera: lo que mide el propio
+  teléfono se descarta.
+• Peso y sexo (opcionales): si los cargás, se guardan solo en tu dispositivo y
+  se usan para estimar las calorías de tus sesiones a partir del pulso de tu
+  reloj. No se suben a nuestros servidores.
 • Actividad de juego: historial de sesiones (cancha, fecha, duración, resultado,
   marcador, formato y los puntos que cargás), tus rachas pasadas, tus canchas
   favoritas y los usuarios que bloqueaste. Esto se respalda en nuestro servidor

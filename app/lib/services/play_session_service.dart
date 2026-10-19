@@ -348,6 +348,18 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   double _calorieRecord = 0;
   double get calorieRecord => _calorieRecord;
 
+  /// Peso/sexo/edad del usuario para estimar calorías desde el pulso (ver
+  /// `HealthService`). Lo setea SyncCoordinator desde `Session`.
+  BodyProfile _bodyProfile = const BodyProfile();
+  int? _userAge;
+  double? _bodyWeight;
+  String? _bodySex;
+  void setBodyProfile({double? weightKg, String? sex}) {
+    _bodyWeight = weightKg;
+    _bodySex = sex;
+    _bodyProfile = BodyProfile(weightKg: _bodyWeight, sex: _bodySex, age: _userAge);
+  }
+
   /// Pulso máximo de referencia del usuario (220 − edad), para que las zonas
   /// cardíacas sean comparables entre sesiones. null sin fecha de nacimiento:
   /// las zonas caen al máximo observado en la sesión. Lo setea SyncCoordinator.
@@ -356,12 +368,17 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     final d = DateTime.tryParse(birthdate.trim());
     if (d == null) {
       _userMaxHr = null;
+      _userAge = null;
+      _bodyProfile = BodyProfile(weightKg: _bodyWeight, sex: _bodySex);
       return;
     }
     final now = DateTime.now();
     var age = now.year - d.year;
     if (now.month < d.month || (now.month == d.month && now.day < d.day)) age--;
     _userMaxHr = (age >= 10 && age <= 90) ? 220 - age : null;
+    _userAge = (age >= 10 && age <= 90) ? age : null;
+    _bodyProfile =
+        BodyProfile(weightKg: _bodyWeight, sex: _bodySex, age: _userAge);
   }
 
   /// Calorías estimadas por paso cuando el reloj no las manda. Se estima desde
@@ -674,7 +691,11 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
 
 
   /// True si hay stats de salud para mostrar (health activo + al menos un partido con datos).
-  bool get hasHealthStats => _healthEnabled && healthMatches > 0;
+  /// Hay sesiones con datos de salud para resumir en el perfil. NO depende de
+  /// que Salud esté conectada AHORA: al reinstalar la app (o desconectar Salud)
+  /// la conexión se apaga, pero los datos ya guardados siguen siendo tuyos, y
+  /// antes la tarjeta desaparecía aunque hubiera historial.
+  bool get hasHealthStats => healthMatches > 0;
 
   /// Evolución de los stats físicos de los últimos 7 días: una entrada por día
   /// (más viejo → más nuevo, hoy inclusive), agregando los partidos con datos
@@ -2359,8 +2380,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     if (_healthEnabled && p.seconds > 0) {
       final end = DateTime.fromMillisecondsSinceEpoch(p.endedAtMillis);
       final start = end.subtract(Duration(seconds: p.seconds));
-      hm = await _health.metricsFor(start, end, maxHrRef: _userMaxHr);
-      if (hm != null && hm.calories > 0) {
+      hm = await _health.metricsFor(start, end,
+          maxHrRef: _userMaxHr, body: _bodyProfile);
+      // Las estimadas (desde el pulso) no cuentan para el récord.
+      if (hm != null && hm.calories > 0 && !hm.caloriesEstimated) {
         if (_calorieRecord > 0 && hm.calories > _calorieRecord) {
           newCalorieRecord = true;
         }
@@ -2383,6 +2406,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         result,
         points: gained,
         calories: hm?.calories ?? 0,
+        caloriesEstimated: hm?.caloriesEstimated ?? false,
         avgHr: hm?.avgHr,
         maxHr: hm?.maxHr,
         steps: hm?.steps ?? 0,
@@ -2762,7 +2786,8 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _healthRefreshing.add(s.endedAtMillis);
     notifyListeners();
     try {
-      hm = await _health.metricsFor(start, end, maxHrRef: _userMaxHr);
+      hm = await _health.metricsFor(start, end,
+          maxHrRef: _userMaxHr, body: _bodyProfile);
     } catch (_) {
       hm = null;
     } finally {
@@ -3631,7 +3656,11 @@ class PlaySession {
         speed: speed ?? hm.speed,
         // Si llegó el dato REAL, se limpia la marca de estimado: si no, un buen
         // dato quedaría rotulado como inventado para siempre.
-        caloriesEstimated: hm.calories > 0 ? false : caloriesEstimated,
+        // Se conserva lo medido; si se toma lo nuevo, vale su propio flag
+        // (puede ser una estimación desde el pulso).
+        caloriesEstimated: (calories > 0 && !caloriesEstimated)
+            ? false
+            : (hm.calories > 0 ? hm.caloriesEstimated : caloriesEstimated),
         distanceEstimated: hm.distance > 0 ? false : distanceEstimated,
       );
 

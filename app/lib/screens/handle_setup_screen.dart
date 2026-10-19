@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/session.dart';
 import '../theme/app_fx.dart';
 import '../theme/app_theme.dart';
+import '../widgets/body_fields.dart';
 import '../widgets/pressable_widget.dart';
 
 /// Pantalla obligatoria que se muestra justo después del registro para que el
@@ -17,22 +18,38 @@ class HandleSetupScreen extends StatefulWidget {
 
 class _HandleSetupScreenState extends State<HandleSetupScreen> {
   final _ctrl = TextEditingController();
+  final _weightCtrl = TextEditingController();
+  String? _sex;
   bool _loading = false;
   String? _error;
 
   @override
   void dispose() {
     _ctrl.dispose();
+    _weightCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     FocusScope.of(context).unfocus();
+    final double? weight;
+    try {
+      weight = BodyFields.parseWeight(_weightCtrl.text);
+    } on FormatException catch (e) {
+      setState(() => _error = e.message);
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
     });
-    final err = await context.read<Session>().setHandle(_ctrl.text);
+    final session = context.read<Session>();
+    // Opcionales y locales: se guardan ANTES del handle, porque un handle OK
+    // hace que _Root pase solo a MainShell.
+    if (weight != null || _sex != null) {
+      await session.setBody(weightKg: weight, sex: _sex);
+    }
+    final err = await session.setHandle(_ctrl.text);
     if (!mounted) return;
     // Si OK, Session notifica y _Root pasa a MainShell solo. Si falla, mostramos.
     setState(() {
@@ -101,6 +118,21 @@ class _HandleSetupScreenState extends State<HandleSetupScreen> {
                       '3–20 caracteres · letras, números, punto (.) o guion bajo (_)',
                       style: AppText.grotesk(size: 11.5, color: AppColors.white(0.4)),
                     ),
+                  ),
+                  const SizedBox(height: 28),
+                  _label('Para medir mejor tus calorías (opcional)'),
+                  Text(
+                    'Con tu sexo y tu peso, las calorías que estimamos desde el '
+                    'pulso de tu reloj salen más precisas. Se guardan solo en '
+                    'tu celular y podés cambiarlos después desde tu perfil.',
+                    style: AppText.grotesk(
+                        size: 12.5, color: AppColors.white(0.5), height: 1.4),
+                  ),
+                  const SizedBox(height: 14),
+                  BodyFields(
+                    sex: _sex,
+                    onSex: (v) => setState(() => _sex = v),
+                    weight: _weightCtrl,
                   ),
                   const SizedBox(height: 28),
                   _saveBtn(),

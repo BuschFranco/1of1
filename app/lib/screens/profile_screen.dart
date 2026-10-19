@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/achievements.dart';
 import '../data/cosmetics.dart';
 import '../data/courts.dart';
+import '../data/game_insights.dart';
 import '../data/legal_content.dart';
 import '../data/models.dart';
 import '../services/analytics_service.dart';
@@ -38,6 +39,7 @@ import '../widgets/app_tour.dart';
 import '../widgets/permissions_modal.dart';
 import '../widgets/pop_background.dart';
 import '../widgets/pop_panel.dart';
+import '../widgets/body_fields.dart';
 import '../widgets/busy_overlay.dart';
 import '../widgets/offline_pill.dart';
 import '../widgets/pressable_widget.dart';
@@ -529,6 +531,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ],
                         ],
                       ),
+                      // Peso y sexo (locales, para estimar calorías). Se editan
+                      // con el mismo lápiz del handle.
+                      const SizedBox(height: 3),
+                      Text(
+                        BodyFields.summary(context.watch<Session>().bodyWeight,
+                                context.watch<Session>().bodySex) ??
+                            'Sin especificar',
+                        style: AppText.grotesk(
+                            size: 12, color: AppColors.white(0.5)),
+                      ),
                       _identityBadges(profile),
                     ],
                   ),
@@ -593,6 +605,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 key: TourKeys.profileStats, child: _statsGrid()),
           ),
         ),
+        if (ps.log.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          RevealOnScroll(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: _gameInsightsCard(ps),
+            ),
+          ),
+        ],
         if (ps.hasHealthStats) ...[
           const SizedBox(height: 16),
           RevealOnScroll(
@@ -1311,10 +1332,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   /// Card de stats de salud: muestra métricas agregadas del reloj/anillo.
   /// Solo visible si hay health habilitado y al menos un partido con datos.
-  Widget _healthStatsCard(PlaySessionService ps) {
-    // [qualifier] aclara qué es el número: 'total' (acumulado), 'prom' o 'máx'.
-    Widget stat(
-        String label, String value, String qualifier, IconData icon, Color color) {
+  /// Celda de las tarjetas de stats: rótulo con ícono, número y [qualifier]
+  /// que aclara qué es ('total', 'prom', 'máx'…).
+  Widget _qStat(
+      String label, String value, String qualifier, IconData icon, Color color) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Column(
@@ -1356,9 +1377,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
       );
-    }
+  }
 
+  /// Celdas de a 2 por fila con divisores (la última puede quedar sola).
+  List<Widget> _gridRows(List<Widget> cells) {
     Widget hDiv() => Container(height: 1, color: AppColors.white(0.06));
+    final rows = <Widget>[];
+    for (var i = 0; i < cells.length; i += 2) {
+      if (rows.isNotEmpty) rows.add(hDiv());
+      if (i + 1 < cells.length) {
+        rows.add(IntrinsicHeight(
+          child: Row(children: [
+            Expanded(child: cells[i]),
+            Container(width: 1, color: AppColors.white(0.06)),
+            Expanded(child: cells[i + 1]),
+          ]),
+        ));
+      } else {
+        rows.add(Row(children: [
+          Expanded(child: cells[i]),
+          const Expanded(child: SizedBox()),
+        ]));
+      }
+    }
+    return rows;
+  }
+
+  Widget _healthStatsCard(PlaySessionService ps) {
+    final stat = _qStat;
 
     // Formateo de distancia: metros a km con 1 decimal.
     String fmtDistance(double meters) {
@@ -1395,26 +1441,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Icons.straighten, const Color(0xFF3B82F6)),
     ];
     if (cells.isEmpty) return const SizedBox.shrink();
-
-    // Filas de a 2 (la última puede quedar con una sola, a ancho completo).
-    final rows = <Widget>[];
-    for (var i = 0; i < cells.length; i += 2) {
-      if (rows.isNotEmpty) rows.add(hDiv());
-      if (i + 1 < cells.length) {
-        rows.add(IntrinsicHeight(
-          child: Row(children: [
-            Expanded(child: cells[i]),
-            Container(width: 1, color: AppColors.white(0.06)),
-            Expanded(child: cells[i + 1]),
-          ]),
-        ));
-      } else {
-        rows.add(Row(children: [
-          Expanded(child: cells[i]),
-          const Expanded(child: SizedBox()),
-        ]));
-      }
-    }
+    final rows = _gridRows(cells);
 
     return Container(
       decoration: BoxDecoration(
@@ -1451,6 +1478,194 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+
+  /// Card "Tu juego": récord, formatos, tiempo, constancia, cuándo jugás,
+  /// entrenamientos y el mes contra el anterior. Todo sale del historial local
+  /// (`GameInsights`), sin red.
+  Widget _gameInsightsCard(PlaySessionService ps) {
+    final g = GameInsights.from(ps.log, bestStreak: ps.bestStreak);
+    if (!g.hasData) return const SizedBox.shrink();
+    const days = [
+      'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábados',
+      'domingos',
+    ];
+    String hours(int sec) {
+      final h = sec ~/ 3600;
+      final m = (sec % 3600) ~/ 60;
+      if (h == 0) return '$m min';
+      return m == 0 ? '$h h' : '$h h $m';
+    }
+
+    String one(double v) =>
+        v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
+
+    final record =
+        '${g.wins}-${g.losses}${g.ties > 0 ? '-${g.ties}' : ''}';
+    final cells = <Widget>[
+      if (g.games > 0)
+        _qStat('Récord', record, g.ties > 0 ? 'V-D-E' : 'V-D',
+            Icons.scoreboard_outlined, AppColors.accent),
+      if (g.bestStreak > 0)
+        _qStat('Mejor racha', '${g.bestStreak}', 'victorias',
+            Icons.local_fire_department, const Color(0xFFF97316)),
+      if (g.totalSeconds > 0)
+        _qStat('En la cancha', hours(g.totalSeconds), 'total',
+            Icons.timer_outlined, const Color(0xFF3B82F6)),
+      if (g.monthSeconds > 0)
+        _qStat('Este mes', hours(g.monthSeconds), 'en cancha',
+            Icons.calendar_month, const Color(0xFF3B82F6)),
+      if (g.avgSessionSeconds > 0)
+        _qStat('Sesión', hours(g.avgSessionSeconds), 'prom', Icons.av_timer,
+            const Color(0xFF06B6D4)),
+      _qStat('Constancia', one(g.sessionsPerWeek), 'sesiones/sem',
+          Icons.event_repeat, const Color(0xFF22C55E)),
+      if (g.gamesPerSession > 0)
+        _qStat('Partidos', one(g.gamesPerSession), 'por sesión',
+            Icons.sports_basketball, AppColors.accent),
+      if (g.trainings > 0)
+        _qStat('Entrenamientos', '${g.trainings}', '${g.trainingShare}%',
+            Icons.fitness_center, const Color(0xFFA855F7)),
+      if (g.favoriteWeekday != null)
+        _qStat(
+            'Cuándo jugás',
+            _cap(days[g.favoriteWeekday! - 1]),
+            g.favoriteBand == null ? '' : 'a la ${g.favoriteBand}',
+            Icons.schedule,
+            const Color(0xFFEAB308)),
+    ];
+
+    final formats = g.byFormat.entries.toList()
+      ..sort((a, b) => b.value.games.compareTo(a.value.games));
+
+    Widget trend(String label, String now, String? before, int dir) {
+      final color = dir > 0
+          ? AppColors.open
+          : (dir < 0 ? AppColors.accentDark : AppColors.white(0.4));
+      final icon = dir > 0
+          ? Icons.arrow_upward
+          : (dir < 0 ? Icons.arrow_downward : Icons.remove);
+      return Expanded(
+        child: Column(
+          children: [
+            Text(label.toUpperCase(),
+                style: AppText.grotesk(
+                    size: 9,
+                    weight: FontWeight.w700,
+                    color: AppColors.white(0.45),
+                    letterSpacing: 0.1)),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(now,
+                    style: AppText.archivo(size: 17, weight: FontWeight.w900)),
+                const SizedBox(width: 4),
+                Icon(icon, size: 13, color: color),
+              ],
+            ),
+            Text(before == null ? 'sin datos antes' : 'antes $before',
+                style: AppText.grotesk(size: 9.5, color: AppColors.white(0.4))),
+          ],
+        ),
+      );
+    }
+
+    int cmp(num? a, num? b) =>
+        (a == null || b == null) ? 0 : (a > b ? 1 : (a < b ? -1 : 0));
+    final tm = g.thisMonth, lm = g.lastMonth;
+
+    Widget subTitle(String t) => Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+          child: Text(t,
+              style: AppText.grotesk(
+                  size: 9.5,
+                  weight: FontWeight.w700,
+                  color: AppColors.white(0.45),
+                  letterSpacing: 0.1)),
+        );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppShape.rCard),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _cardHeader(
+              Icons.insights, 'TU JUEGO', 'Partidos, tiempo y constancia'),
+          const SizedBox(height: 8),
+          ..._gridRows(cells),
+          if (formats.isNotEmpty) ...[
+            Container(height: 1, color: AppColors.white(0.06)),
+            subTitle('POR FORMATO'),
+            for (final e in formats)
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 44,
+                      child: Text('${e.key}v${e.key}',
+                          style: AppText.archivo(
+                              size: 14,
+                              weight: FontWeight.w900,
+                              color: e.key == g.favoriteFormat
+                                  ? AppColors.accent
+                                  : AppColors.ink)),
+                    ),
+                    Expanded(
+                      child: Text(
+                        [
+                          if (e.value.games > 0)
+                            '${e.value.games} ${e.value.games == 1 ? 'partido' : 'partidos'}',
+                          if (e.value.winRate != null)
+                            '${e.value.winRate}% efectividad',
+                          if (e.value.avgPoints != null)
+                            '${one(e.value.avgPoints!)} pts/partido',
+                        ].join(' · '),
+                        style: AppText.grotesk(
+                            size: 12, color: AppColors.white(0.7)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 8),
+          ],
+          if (tm.games > 0 || lm.games > 0) ...[
+            Container(height: 1, color: AppColors.white(0.06)),
+            subTitle('ESTE MES VS. EL ANTERIOR'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 14),
+              child: Row(
+                children: [
+                  trend('Partidos', '${tm.games}',
+                      lm.games > 0 ? '${lm.games}' : null,
+                      cmp(tm.games, lm.games)),
+                  trend(
+                      'Efectividad',
+                      tm.winRate == null ? '—' : '${tm.winRate}%',
+                      lm.winRate == null ? null : '${lm.winRate}%',
+                      cmp(tm.winRate, lm.winRate)),
+                  trend(
+                      'Pts/partido',
+                      tm.avgPoints == null ? '—' : one(tm.avgPoints!),
+                      lm.avgPoints == null ? null : one(lm.avgPoints!),
+                      cmp(tm.avgPoints, lm.avgPoints)),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _cap(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
   /// Card de estadísticas de juego ingresadas por el usuario.
   Widget _userStatsCard(PlaySessionService ps) {
@@ -2257,8 +2472,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _editHandle(BuildContext context, String current) async {
-    // Hay que verificar en el servidor que el handle esté libre.
-    if (!requireOnline(context)) return;
+    // Sexo y peso se pueden editar sin conexión; el handle no (el diálogo lo
+    // avisa solo si se intenta cambiar).
     final changed = await showDialog<bool>(
       context: context,
       builder: (_) => _EditHandleDialog(current: current),
@@ -2266,7 +2481,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (changed == true && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Handle actualizado', style: AppText.grotesk(size: 13)),
+          content: Text('Perfil actualizado', style: AppText.grotesk(size: 13)),
           backgroundColor: AppColors.accent,
         ),
       );
@@ -3853,21 +4068,44 @@ class _EditHandleDialog extends StatefulWidget {
 class _EditHandleDialogState extends State<_EditHandleDialog> {
   late final TextEditingController _ctrl =
       TextEditingController(text: widget.current.replaceFirst('@', ''));
+  late final TextEditingController _weightCtrl = TextEditingController(
+      text: BodyFields.summary(context.read<Session>().bodyWeight, null)
+              ?.replaceAll(' kg', '') ??
+          '');
+  late String? _sex = context.read<Session>().bodySex;
   bool _loading = false;
   String? _error;
 
   @override
   void dispose() {
     _ctrl.dispose();
+    _weightCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
+    final session = context.read<Session>();
+    final double? weight;
+    try {
+      weight = BodyFields.parseWeight(_weightCtrl.text);
+    } on FormatException catch (e) {
+      setState(() => _error = e.message);
+      return;
+    }
+    final handleChanged = FriendsService.normalizeHandle(_ctrl.text) !=
+        FriendsService.normalizeHandle(widget.current);
+    if (handleChanged && session.offline) {
+      setState(() => _error = 'Necesitás conexión para cambiar el handle.');
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
     });
-    final err = await context.read<Session>().setHandle(_ctrl.text);
+    // Local e instantáneo: anda también sin conexión.
+    await session.setBody(weightKg: weight, sex: _sex);
+    // Sin cambios de handle, setHandle no pega a la red.
+    final err = await session.setHandle(_ctrl.text);
     if (!mounted) return;
     if (err == null) {
       Navigator.pop(context, true);
@@ -3883,12 +4121,17 @@ class _EditHandleDialogState extends State<_EditHandleDialog> {
   Widget build(BuildContext context) {
     // El fondo/forma los pone el dialogTheme global (neobrutalista).
     return AlertDialog(
-      title: Text('Editar handle',
+      title: Text('Editar perfil',
           style: AppText.archivo(size: 18, weight: FontWeight.w800)),
-      content: Column(
+      content: SingleChildScrollView(
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text('Handle',
+              style: AppText.grotesk(
+                  size: 12, weight: FontWeight.w700, color: AppColors.white(0.6))),
+          const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
@@ -3926,12 +4169,26 @@ class _EditHandleDialogState extends State<_EditHandleDialog> {
               ],
             ),
           ),
+          const SizedBox(height: 18),
+          Text(
+            'Opcional: con tu sexo y tu peso, las calorías estimadas desde el '
+            'pulso de tu reloj salen más precisas. Se guardan solo en tu celular.',
+            style: AppText.grotesk(
+                size: 11.5, color: AppColors.white(0.5), height: 1.4),
+          ),
+          const SizedBox(height: 12),
+          BodyFields(
+            sex: _sex,
+            onSex: (v) => setState(() => _sex = v),
+            weight: _weightCtrl,
+          ),
           if (_error != null) ...[
             const SizedBox(height: 10),
             Text(_error!,
                 style: AppText.grotesk(size: 12, color: AppColors.accentDark)),
           ],
         ],
+      ),
       ),
       actions: [
         TextButton(

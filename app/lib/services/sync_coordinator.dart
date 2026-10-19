@@ -552,6 +552,10 @@ class SyncCoordinator with WidgetsBindingObserver {
     _alarmsCleared = false; // hay sesión: al cerrarla hay que volver a limpiar
     // Pulso máximo de referencia para las zonas cardíacas (220 − edad).
     _play.setUserBirthdate(p.birthdate);
+    // Peso y sexo (locales) para estimar calorías desde el pulso del reloj.
+    _play.setBodyProfile(
+        weightKg: _session.bodyWeight,
+        sex: _session.bodySex == 'none' ? null : _session.bodySex);
     // Se arranca con el perfil cacheado aunque `GET /me` siga en vuelo: el
     // tracking es local (historial, sesión en curso, alarmas) y lo de red es
     // best-effort con reintento. Antes se esperaba la verificación, y eso

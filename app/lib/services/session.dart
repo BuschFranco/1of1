@@ -38,6 +38,11 @@ class Session extends ChangeNotifier {
   Profile? _profile;
   String? _email;
   String _localPosition = '';
+  // Peso (kg) y sexo ('male' / 'female' / 'none' = prefiere no decir).
+  // Opcionales, SOLO en el celu (como los datos de salud): sirven para estimar
+  // calorías desde el pulso del reloj. Por cuenta: `body_*::<email>`.
+  double? _bodyWeight;
+  String? _bodySex;
   String _profileBg = '';
   String _defaultTab = 'home';
   bool _restoring = true;
@@ -70,6 +75,42 @@ class Session extends ChangeNotifier {
 
   Profile? get profile => _profile;
   String? get email => _email;
+  double? get bodyWeight => _bodyWeight;
+  String? get bodySex => _bodySex;
+
+  static String _kBodyWeight(String email) =>
+      'body_weight::${email.trim().toLowerCase()}';
+  static String _kBodySex(String email) =>
+      'body_sex::${email.trim().toLowerCase()}';
+
+  Future<void> _loadBody(String email) async {
+    final prefs = await SharedPreferences.getInstance();
+    _bodyWeight = prefs.getDouble(_kBodyWeight(email));
+    _bodySex = prefs.getString(_kBodySex(email));
+  }
+
+  /// Guarda peso y sexo (null = sin especificar). Local e instantáneo: no pasa
+  /// por el servidor, así que también anda sin conexión.
+  Future<void> setBody({double? weightKg, String? sex}) async {
+    final email = _email;
+    if (email == null) return;
+    _bodyWeight = weightKg;
+    _bodySex = sex;
+    final prefs = await SharedPreferences.getInstance();
+    if (weightKg == null) {
+      await prefs.remove(_kBodyWeight(email));
+    } else {
+      await prefs.setDouble(_kBodyWeight(email), weightKg);
+    }
+    if (sex == null) {
+      await prefs.remove(_kBodySex(email));
+    } else {
+      await prefs.setString(_kBodySex(email), sex);
+    }
+    AnalyticsService.event('profile_edit', {'field': 'body'});
+    notifyListeners();
+  }
+
   /// Posición de juego elegida (local, cosmética). '' si no eligió ninguna.
   String get localPosition => _localPosition;
 
@@ -167,6 +208,7 @@ class Session extends ChangeNotifier {
       Profile.fromJson(profJson.cast<String, dynamic>()),
     );
     await _persist(email, prof);
+    await _loadBody(email);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kPersist, persist);
     _justAuthenticated = true;
@@ -201,6 +243,7 @@ class Session extends ChangeNotifier {
           Profile.fromJson(jsonDecode(cached) as Map<String, dynamic>),
         );
         _email = em;
+        await _loadBody(em);
       } catch (_) {/* cache corrupto: ignorar */}
     }
     // Con sesión cacheada se entra YA y se verifica contra el backend en
@@ -697,6 +740,8 @@ class Session extends ChangeNotifier {
     _profile = null;
     _email = null;
     _localPosition = '';
+    _bodyWeight = null;
+    _bodySex = null;
     _profileBg = '';
     _defaultTab = 'home';
     notifyListeners();
@@ -723,6 +768,8 @@ class Session extends ChangeNotifier {
     _profile = null;
     _email = null;
     _localPosition = '';
+    _bodyWeight = null;
+    _bodySex = null;
     _profileBg = '';
     _defaultTab = 'home';
     notifyListeners();

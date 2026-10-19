@@ -38,6 +38,9 @@ class HealthMetrics {
   /// Velocidad promedio, en m/s.
   final double? speed;
 
+  /// True si [calories] se estimaron desde el pulso del reloj (no las midió).
+  final bool caloriesEstimated;
+
   const HealthMetrics({
     this.calories = 0,
     this.avgHr,
@@ -52,6 +55,7 @@ class HealthMetrics {
     this.hrv,
     this.respiratoryRate,
     this.speed,
+    this.caloriesEstimated = false,
   });
 
   /// ¿Hay algo que valga la pena registrar? (sin wearable suele venir todo en 0)
@@ -100,6 +104,22 @@ class HealthService {
 
   static final List<HealthDataAccess> _perms =
       List.filled(_types.length, HealthDataAccess.READ);
+
+  /// Orígenes que escriben lo que mide el TELÉFONO. Se descartan siempre: en un
+  /// partido el celu queda en el bolso, así que sus pasos/calorías no son del
+  /// jugador. El paquete `health` no expone el tipo de dispositivo que guarda
+  /// Health Connect, solo el paquete que escribió cada dato: se filtra por eso.
+  ///
+  /// Límite conocido: Samsung Health puede fusionar en SUS registros pasos del
+  /// reloj y del celu; con el nombre del paquete no hay forma de separarlos.
+  static const _phoneOrigins = [
+    'com.android.healthconnect', // conteo propio de Android 14+
+    'com.google.android.gms', // sensores vía Play Services
+    'com.google.android.apps.fitness', // Google Fit (en Android 14+, el celu)
+  ];
+
+  static bool isPhoneOrigin(String source) =>
+      _phoneOrigins.any(source.startsWith);
 
   /// Promedio de las muestras, o null si no hubo ninguna. Null y 0 significan
   /// cosas distintas acá: "el reloj no midió" vs "midió cero".
@@ -150,6 +170,7 @@ class HealthService {
   /// disponible — y la que distingue "lo escribió el reloj" de "lo escribió el
   /// celular".
   static String _sourceLabel(String raw) {
+    if (isPhoneOrigin(raw)) return 'Teléfono (excluido)';
     const conocidos = {
       'com.sec.android.app.shealth': 'Samsung Health',
       'com.google.android.apps.fitness': 'Google Fit',
@@ -260,6 +281,9 @@ class HealthService {
     // uno, así que Calorías/Distancia pueden estar denegadas aunque HR ande.
     // Todos los orígenes vistos, para el veredicto del final.
     final origenes = <String>{};
+    // Tipos que escribió algún wearable (para saber si el reloj "solo mandó
+    // pulso").
+    final tiposDelReloj = <HealthDataType>{};
     for (final t in _types) {
       // Estado del permiso de ESTE tipo (en Android puede venir null = oculto).
       String permLabel;
@@ -280,6 +304,7 @@ class HealthService {
         final clean = _health.removeDuplicates(points);
         for (final p in clean) {
           if (p.sourceName.isNotEmpty) origenes.add(p.sourceName);
+          if (!isPhoneOrigin(p.sourceName)) tiposDelReloj.add(t);
         }
         // WORKOUT: cada punto es una sesión de ejercicio (no un número). Se
         // reporta actividad + totales para poder verificar el enriquecimiento.
@@ -303,8 +328,12 @@ class HealthService {
           sb.writeln('${t.name} ($permLabel): ${clean.length} sesiones$detalle');
           continue;
         }
+        // El total es SOLO de lo que se usa (sin el teléfono), igual que en
+        // las métricas de la sesión; el desglose de abajo muestra todo.
+        final usados =
+            clean.where((p) => !isPhoneOrigin(p.sourceName)).toList();
         double sum = 0;
-        for (final p in clean) {
+        for (final p in usados) {
           final v = p.value;
           if (v is NumericHealthValue) sum += v.numericValue.toDouble();
         }
@@ -313,11 +342,11 @@ class HealthService {
           HealthDataType.TOTAL_CALORIES_BURNED => ' · ${sum.round()} kcal',
           HealthDataType.STEPS => ' · ${sum.round()} pasos',
           HealthDataType.DISTANCE_DELTA => ' · ${sum.round()} m',
-          HealthDataType.HEART_RATE => ' · prom ${clean.isEmpty ? 0 : (sum / clean.length).round()} bpm',
+          HealthDataType.HEART_RATE => ' · prom ${usados.isEmpty ? 0 : (sum / usados.length).round()} bpm',
           _ => '',
         };
         // El desglose por origen es LO importante de todo el diagnóstico.
-        sb.writeln('${t.name} ($permLabel): ${clean.length} muestras$agg'
+        sb.writeln('${t.name} ($permLabel): ${usados.length} muestras$agg'
             '${_porOrigen(clean, t)}${_rango(clean)}');
       } catch (e) {
         sb.writeln('${t.name} ($permLabel): ERROR → $e');
@@ -344,13 +373,28 @@ class HealthService {
         'com.garmin.android.apps.connectmobile',
         'com.fitbit.FitbitMobile',
       };
+      if (origenes.any(isPhoneOrigin)) {
+        sb.writeln('');
+        sb.writeln('Lo que escribió el TELÉFONO no se usa: durante el partido '
+            'queda en el bolso, así que sus pasos y calorías no son tuyos.');
+      }
+      final soloPulso = tiposDelReloj.isNotEmpty &&
+          tiposDelReloj.every((t) => t == HealthDataType.HEART_RATE);
       if (!origenes.any(puente.contains)) {
         sb.writeln('');
-        sb.writeln('⚠ No aparece ninguna app de reloj/pulsera. Los datos que ves '
-            'son del TELÉFONO, por eso los números son bajos.');
+        sb.writeln('⚠ No aparece ninguna app de reloj/pulsera en esta ventana.');
         sb.writeln('En Samsung: abrí Samsung Health → Ajustes → Health Connect y '
             'activá el compartido de Pasos, Frecuencia cardíaca, Actividad '
             '(calorías y distancia) y Ejercicio.');
+      } else if (soloPulso) {
+        sb.writeln('');
+        sb.writeln('⚠ Tu reloj solo mandó PULSO: ni pasos, ni calorías, ni '
+            'distancia. Las calorías se estimaron desde tu pulso.');
+        sb.writeln('Para datos completos:');
+        sb.writeln('· Samsung Health → Ajustes → Health Connect: permitir '
+            'escribir Pasos, Calorías activas, Distancia y Ejercicio.');
+        sb.writeln('· En el reloj, medir el pulso de forma continua, o usar el '
+            'modo Básquet al jugar.');
       }
     }
     return sb.toString();
@@ -362,8 +406,11 @@ class HealthService {
   ///
   /// [maxHrRef] es el pulso máximo de referencia del usuario (220 − edad) para
   /// las zonas cardíacas; sin él se usa el máximo observado en la ventana.
+  ///
+  /// [body] se usa para estimar calorías desde el pulso cuando el reloj no las
+  /// manda (ver [_kcalFromHr]).
   Future<HealthMetrics?> metricsFor(DateTime start, DateTime end,
-      {int? maxHrRef}) async {
+      {int? maxHrRef, BodyProfile body = const BodyProfile()}) async {
     if (end.isBefore(start)) return null;
     try {
       await _ensureConfigured();
@@ -389,6 +436,7 @@ class HealthService {
       double bestOverlap = 0;
       for (final p in wpoints) {
         if (p.value is! WorkoutHealthValue) continue;
+        if (isPhoneOrigin(p.sourceName)) continue;
         // Solape (en ms) entre la sesión y la ventana del partido.
         final os = p.dateFrom.isAfter(start) ? p.dateFrom : start;
         final oe = p.dateTo.isBefore(end) ? p.dateTo : end;
@@ -457,6 +505,7 @@ class HealthService {
         );
         final clean = _health.removeDuplicates(points);
         for (final p in clean) {
+          if (isPhoneOrigin(p.sourceName)) continue;
           final v = p.value;
           final num n = v is NumericHealthValue ? v.numericValue : 0;
           switch (p.type) {
@@ -503,15 +552,9 @@ class HealthService {
       } catch (_) {/* seguimos con los demás tipos */}
     }
 
-    // Pasos por la API de AGREGACIÓN de Health Connect, que deduplica del lado
-    // del sistema. Sumar los registros crudos (arriba) sobrecuenta cuando el
-    // reloj y el teléfono cubren el mismo rato: `removeDuplicates` compara los
-    // puntos por todos sus campos —uuid y origen incluidos— así que dos fuentes
-    // distintas nunca se deduplican entre sí. La suma cruda queda de fallback.
-    try {
-      final agg = await _health.getTotalStepsInInterval(winStart, winEnd);
-      if (agg != null && agg > 0) steps = agg;
-    } catch (_) {/* nos quedamos con la suma cruda */}
+    // Los pasos son la suma de los registros que pasaron el filtro de origen.
+    // Antes se pedían a la API de agregación de Health Connect, que mezcla
+    // TODOS los orígenes (teléfono incluido) por diseño.
 
     int? avgHr;
     int? maxHr;
@@ -539,10 +582,15 @@ class HealthService {
         (workout?.totalEnergyBurned ?? 0).toDouble() * workoutShare;
     final workoutDist =
         (workout?.totalDistance ?? 0).toDouble() * workoutShare;
+    final measuredCal =
+        workoutCal > 0 ? workoutCal : (activeCal > 0 ? activeCal : totalCal);
+    // Sin calorías del reloj pero con su pulso: se estiman desde el pulso.
+    final estimatedCal = measuredCal > 0 || hrs.isEmpty
+        ? 0.0
+        : _kcalFromHr(hrs, hrTimestamps, body, start, end);
     return HealthMetrics(
-      calories: workoutCal > 0
-          ? workoutCal
-          : (activeCal > 0 ? activeCal : totalCal),
+      calories: measuredCal > 0 ? measuredCal : estimatedCal,
+      caloriesEstimated: measuredCal <= 0 && estimatedCal > 0,
       avgHr: avgHr,
       maxHr: maxHr,
       steps: steps,
@@ -556,6 +604,43 @@ class HealthService {
       respiratoryRate: _promedio(resps)?.round(),
       speed: _promedio(speeds),
     );
+  }
+
+  /// Calorías estimadas desde el pulso (Keytel et al., 2005), la fórmula que
+  /// usan los relojes cuando no hay un ejercicio grabado. Cada muestra cuenta
+  /// por el tiempo hasta la siguiente (tope 5 min, como las zonas) y solo
+  /// dentro de la sesión. Debajo de 90 bpm no se cuenta: la fórmula no vale en
+  /// reposo y así las esperas entre partidos no suman.
+  static double _kcalFromHr(List<double> hrs, List<DateTime> ts,
+      BodyProfile body, DateTime start, DateTime end) {
+    final idx = List<int>.generate(hrs.length, (i) => i)
+      ..sort((a, b) => ts[a].compareTo(ts[b]));
+    final w = body.weightKg ?? 75.0;
+    final a = (body.age ?? 30).toDouble();
+    double perMin(double hr) {
+      final male = (-55.0969 + 0.6309 * hr + 0.1988 * w + 0.2017 * a) / 4.184;
+      final female = (-20.4022 + 0.4472 * hr - 0.1263 * w + 0.074 * a) / 4.184;
+      final v = switch (body.sex) {
+        'male' => male,
+        'female' => female,
+        _ => (male + female) / 2,
+      };
+      return v < 0 ? 0 : v;
+    }
+
+    var total = 0.0;
+    for (var k = 0; k < idx.length; k++) {
+      final t = ts[idx[k]];
+      if (t.isBefore(start) || t.isAfter(end)) continue;
+      final hr = hrs[idx[k]];
+      if (hr < 90) continue;
+      final next = k + 1 < idx.length ? ts[idx[k + 1]] : end;
+      var sec = next.difference(t).inSeconds;
+      if (sec <= 0) sec = 5;
+      if (sec > 300) sec = 300;
+      total += perMin(hr) * sec / 60;
+    }
+    return total;
   }
 
   /// Calcula la distribución de tiempo en zonas cardíacas a partir de las
@@ -602,4 +687,13 @@ class HealthService {
     }
     return zones;
   }
+}
+
+/// Datos del usuario para estimar calorías desde el pulso. Todos opcionales:
+/// sin ellos se usan valores promedio. [sex]: 'male', 'female' o null.
+class BodyProfile {
+  final double? weightKg;
+  final String? sex;
+  final int? age;
+  const BodyProfile({this.weightKg, this.sex, this.age});
 }

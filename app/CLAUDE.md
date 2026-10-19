@@ -564,6 +564,12 @@ Si lo hacés, cambiá **de forma consistente**:
   además los descarta con una lista blanca. Si agregás un campo a una sesión,
   decidí si viaja y actualizá `PlaySession.toSyncJson` **y** la lista blanca de
   `sanitizeSessionData`; hay un test que falla si se cuela salud.
+- **Salud: solo wearables.** `HealthService` descarta todo lo que escribió el
+  propio teléfono en Health Connect (`_phoneOrigins`: el conteo de Android,
+  Play Services, Google Fit): en un partido el celu queda en el bolso. Si el
+  reloj no manda calorías, se estiman desde su pulso (Keytel) con el peso y el
+  sexo del usuario, que son opcionales y se guardan SOLO en el celu
+  (`Session.setBody`).
 - **Datos por usuario:** cualquier estado local nuevo debe ir namespaced por
   `userKey` (patrón `base::$userKey`) para no filtrarse entre cuentas. Al cerrar
   sesión, limpialo (`resetForLogout` / `clearForLogout`).
