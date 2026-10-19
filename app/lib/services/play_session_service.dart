@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/achievements.dart';
 import '../data/courts.dart';
+import 'analytics_service.dart';
 import 'api/api_config.dart';
 import 'cache/api_cache.dart';
 import 'court_owner_cache.dart';
@@ -977,6 +978,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   /// queda pendiente, no suma puntos, ni tiempo, ni jugadas, ni historial.
   void discardOnTimeout() {
     if (!awaitingConfirm) return;
+    AnalyticsService.event('play_session_discard', {
+      'minutes': _elapsed ~/ 60,
+      'reason': 'confirm_timeout',
+    });
     onCancelConfirmNotif?.call();
     final id = _courtId;
     if (id != null) unawaited(_setSnooze(id));
@@ -1059,6 +1064,12 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
           if (_background) unawaited(_startStream());
           _renderSessionNotif();
           notifyListeners();
+          // Arrancó en segundo plano (la alarma): ese isolate no puede loguear
+          // en Analytics, así que se cuenta al adoptarla.
+          AnalyticsService.event('play_session_start', {
+            'court_id': _courtId ?? '',
+            'trigger': 'background',
+          });
         }
       } catch (_) {}
     }
@@ -2441,6 +2452,16 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _recomputeBadges();
     _checkLevelUp(); // los puntos ganados pueden haber subido el nivel
     notifyListeners();
+    AnalyticsService.event('play_session_close', {
+      'result': result.name, // notCounted = cerró el sheet sin cargar
+      'games': resolved.gamesPlayed,
+      'wins': resolved.winsCount,
+      'trainings': resolved.trainingsDone,
+      'minutes': p.seconds ~/ 60,
+      'exp': gained,
+      'new_court': isNewCourt,
+      'had_health': hm != null && hm.hasData,
+    });
   }
 
   // ── Partidos pendientes de subir (ranking por período) ──────────────────
@@ -2649,6 +2670,13 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     try {
       await _health.requestPermissions();
     } catch (_) {/* el usuario resolverá en el diálogo del sistema */}
+    // Solo para medir: Salud se activa igual aunque niegue (como antes).
+    bool granted = false;
+    try {
+      granted = await _health.hasPermissions();
+    } catch (_) {}
+    AnalyticsService.event('permission_result',
+        {'perm': 'health', 'granted': granted, 'source': 'modal'});
     _healthEnabled = true;
     await prefs.setBool(_kHealthEnabled, true);
     notifyListeners();

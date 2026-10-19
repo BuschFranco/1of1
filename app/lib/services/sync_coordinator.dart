@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:native_geofence/native_geofence.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/courts.dart';
+import 'analytics_service.dart';
 import 'api/api_client.dart';
 import 'cache/api_cache.dart';
 import 'courts_provider.dart';
@@ -105,6 +106,10 @@ class SyncCoordinator with WidgetsBindingObserver {
     _play.onPresenceChanged = (playing, courtId, since) {
       _session.setPresence(playing: playing, courtId: courtId, since: since);
       if (playing) {
+        AnalyticsService.event(
+            'play_session_start', {'court_id': courtId, 'trigger': 'app'});
+      }
+      if (playing) {
         final name = _courtNameById(courtId);
         NotificationsService.instance.show(
           '¡Arrancó tu sesión de juego!',
@@ -135,6 +140,8 @@ class SyncCoordinator with WidgetsBindingObserver {
 
     // Partido demasiado corto (< 13 min): no se registró.
     _play.onMatchDiscarded = (court, seconds) {
+      AnalyticsService.event('play_session_discard',
+          {'minutes': seconds ~/ 60, 'reason': 'too_short'});
       final mins = seconds ~/ 60;
       final dur = mins > 0 ? '$mins min' : '$seconds s';
       NotificationsService.instance.show(

@@ -10,6 +10,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../data/achievements.dart';
 import '../data/courts.dart';
+import '../services/analytics_service.dart';
 import '../services/cache/court_image_cache.dart';
 import '../services/courts_provider.dart';
 import '../services/play_session_service.dart';
@@ -1259,10 +1260,16 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       entry.remove();
       if (mounted) setState(() => _sharing = false);
 
-      await Share.shareXFiles(
+      final shared = await Share.shareXFiles(
         [XFile(file.path)],
         text: '¡Resultado en 1of1! 🏀',
       );
+      AnalyticsService.share('session_result', {
+        'status': shared.status.name, // success / dismissed / unavailable
+        'has_photo': background != null,
+        'result': s.displayResult?.name,
+        'games': s.gamesPlayed,
+      });
     } catch (e) {
       entry.remove();
       if (context.mounted) {

@@ -11,6 +11,7 @@ import '../data/cosmetics.dart';
 import '../data/courts.dart';
 import '../data/legal_content.dart';
 import '../data/models.dart';
+import '../services/analytics_service.dart';
 import '../services/api/api_client.dart';
 import '../services/cache/api_cache.dart';
 import '../services/api/api_config.dart';
@@ -3371,6 +3372,7 @@ class _FriendsTabState extends State<_FriendsTab> {
           _snack('${found.handle} ya está en tus amigos');
         } else {
           await _service.addFriend(_ownerEmail, found);
+          AnalyticsService.event('friend_add');
           _searchCtrl.clear();
           _snack('¡Agregaste a ${found.name}!');
           _refresh();
@@ -3389,6 +3391,7 @@ class _FriendsTabState extends State<_FriendsTab> {
     // spinner: va overlay.
     try {
       await runBusy(context, () => _service.removeFriend(f.pageId));
+      AnalyticsService.event('friend_remove', {'reason': 'remove'});
       _refresh();
     } catch (_) {
       _snack('No se pudo eliminar.');
@@ -3823,6 +3826,7 @@ class _FriendsTabState extends State<_FriendsTab> {
     });
     if (!mounted) return;
     _refresh();
+    AnalyticsService.event('friend_remove', {'reason': 'block'});
     _snack('Bloqueaste a ${f.friendName.isEmpty ? f.friendHandle : f.friendName}');
   }
 

@@ -13,6 +13,7 @@ import 'screens/handle_setup_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/pickup_chat_screen.dart';
+import 'services/analytics_service.dart';
 import 'services/api/api_client.dart';
 import 'services/app_loading_state.dart';
 import 'services/blocked_provider.dart';
@@ -57,6 +58,8 @@ void main() async {
     systemNavigationBarIconBrightness: Brightness.light,
   ));
 
+  // Firebase Analytics (solo Android por ahora). No bloquea el arranque.
+  unawaited(AnalyticsService.init());
   // Notificaciones locales (recompensas). No bloquea el arranque si falla.
   unawaited(NotificationsService.instance.init());
   // Geofencing (detecta llegada a una cancha sin notificación persistente).
@@ -214,6 +217,9 @@ class _RootState extends State<_Root> {
   Future<void> _leaveOnboarding(AuthMode mode) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('onboarding_seen', true);
+    AnalyticsService.event('onboarding_complete', {
+      'next': mode == AuthMode.signup ? 'signup' : 'login',
+    });
     if (!mounted) return;
     setState(() {
       _onboardingSeen = true;

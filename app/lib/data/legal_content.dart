@@ -26,7 +26,7 @@ const String kPrivacyPolicyUrl = 'https://buschfranco.github.io/1of1/privacidad'
 const String kTermsUrl = 'https://buschfranco.github.io/1of1/terminos';
 
 /// Fecha de última actualización de los documentos (mostrada al usuario).
-const String kLegalLastUpdated = '12 de octubre de 2026';
+const String kLegalLastUpdated = '19 de octubre de 2026';
 
 /// Política de Privacidad (resumen honesto de lo que la app hace hoy).
 const String kPrivacyPolicy = '''
@@ -80,8 +80,14 @@ rutas a las canchas). Al usar esas funciones, tu ubicación y/o la dirección
 consultada se envían a Google. Las consultas de zona y de rutas pasan por
 nuestro servidor, que las reenvía a Google y no guarda las coordenadas en la base
 de datos. Si iniciás sesión con Google, tu autenticación y
-foto de perfil las provee Google Sign-In. El tratamiento que hace Google se rige
-por su propia política de privacidad (policies.google.com/privacy).
+foto de perfil las provee Google Sign-In. Para mejorar la app usamos Google
+Analytics para Firebase (Google LLC), que registra de forma estadística qué
+pantallas abrís y qué acciones hacés (por ejemplo, compartir un resultado, crear
+un pickup o dejar una reseña), junto con un identificador de instalación de la
+app y datos técnicos del dispositivo (modelo, versión de Android, país
+aproximado). No le enviamos tu nombre, email, handle, mensajes, ubicación ni
+datos de salud. El tratamiento que hace Google se rige por su propia política de
+privacidad (policies.google.com/privacy).
 
 NOTIFICACIONES
 La app muestra notificaciones locales en tu dispositivo: aviso de llegada a una

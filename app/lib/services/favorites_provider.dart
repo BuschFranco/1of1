@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'analytics_service.dart';
 
 /// Favoritos guardados localmente (no en Notion), por court id. Las claves se
 /// separan por usuario para que las cuentas no compartan favoritos en el mismo
@@ -47,11 +48,16 @@ class FavoritesProvider extends ChangeNotifier {
   }
 
   Future<void> toggle(String courtId) async {
-    if (_ids.contains(courtId)) {
-      _ids.remove(courtId);
-    } else {
+    final adding = !_ids.contains(courtId);
+    if (adding) {
       _ids.add(courtId);
+    } else {
+      _ids.remove(courtId);
     }
+    AnalyticsService.event('favorite_toggle', {
+      'court_id': courtId,
+      'action': adding ? 'add' : 'remove',
+    });
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_key, _ids.toList());

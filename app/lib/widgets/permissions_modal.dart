@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/analytics_service.dart';
 import '../services/app_permissions.dart';
 import '../services/location_service.dart';
 import '../services/notifications_service.dart';
@@ -50,7 +51,12 @@ class PermissionsModal extends StatefulWidget {
     // Notificaciones: diálogo directo del sistema, sin pasar por el modal
     // (fricción mínima). Si acepta, la fila ni aparece en el modal; si
     // rechaza, queda ahí como recordatorio.
-    await NotificationsService.instance.requestPermission();
+    final granted = await NotificationsService.instance.requestPermission();
+    AnalyticsService.event('permission_result', {
+      'perm': 'notifications',
+      'granted': granted,
+      'source': 'first_run',
+    });
     if (!context.mounted) return;
     await showIfNeeded(context);
   }
@@ -95,6 +101,16 @@ class _PermissionsModalState extends State<PermissionsModal>
   Future<void> _refresh() async {
     final st = await checkPermissions();
     if (!mounted) return;
+    // "Permitir todo el tiempo" se concede en Ajustes del sistema: el resultado
+    // recién se ve al volver a la app, como un cambio false → true.
+    final before = _state;
+    if (before != null && !before.background && st.background) {
+      AnalyticsService.event('permission_result', {
+        'perm': 'background',
+        'granted': true,
+        'source': 'settings',
+      });
+    }
     setState(() => _state = st);
     // "Permitir siempre" concedido: sincronizamos la preferencia de background
     // (idempotente) para que el coordinador registre geofences + radar ya mismo,
@@ -120,10 +136,32 @@ class _PermissionsModalState extends State<PermissionsModal>
     if (_busy) return;
     // Background exige la divulgación destacada de Google Play ANTES de pedir
     // el permiso del sistema (misma que usa el switch del perfil).
-    if (p == AppPerm.background && !await _backgroundDisclosure()) return;
+    if (p == AppPerm.background && !await _backgroundDisclosure()) {
+      AnalyticsService.event('permission_result', {
+        'perm': 'background',
+        'granted': false,
+        'source': 'disclosure_declined',
+      });
+      return;
+    }
     setState(() => _busy = true);
     await requestPerm(p);
     await _refresh();
+    // "Siempre" se resuelve en Ajustes: lo registra _refresh al volver.
+    final st = _state;
+    if (p != AppPerm.background && st != null) {
+      AnalyticsService.event('permission_result', {
+        'perm': p.name,
+        'granted': switch (p) {
+          AppPerm.location => st.location,
+          AppPerm.background => st.background,
+          AppPerm.notifications => st.notifications,
+          AppPerm.alarm => st.alarm,
+          AppPerm.battery => st.battery,
+        },
+        'source': 'modal',
+      });
+    }
     if (mounted) setState(() => _busy = false);
     // Encadenado: al conceder la ubicación base seguimos de una con "Permitir
     // todo el tiempo" (Android lo obliga en dos pasos: el diálogo del sistema

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/courts.dart';
+import 'analytics_service.dart';
 import 'api/api_client.dart';
 
 /// Fuente de canchas para la app. Carga desde el backend y guarda una copia en
@@ -130,6 +131,12 @@ class CourtsProvider extends ChangeNotifier {
     String? createdByEmail,
   }) async {
     final created = await _api.proposeCourt(court.toApiJson());
+    AnalyticsService.event('court_propose', {
+      'type': court.type,
+      'surface': court.surface,
+      'free': court.free,
+      'has_hours': court.openTime.isNotEmpty || court.hours.isNotEmpty,
+    });
     // Sembramos el estado "pendiente" en el mapa persistido para no perder la
     // PRIMERA aprobación: si no registráramos el pendiente, al detectarla luego
     // se tomaría como "primera observación" y no dispararía la notificación.

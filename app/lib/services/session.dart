@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' show ClientException;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models.dart';
+import 'analytics_service.dart';
 import 'api/api_client.dart';
 import 'friends_service.dart';
 
@@ -295,7 +296,9 @@ class Session extends ChangeNotifier {
     if (email.isEmpty || password.isEmpty) return 'Completá email y contraseña.';
     try {
       final data = await _api.login(email, password);
-      return await _acceptAuth(data, email, persist: persist);
+      final err = await _acceptAuth(data, email, persist: persist);
+      if (err == null) AnalyticsService.login('email');
+      return err;
     } on ApiException catch (e) {
       if (e.statusCode == 401) return 'Email o contraseña incorrectos.';
       return _apiError(e);
@@ -329,7 +332,9 @@ class Session extends ChangeNotifier {
         phone: phone.trim(),
         birthdate: birthdate,
       );
-      return await _acceptAuth(data, email, persist: true);
+      final err = await _acceptAuth(data, email, persist: true);
+      if (err == null) AnalyticsService.signUp('email');
+      return err;
     } on ApiException catch (e) {
       if (e.statusCode == 409) return 'Ya existe una cuenta con ese email.';
       return _apiError(e);
@@ -351,7 +356,9 @@ class Session extends ChangeNotifier {
       final email =
           ((data['profile'] as Map?)?['userEmail'] ?? '').toString().trim().toLowerCase();
       if (email.isEmpty) return 'No se pudo obtener el email de Google.';
-      return await _acceptAuth(data, email, persist: true);
+      final err = await _acceptAuth(data, email, persist: true);
+      if (err == null) AnalyticsService.login('google');
+      return err;
     } on ApiException catch (e) {
       if (e.statusCode == 401) return 'No se pudo validar la cuenta de Google.';
       return _apiError(e);
@@ -405,6 +412,10 @@ class Session extends ChangeNotifier {
       // El server valida formato y unicidad; el copyWith local evita esperar
       // el próximo refresh para ver el handle nuevo.
       await _api.setHandle(handle);
+      AnalyticsService.event('profile_edit', {
+        'field': 'handle',
+        'first_time': prof.handle.isEmpty,
+      });
       await _persist(email, prof.copyWith(handle: handle));
       return null;
     } on ApiException catch (e) {
@@ -433,6 +444,7 @@ class Session extends ChangeNotifier {
 
     // Se guarda localmente y se sube en el próximo batch.
     _markDirty(['clan', 'avatarColor', 'clanTextColor', 'clanFont', 'avatarFrame']);
+    AnalyticsService.event('profile_edit', {'field': 'badge'});
     await _persist(
       email,
       prof.copyWith(
@@ -453,6 +465,7 @@ class Session extends ChangeNotifier {
     final email = _email;
     if (prof == null || email == null) return 'No hay sesión activa.';
     _markDirty(['title']);
+    AnalyticsService.event('profile_edit', {'field': 'title'});
     await _persist(email, prof.copyWith(title: title));
     return null;
   }
@@ -691,6 +704,9 @@ class Session extends ChangeNotifier {
   }
 
   Future<void> logout({bool flushFirst = true}) async {
+    // flushFirst=false solo lo usa la sesión vencida (401).
+    AnalyticsService.event(
+        'logout', {'reason': flushFirst ? 'user' : 'expired'});
     if (flushFirst) {
       await flush(); // subir lo que haya quedado pendiente antes de cerrar
     }

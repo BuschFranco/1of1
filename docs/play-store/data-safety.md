@@ -40,7 +40,8 @@ cuenta de desarrollador).
 | Información personal | Otra info (fecha de nacimiento, ciudad) | Sí | Sí | No | Funcionalidad de la app |
 | Fotos y videos | Fotos | Sí (avatar y fotos de cancha) | Sí | No | Funcionalidad de la app |
 | Mensajes | Otros mensajes en la app | Sí (chat de pickups) | No (si usás esa función) | No | Funcionalidad de la app |
-| Actividad en la app | Interacciones en la app | Sí (partidos, reseñas, logros) | No | No | Funcionalidad de la app, Analítica |
+| Actividad en la app | Interacciones en la app | Sí (partidos, reseñas, logros; y pantallas/acciones vía Firebase Analytics) | No | No | Funcionalidad de la app, Analítica |
+| Identificadores del dispositivo u otros | ID del dispositivo u otros (ID de instancia de la app de Firebase Analytics) | Sí | No | No | Analítica |
 | Salud y fitness | Información de salud (Health Connect: pulso, calorías, pasos, distancia, velocidad, saturación de oxígeno, frecuencia cardíaca en reposo, variabilidad cardíaca, ritmo respiratorio y sesiones de ejercicio — los 11 permisos `health.READ_*` del manifest) | Sí, SOLO si el usuario lo activa | **Sí, opt-in explícito** | No | Funcionalidad de la app |
 
 > ⚠️ **Esta lista tiene que coincidir con `AndroidManifest.xml` y con la política de
@@ -50,7 +51,7 @@ cuenta de desarrollador).
 > formulario de Seguridad de datos en Play Console (vive allá, no en este repo).
 
 **Sobre "compartir con terceros":** usamos Supabase (base de datos/almacenamiento)
-y Google (Maps, Sign-In) como **proveedores de servicio** para operar la app,
+y Google (Maps, Sign-In, Firebase Analytics) como **proveedores de servicio** para operar la app,
 no como terceros a quienes se "comparten" los datos con fines propios de ellos
 — esa es la distinción que hace el formulario de Google. Si tenés dudas al
 completarlo, la guía oficial lo aclara: un proveedor que solo procesa datos en

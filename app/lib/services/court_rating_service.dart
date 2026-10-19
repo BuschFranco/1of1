@@ -1,5 +1,6 @@
 import 'dart:collection';
 import '../data/models.dart';
+import 'analytics_service.dart';
 import 'api/api_client.dart';
 import 'cache/api_cache.dart';
 
@@ -75,6 +76,11 @@ class CourtRatingService {
   }) async {
     final json =
         await _api.createReview(courtId, rating: rating, comment: comment);
+    AnalyticsService.event('review_create', {
+      'court_id': courtId,
+      'rating': rating,
+      'has_comment': comment.trim().isNotEmpty,
+    });
     invalidate(courtId);
     return Review.fromApi(json);
   }
@@ -82,6 +88,7 @@ class CourtRatingService {
   /// Borra una reseña (propia, o cualquiera si el token es admin).
   Future<void> deleteReview(String pageId, {String courtId = ''}) async {
     await _api.deleteReview(pageId);
+    AnalyticsService.event('review_delete', {'court_id': courtId});
     if (courtId.isNotEmpty) invalidate(courtId);
   }
 

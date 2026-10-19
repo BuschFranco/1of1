@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/courts.dart';
 import '../data/models.dart';
+import '../services/analytics_service.dart';
 import '../services/app_loading_state.dart';
 import '../services/app_permissions.dart' as app_perms;
 import '../services/court_rating_service.dart';
@@ -257,6 +258,11 @@ class _HomeScreenState extends State<HomeScreen>
     }
     setState(_applyFilters);
     _syncPageToIndex();
+    AnalyticsService.event('map_filter', {
+      'filter': label,
+      'active': _activeFilters.contains(label),
+      'results': _filtered.length,
+    });
   }
 
   /// Reposiciona el carrusel al índice actual tras cambios en la lista
@@ -1709,10 +1715,11 @@ class _HomeScreenState extends State<HomeScreen>
         // permanente, requestLocation abre los ajustes de la app).
         await app_perms.requestLocation();
         permission = await Geolocator.checkPermission();
-        if (permission != LocationPermission.always &&
-            permission != LocationPermission.whileInUse) {
-          return;
-        }
+        final granted = permission == LocationPermission.always ||
+            permission == LocationPermission.whileInUse;
+        AnalyticsService.event('permission_result',
+            {'perm': 'location', 'granted': granted, 'source': 'map'});
+        if (!granted) return;
         // Recién concedido: el stream en vivo del arranque se había salteado
         // por falta de permiso — lo levantamos ahora.
         if (_posStream == null) unawaited(_startLocationUpdates());
@@ -1784,6 +1791,12 @@ class _HomeScreenState extends State<HomeScreen>
     await _refreshRoute(pos);
     // Encuadrar la ruta completa (usuario + cancha) en el mapa.
     final r = _route;
+    // Solo la primera ruta: los recálculos al caminar no son "pedir una ruta".
+    AnalyticsService.event('route_start', {
+      'court_id': court.id,
+      'mode': mode,
+      'straight_line': r?.straightLine ?? true,
+    });
     if (r != null && _mapCtrl != null && _waypointCourt?.id == court.id) {
       var minLat = double.infinity, maxLat = -double.infinity;
       var minLng = double.infinity, maxLng = -double.infinity;

@@ -174,7 +174,7 @@
   "terms": {
     "badge": "1OF1",
     "title": "Terms & Conditions",
-    "updated": "Last updated: October 12, 2026",
+    "updated": "Last updated: October 19, 2026",
     "intro": "By creating an account and using 1of1, you accept these terms.",
     "sections": [
       { "heading": "Use of the app", "body": "1of1 helps you find courts and log your play sessions. You are responsible for the information you submit (courts, reviews, handle, name) and for playing safely: the app does not monitor or guarantee the condition of courts." },
@@ -192,7 +192,7 @@
   "deleteAccount": {
     "badge": "1OF1",
     "title": "Delete your account",
-    "updated": "Last updated: October 12, 2026",
+    "updated": "Last updated: October 19, 2026",
     "intro": "You can delete your 1of1 account and its associated data at any time, whether or not you have the app installed.",
     "sections": [
       { "heading": "From the app (instant)", "body": "Open 1of1 → Profile → Settings → Delete account. Confirm and your account is deleted right away, no waiting." },
@@ -208,13 +208,13 @@
   "privacy": {
     "badge": "1OF1",
     "title": "Privacy Policy",
-    "updated": "Last updated: October 12, 2026",
+    "updated": "Last updated: October 19, 2026",
     "intro": "1of1 (\"the app\") is an application to find basketball courts and log your play sessions. This policy explains what data we use and why.",
     "sections": [
       { "heading": "What data we collect", "body": "Account data: name, email, and optionally city and phone number you provide when signing up. Your birth date is stored to verify and confirm you meet the minimum age. Handle and profile data: public handle, clan badge, photo (if you sign in with Google), and your game stats. Location: we use it to show nearby courts and detect when you're playing; with \"Always\" permission, detection works with the app closed. We don't store your coordinates in our database, only which court you played at (see \"Third-party services\"). Health data (optional): if you connect Health (Health Connect), we read calories, heart rate, steps, distance, speed, blood oxygen, resting heart rate, heart rate variability and respiratory rate from your play sessions, plus the exercise sessions your watch records. We only read them (we never write to your health history) and they stay ONLY on your device: they are not uploaded to our servers. Game activity: play-session history (court, date, duration, result, score, format and the points you log), your past streaks, your favorite courts and the users you blocked. This is backed up on our server so you don't lose it if you reinstall the app or switch phones. Health metrics are NOT backed up: they stay only on your device. Messages: the content of pickup chats is stored on our server so we can show it to that pickup's participants." },
       { "heading": "What we use it for", "body": "To make the app work: locating you on the map, detecting and scoring your play sessions, showing your profile and rankings, and connecting the community (friends, pickups, and their chats)." },
       { "heading": "Where it's stored", "body": "Account, game, and message data is stored on our own backend, hosted on Render (Render Services, Inc., servers in the United States) on a Supabase Postgres database (Supabase, Inc.). Both providers act as data processors on our behalf. By using the app you accept this international data transfer to the United States. Health data never leaves your phone." },
-      { "heading": "Third-party services", "body": "We use Google services for map features: Google Maps (displaying the map), Geocoding (converting addresses to coordinates), and Directions (calculating routes). When you use those features, your location and/or the address queried is sent to Google. Map-area and route lookups go through our server, which forwards them to Google and does not store the coordinates in our database. If you sign in with Google, your authentication and profile photo are provided by Google Sign-In. Google's handling of that data is governed by its own privacy policy (policies.google.com/privacy)." },
+      { "heading": "Third-party services", "body": "We use Google services for map features: Google Maps (displaying the map), Geocoding (converting addresses to coordinates), and Directions (calculating routes). When you use those features, your location and/or the address queried is sent to Google. Map-area and route lookups go through our server, which forwards them to Google and does not store the coordinates in our database. If you sign in with Google, your authentication and profile photo are provided by Google Sign-In. To improve the app we use Google Analytics for Firebase (Google LLC), which statistically records which screens you open and which actions you take (for example, sharing a result, creating a pickup or leaving a review), along with an app installation identifier and technical device data (model, Android version, approximate country). We do not send it your name, email, handle, messages, location or health data. Google's handling of that data is governed by its own privacy policy (policies.google.com/privacy)." },
       { "heading": "Notifications", "body": "The app shows local notifications on your device: a court-arrival alert, the play-session timer and, if you leave it on, a reminder to get back on court when several days pass without a session (at most three in a row, and only until you play again). They are generated on your phone: we do not send them from our servers or share data with third parties to show them. You can turn them off in your system permissions, and the come-back reminder in Settings → Privacy." },
       { "heading": "News", "body": "The News section shows basketball stories (NBA, WNBA and Liga Nacional) that our server fetches from ESPN and NewsData.io. We send none of your data to those services: the request is by league only." },
       { "heading": "How long we keep it", "body": "We keep your data while your account is active. If you delete your account, we remove it from our database; it may persist briefly in backups before being fully purged." },

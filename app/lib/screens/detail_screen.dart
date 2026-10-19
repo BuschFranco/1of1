@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../data/courts.dart';
 import '../data/legal_content.dart';
 import '../data/models.dart';
+import '../services/analytics_service.dart';
 import '../services/api/api_client.dart';
 import '../services/api/api_config.dart';
 import '../services/blocked_provider.dart';
@@ -2083,6 +2084,10 @@ class _PostsSectionState extends State<_PostsSection> {
                       final res = await ApiClient().togglePostLike(p.pageId);
                       final serverCount = (res['likeCount'] as num?)?.toInt();
                       final serverLiked = res['likedByMe'] as bool?;
+                      AnalyticsService.event('post_like', {
+                        'court_id': widget.courtId,
+                        'liked': serverLiked ?? liked,
+                      });
                       setLocal(() {
                         if (serverCount != null) likeCount = serverCount;
                         if (serverLiked != null) liked = serverLiked;
@@ -2280,6 +2285,8 @@ class _PostsSectionState extends State<_PostsSection> {
                       try {
                         await ApiClient().createPost(widget.courtId,
                             content: text);
+                        AnalyticsService.event(
+                            'post_create', {'court_id': widget.courtId});
                         if (ctx.mounted) Navigator.pop(ctx);
                         _refresh();
                       } catch (e) {
@@ -2406,6 +2413,10 @@ class _PostDetailSheetState extends State<_PostDetailSheet> {
       final res = await ApiClient().togglePostLike(widget.post.pageId);
       final c = (res['likeCount'] as num?)?.toInt();
       final l = res['likedByMe'] as bool?;
+      AnalyticsService.event('post_like', {
+        'court_id': widget.post.courtId,
+        'liked': l ?? _liked,
+      });
       setState(() {
         if (c != null) _likeCount = c;
         if (l != null) _liked = l;
@@ -2429,6 +2440,8 @@ class _PostDetailSheetState extends State<_PostDetailSheet> {
     try {
       final json =
           await ApiClient().addPostComment(widget.post.pageId, content: text);
+      AnalyticsService.event(
+          'post_comment', {'court_id': widget.post.courtId});
       final c = PostComment.fromApi(json);
       setState(() {
         _comments = [..._comments, c];

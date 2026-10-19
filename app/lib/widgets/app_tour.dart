@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../services/analytics_service.dart';
 import '../theme/app_theme.dart';
 import 'app_logo.dart';
 import 'app_tab_bar.dart';
@@ -67,7 +68,10 @@ final ValueNotifier<int> appTourRequest = ValueNotifier<int>(0);
 /// Muestra el tour encima de todo (overlay raíz) y termina cuando el usuario
 /// lo completa o lo salta. Los pasos cuyo elemento no está en pantalla (p. ej.
 /// el ranking en modo offline) se saltean solos.
-Future<void> runAppTour(BuildContext context, List<TourStep> steps) async {
+///
+/// [id] identifica el tour en Analytics (`main` o el nombre de la pestaña).
+Future<void> runAppTour(BuildContext context, List<TourStep> steps,
+    {required String id}) async {
   // Un paso entra si su elemento está montado, o si se puede scrollear hasta él.
   final visible = [
     for (final s in steps)
@@ -80,11 +84,18 @@ Future<void> runAppTour(BuildContext context, List<TourStep> steps) async {
   entry = OverlayEntry(
     builder: (_) => _TourOverlay(
       steps: visible,
-      onClose: () {
+      onClose: (reason, step) {
         // Saltar y el back pueden llegar juntos: cerrar una sola vez.
         if (done.isCompleted) return;
         entry.remove();
         done.complete();
+        final completed = reason == 'completed';
+        AnalyticsService.event(completed ? 'tour_complete' : 'tour_skip', {
+          'tour': id,
+          'step': step + 1,
+          'total': visible.length,
+          if (!completed) 'via': reason,
+        });
       },
     ),
   );
@@ -105,7 +116,8 @@ Rect? _rectOf(GlobalKey key) {
 
 class _TourOverlay extends StatefulWidget {
   final List<TourStep> steps;
-  final VoidCallback onClose;
+  /// Motivo (`completed`, `skip`, `back`) y paso en el que estaba (0-based).
+  final void Function(String reason, int step) onClose;
   const _TourOverlay({required this.steps, required this.onClose});
 
   @override
@@ -169,7 +181,7 @@ class _TourOverlayState extends State<_TourOverlay>
         }
         n++;
       }
-      widget.onClose();
+      widget.onClose('completed', widget.steps.length - 1);
     } finally {
       _busy = false;
     }
@@ -229,7 +241,7 @@ class _TourOverlayState extends State<_TourOverlay>
       canPop: false,
       // Back de Android = saltar el tour.
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) widget.onClose();
+        if (!didPop) widget.onClose('back', _i < 0 ? 0 : _i);
       },
       child: Material(
         type: MaterialType.transparency,
@@ -318,7 +330,7 @@ class _TourOverlayState extends State<_TourOverlay>
             children: [
               if (!last)
                 PressableWidget(
-                  onTap: widget.onClose,
+                  onTap: () => widget.onClose('skip', _i < 0 ? 0 : _i),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     child: Text(

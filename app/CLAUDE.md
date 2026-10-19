@@ -324,6 +324,13 @@ login). Una instalación nueva igual necesita conectarse una vez.
   la local. `POST /matches` es idempotente por `(email, endedAt)` en el backend,
   así que reintentar un lote nunca duplica ranking ni puntos de clan.
 
+### Analytics (Firebase)
+
+Toda acción importante nueva lleva su evento vía `AnalyticsService.event(...)`
+(`lib/services/analytics_service.dart`), en el punto donde la acción **se
+completó** y **sin datos personales** en los parámetros. Lista de eventos,
+reglas y cómo probarlos: [`docs/analytics.md`](docs/analytics.md).
+
 ### Notificaciones a OTROS usuarios: no hay push
 
 **No existe canal server→cliente** (nada de FCM; `notifications_service.dart` es

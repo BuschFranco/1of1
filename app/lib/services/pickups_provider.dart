@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models.dart';
+import 'analytics_service.dart';
 import 'api/api_client.dart';
 import 'cache/api_cache.dart';
 
@@ -234,6 +235,15 @@ class PickupsProvider extends ChangeNotifier {
   Future<Pickup> create(Pickup p) async {
     final json = await _api.createPickup(p.toApiJson());
     final created = Pickup.fromApi(json);
+    final when = DateTime.tryParse(created.dateTime ?? '');
+    AnalyticsService.event('pickup_create', {
+      'court_id': created.courtId,
+      'team_size': created.teamSize,
+      'is_public': created.isPublic,
+      'has_rewards': created.rewards.isNotEmpty,
+      'invited': created.teamAMembers.length + created.teamBMembers.length,
+      if (when != null) 'hours_ahead': when.difference(DateTime.now()).inHours,
+    });
     _pickups.insert(0, created);
     notifyListeners();
     return created;
@@ -268,8 +278,11 @@ class PickupsProvider extends ChangeNotifier {
   /// [iso] va en hora LOCAL sin zona (`toIso8601String()` de un DateTime local),
   /// igual que al crear el pickup: el backend lo interpreta con parseUtc, así
   /// que mezclar formatos desfasaría el horario mostrado.
-  Future<Pickup> reschedule(Pickup p, DateTime when) =>
-      _update(p.copyWith(dateTime: when.toIso8601String()));
+  Future<Pickup> reschedule(Pickup p, DateTime when) async {
+    final updated = await _update(p.copyWith(dateTime: when.toIso8601String()));
+    AnalyticsService.event('pickup_reschedule', {'court_id': p.courtId});
+    return updated;
+  }
 
   /// Acepta la invitación: agrega a aceptados y saca de rechazados.
   Future<Pickup> accept(Pickup p, String email) async {
@@ -341,6 +354,11 @@ class PickupsProvider extends ChangeNotifier {
     try {
       final json = await _api.joinPickup(c);
       final joined = Pickup.fromApi(json);
+      AnalyticsService.joinGroup(joined.pageId, {
+        'method': 'code',
+        'court_id': joined.courtId,
+        'team_size': joined.teamSize,
+      });
       // El pickup no estaba en la lista local del que se une: recargar sí o sí.
       await loadForUser(e, force: true);
       return (error: null, pickupId: joined.pageId);
@@ -377,6 +395,11 @@ class PickupsProvider extends ChangeNotifier {
     try {
       final json = await _api.joinPublicPickup(p.pageId);
       final joined = Pickup.fromApi(json);
+      AnalyticsService.joinGroup(joined.pageId, {
+        'method': 'public',
+        'court_id': joined.courtId,
+        'team_size': joined.teamSize,
+      });
       await loadForUser(e, force: true);
       // Actualizar en la lista pública cacheada si está, así la UI local
       // refleja el cupo nuevo sin refetch.
@@ -405,6 +428,7 @@ class PickupsProvider extends ChangeNotifier {
       declinedMembers: p.declinedMembers.where((x) => !_eq(x, email)).toList(),
     );
     await _api.updatePickup(updated.pageId, updated.toApiJson());
+    AnalyticsService.event('pickup_leave', {'court_id': p.courtId});
     _pickups.removeWhere((x) => x.pageId == p.pageId);
     notifyListeners();
   }
@@ -429,6 +453,7 @@ class PickupsProvider extends ChangeNotifier {
   /// Elimina el pickup (y su chat, server-side). Solo el creador.
   Future<void> deletePickup(Pickup p) async {
     await _api.deletePickup(p.pageId);
+    AnalyticsService.event('pickup_delete', {'court_id': p.courtId});
     _pickups.removeWhere((x) => x.pageId == p.pageId);
     notifyListeners();
   }

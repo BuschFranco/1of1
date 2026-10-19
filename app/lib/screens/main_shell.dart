@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/analytics_service.dart';
 import '../services/app_loading_state.dart';
 import '../services/courts_provider.dart';
 import '../services/play_session_service.dart';
@@ -149,7 +150,7 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
       if (!mounted || _tab != tab || _tourRunning) return;
       _tourRunning = true;
       try {
-        await runAppTour(context, steps);
+        await runAppTour(context, steps, id: tab.name);
       } finally {
         _tourRunning = false;
       }
@@ -310,7 +311,7 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
         await Future<void>.delayed(const Duration(milliseconds: 450));
         if (!mounted) return;
       }
-      await runAppTour(context, _tourSteps);
+      await runAppTour(context, _tourSteps, id: 'main');
     } finally {
       _tourRunning = false;
     }
@@ -493,6 +494,27 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
             style: AppText.grotesk(size: 13)),
         backgroundColor: AppColors.bgElev,
       ));
+  }
+
+  // Última pantalla registrada en Analytics. Se loguea desde build() porque a
+  // la pestaña se llega por varios caminos (tap, swipe, atrás, "ver en mapa").
+  String? _loggedScreen;
+
+  void _logScreen() {
+    final name = _detailCourtId != null
+        ? 'cancha_detalle'
+        : _filtersOpen
+            ? 'filtros'
+            : switch (_tab) {
+                AppTab.home => 'mapa',
+                AppTab.list => 'canchas',
+                AppTab.plus => 'crear',
+                AppTab.chat => 'social',
+                AppTab.profile => 'perfil',
+              };
+    if (name == _loggedScreen) return;
+    _loggedScreen = name;
+    AnalyticsService.screen(name);
   }
 
   void _selectTab(AppTab t) {
@@ -724,6 +746,7 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
 
   @override
   Widget build(BuildContext context) {
+    _logScreen();
     final courtsProvider = context.watch<CourtsProvider>();
     final courts = courtsProvider.courts;
     final hideTabs = _detailCourtId != null || _filtersOpen;

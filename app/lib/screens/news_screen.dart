@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../data/models.dart';
+import '../services/analytics_service.dart';
 import '../services/cache/api_cache.dart';
 import '../services/news_service.dart';
 import '../theme/app_theme.dart';
@@ -74,6 +75,8 @@ class _NewsScreenState extends State<NewsScreen> {
     if (uri == null) return;
     try {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+      AnalyticsService.event(
+          'news_open', {'league': _league, 'source': uri.host});
     } catch (_) {/* sin browser disponible: no hacer nada */}
   }
 

@@ -257,20 +257,25 @@ class NotificationsService {
   }
 
   /// Pide permiso de notificaciones (Android 13+ / iOS). Seguro de llamar varias
-  /// veces: el SO solo pregunta una vez.
-  Future<void> requestPermission() async {
+  /// veces: el SO solo pregunta una vez. Devuelve si quedaron habilitadas.
+  Future<bool> requestPermission() async {
     if (!_ready) await init();
-    if (!_ready) return;
+    if (!_ready) return false;
     try {
-      await _plugin
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestNotificationsPermission();
-      await _plugin
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      final granted = await android?.requestNotificationsPermission();
+      final ios = await _plugin
           .resolvePlatformSpecificImplementation<
               IOSFlutterLocalNotificationsPlugin>()
           ?.requestPermissions(alert: true, badge: true, sound: true);
-    } catch (_) {/* ignorar */}
+      return granted ??
+          ios ??
+          await android?.areNotificationsEnabled() ??
+          false;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// True si la app tiene las notificaciones habilitadas por el SO. Sirve para

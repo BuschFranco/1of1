@@ -7,6 +7,7 @@ import '../data/achievements.dart';
 import '../data/cosmetics.dart';
 import '../data/courts.dart';
 import '../data/models.dart';
+import '../services/analytics_service.dart';
 import '../services/api/api_client.dart';
 import '../services/cache/api_cache.dart';
 import '../services/courts_provider.dart';
@@ -228,6 +229,7 @@ class _PickupChatScreenState extends State<PickupChatScreen>
 
     try {
       final res = await _api.sendPickupMessage(widget.pickupId, text);
+      AnalyticsService.event('chat_message');
       final m = ChatMessage.fromApi(res);
       if (!mounted) return;
       setState(() {
