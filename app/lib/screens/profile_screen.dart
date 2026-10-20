@@ -605,12 +605,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 key: TourKeys.profileStats, child: _statsGrid()),
           ),
         ),
-        if (ps.log.isNotEmpty) ...[
+        if (ps.log.isNotEmpty || ps.hasUserStats) ...[
           const SizedBox(height: 16),
           RevealOnScroll(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: _gameInsightsCard(ps),
+              child: _gameStatsCard(ps),
             ),
           ),
         ],
@@ -620,15 +620,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: _healthStatsCard(ps),
-            ),
-          ),
-        ],
-        if (ps.hasUserStats) ...[
-          const SizedBox(height: 16),
-          RevealOnScroll(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: _userStatsCard(ps),
             ),
           ),
         ],
@@ -1479,12 +1470,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// Card "Tu juego": récord, formatos, tiempo, constancia, cuándo jugás,
-  /// entrenamientos y el mes contra el anterior. Todo sale del historial local
-  /// (`GameInsights`), sin red.
-  Widget _gameInsightsCard(PlaySessionService ps) {
+  /// Card única "Estadísticas de juego". Junta lo que sale del HISTORIAL de
+  /// sesiones (récord, formatos, tiempo, constancia, cuándo jugás,
+  /// entrenamientos, mes vs anterior: `GameInsights`, siempre que haya
+  /// sesiones) con lo que sale de los PUNTOS que el usuario carga al cerrar
+  /// (totales, promedio, mejor partido, puntos por tiro y de 1/2/3: solo si
+  /// los cargó). Antes eran dos cards seguidas que repetían la efectividad.
+  /// Toda la card abre la pantalla con gráficos (GameStatsScreen).
+  Widget _gameStatsCard(PlaySessionService ps) {
     final g = GameInsights.from(ps.log, bestStreak: ps.bestStreak);
-    if (!g.hasData) return const SizedBox.shrink();
+    final hasPoints = ps.hasUserStats;
+    if (!g.hasData && !hasPoints) return const SizedBox.shrink();
     const days = [
       'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábados',
       'domingos',
@@ -1499,15 +1495,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String one(double v) =>
         v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
 
-    final record =
-        '${g.wins}-${g.losses}${g.ties > 0 ? '-${g.ties}' : ''}';
-    final cells = <Widget>[
+    Widget hDiv() => Container(height: 1, color: AppColors.white(0.06));
+    Widget subTitle(String t) => Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 2),
+          child: Text(t,
+              style: AppText.grotesk(
+                  size: 9.5,
+                  weight: FontWeight.w700,
+                  color: AppColors.accent,
+                  letterSpacing: 0.12)),
+        );
+
+    // 1) Resumen.
+    final record = '${g.wins}-${g.losses}${g.ties > 0 ? '-${g.ties}' : ''}';
+    final resumen = <Widget>[
       if (g.games > 0)
         _qStat('Récord', record, g.ties > 0 ? 'V-D-E' : 'V-D',
             Icons.scoreboard_outlined, AppColors.accent),
+      // Del historial local (hasta 100 sesiones), no de toda la vida: ver
+      // `PlaySessionService.winRate`. Oculta con menos de 3 partidos.
+      if (ps.winRate != null)
+        _qStat('Efectividad', '${(ps.winRate! * 100).round()}%', '',
+            Icons.emoji_events_outlined, const Color(0xFF22C55E)),
       if (g.bestStreak > 0)
         _qStat('Mejor racha', '${g.bestStreak}', 'victorias',
             Icons.local_fire_department, const Color(0xFFF97316)),
+      if (hasPoints) ...[
+        _qStat('Puntos totales', '${ps.totalUserPoints}', '', Icons.score,
+            const Color(0xFFFF6B1A)),
+        // Por PARTIDO, no por sesión: una tarde de 5 partidos no puede pesar
+        // lo mismo que una de 1 (mismos getters que game_stats_screen).
+        _qStat('Prom. por partido', ps.avgPointsPerGame.toStringAsFixed(1),
+            'pts', Icons.trending_up, const Color(0xFF22C55E)),
+        if (ps.bestGamePoints > 0)
+          _qStat('Mejor partido', '${ps.bestGamePoints}', 'pts',
+              Icons.emoji_events, const Color(0xFFEAB308)),
+      ],
+    ];
+
+    // 2) Puntos por tipo de tiro (solo si los cargó).
+    final puntos = <Widget>[
+      if (ps.avgPointsPerShot > 0)
+        _qStat('Puntos por tiro', ps.avgPointsPerShot.toStringAsFixed(1), '',
+            Icons.my_location, const Color(0xFF14B8A6)),
+      if (ps.totalUserPts3 > 0)
+        _qStat('Puntos de 3', '${ps.totalUserPts3}', '',
+            Icons.add_circle_outline, const Color(0xFF3B82F6)),
+      if (ps.totalUserPts2 > 0)
+        _qStat('Puntos de 2', '${ps.totalUserPts2}', '', Icons.add_circle,
+            const Color(0xFFA855F7)),
+      if (ps.totalUserPts1 > 0)
+        _qStat('Puntos de 1', '${ps.totalUserPts1}', '',
+            Icons.free_cancellation, const Color(0xFFEAB308)),
+    ];
+    final pts3 = ps.totalUserPts3 * 3;
+    final pts2 = ps.totalUserPts2 * 2;
+    final ptsTl = ps.totalUserPts1;
+    final fromBreakdown = pts3 + pts2 + ptsTl;
+
+    // 3) Por formato.
+    final formats = g.byFormat.entries.toList()
+      ..sort((a, b) => b.value.games.compareTo(a.value.games));
+
+    // 4) Tiempo y constancia.
+    final tiempo = <Widget>[
       if (g.totalSeconds > 0)
         _qStat('En la cancha', hours(g.totalSeconds), 'total',
             Icons.timer_outlined, const Color(0xFF3B82F6)),
@@ -1517,8 +1568,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (g.avgSessionSeconds > 0)
         _qStat('Sesión', hours(g.avgSessionSeconds), 'prom', Icons.av_timer,
             const Color(0xFF06B6D4)),
-      _qStat('Constancia', one(g.sessionsPerWeek), 'sesiones/sem',
-          Icons.event_repeat, const Color(0xFF22C55E)),
+      if (g.totalSeconds > 0)
+        _qStat('Constancia', one(g.sessionsPerWeek), 'sesiones/sem',
+            Icons.event_repeat, const Color(0xFF22C55E)),
       if (g.gamesPerSession > 0)
         _qStat('Partidos', one(g.gamesPerSession), 'por sesión',
             Icons.sports_basketball, AppColors.accent),
@@ -1534,9 +1586,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const Color(0xFFEAB308)),
     ];
 
-    final formats = g.byFormat.entries.toList()
-      ..sort((a, b) => b.value.games.compareTo(a.value.games));
-
+    // 5) Este mes contra el anterior.
     Widget trend(String label, String now, String? before, int dir) {
       final color = dir > 0
           ? AppColors.open
@@ -1574,193 +1624,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         (a == null || b == null) ? 0 : (a > b ? 1 : (a < b ? -1 : 0));
     final tm = g.thisMonth, lm = g.lastMonth;
 
-    Widget subTitle(String t) => Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
-          child: Text(t,
-              style: AppText.grotesk(
-                  size: 9.5,
-                  weight: FontWeight.w700,
-                  color: AppColors.white(0.45),
-                  letterSpacing: 0.1)),
-        );
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(AppShape.rCard),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _cardHeader(
-              Icons.insights, 'TU JUEGO', 'Partidos, tiempo y constancia'),
-          const SizedBox(height: 8),
-          ..._gridRows(cells),
-          if (formats.isNotEmpty) ...[
-            Container(height: 1, color: AppColors.white(0.06)),
-            subTitle('POR FORMATO'),
-            for (final e in formats)
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 44,
-                      child: Text('${e.key}v${e.key}',
-                          style: AppText.archivo(
-                              size: 14,
-                              weight: FontWeight.w900,
-                              color: e.key == g.favoriteFormat
-                                  ? AppColors.accent
-                                  : AppColors.ink)),
-                    ),
-                    Expanded(
-                      child: Text(
-                        [
-                          if (e.value.games > 0)
-                            '${e.value.games} ${e.value.games == 1 ? 'partido' : 'partidos'}',
-                          if (e.value.winRate != null)
-                            '${e.value.winRate}% efectividad',
-                          if (e.value.avgPoints != null)
-                            '${one(e.value.avgPoints!)} pts/partido',
-                        ].join(' · '),
-                        style: AppText.grotesk(
-                            size: 12, color: AppColors.white(0.7)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 8),
-          ],
-          if (tm.games > 0 || lm.games > 0) ...[
-            Container(height: 1, color: AppColors.white(0.06)),
-            subTitle('ESTE MES VS. EL ANTERIOR'),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 14),
-              child: Row(
-                children: [
-                  trend('Partidos', '${tm.games}',
-                      lm.games > 0 ? '${lm.games}' : null,
-                      cmp(tm.games, lm.games)),
-                  trend(
-                      'Efectividad',
-                      tm.winRate == null ? '—' : '${tm.winRate}%',
-                      lm.winRate == null ? null : '${lm.winRate}%',
-                      cmp(tm.winRate, lm.winRate)),
-                  trend(
-                      'Pts/partido',
-                      tm.avgPoints == null ? '—' : one(tm.avgPoints!),
-                      lm.avgPoints == null ? null : one(lm.avgPoints!),
-                      cmp(tm.avgPoints, lm.avgPoints)),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  static String _cap(String s) =>
-      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
-
-  /// Card de estadísticas de juego ingresadas por el usuario.
-  Widget _userStatsCard(PlaySessionService ps) {
-    Widget stat(String label, String value, IconData icon, Color color) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 13, color: color),
-                const SizedBox(width: 6),
-                Text(label.toUpperCase(),
-                    style: AppText.grotesk(
-                        size: 9.5,
-                        weight: FontWeight.w700,
-                        color: AppColors.white(0.45),
-                        letterSpacing: 0.1)),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(value,
-                style: AppText.archivo(
-                    size: 20,
-                    weight: FontWeight.w900,
-                    height: 1.0,
-                    color: AppColors.ink)),
-          ],
-        ),
-      );
-    }
-
-    Widget hDiv() => Container(height: 1, color: AppColors.white(0.06));
-
-    // Puntos totales y promedio siempre (son el titular); el resto solo si > 0.
-    final cells = <Widget>[
-      stat('Puntos totales', '${ps.totalUserPoints}', Icons.score,
-          const Color(0xFFFF6B1A)),
-      // Por PARTIDO, no por sesión: una tarde de 5 partidos no puede pesar lo
-      // mismo que una de 1. Son los mismos getters que usa game_stats_screen,
-      // que antes mostraba otro número bajo la misma idea.
-      stat('Prom. por partido', ps.avgPointsPerGame.toStringAsFixed(1),
-          Icons.trending_up, const Color(0xFF22C55E)),
-      if (ps.bestGamePoints > 0)
-        stat('Mejor partido', '${ps.bestGamePoints}', Icons.emoji_events,
-            const Color(0xFFEAB308)),
-      stat('Partidos', '${ps.userGamesWithStats}', Icons.event_available,
-          const Color(0xFF64748B)),
-      // Del historial local (hasta 100 sesiones), no de toda la vida: ver
-      // `PlaySessionService.winRate`. Oculta con menos de 3 partidos.
-      if (ps.winRate != null)
-        stat('Efectividad', '${(ps.winRate! * 100).round()}%',
-            Icons.emoji_events_outlined, const Color(0xFF22C55E)),
-      if (ps.avgPointsPerShot > 0)
-        stat('Puntos por tiro', ps.avgPointsPerShot.toStringAsFixed(1),
-            Icons.my_location, const Color(0xFF14B8A6)),
-      if (ps.totalUserPts3 > 0)
-        stat('Puntos de 3', '${ps.totalUserPts3}', Icons.add_circle_outline,
-            const Color(0xFF3B82F6)),
-      if (ps.totalUserPts2 > 0)
-        stat('Puntos de 2', '${ps.totalUserPts2}', Icons.add_circle,
-            const Color(0xFFA855F7)),
-      if (ps.totalUserPts1 > 0)
-        stat('Puntos de 1', '${ps.totalUserPts1}',
-            Icons.free_cancellation, const Color(0xFFEAB308)),
-    ];
-    final rows = <Widget>[];
-    for (var i = 0; i < cells.length; i += 2) {
-      if (rows.isNotEmpty) rows.add(hDiv());
-      if (i + 1 < cells.length) {
-        rows.add(IntrinsicHeight(
-          child: Row(children: [
-            Expanded(child: cells[i]),
-            Container(width: 1, color: AppColors.white(0.06)),
-            Expanded(child: cells[i + 1]),
-          ]),
-        ));
-      } else {
-        rows.add(Row(children: [
-          Expanded(child: cells[i]),
-          const Expanded(child: SizedBox()),
-        ]));
-      }
-    }
-
-    // Distribución de puntos: de dónde salen tus puntos (3PT/2PT/TL).
-    final pts3 = ps.totalUserPts3 * 3;
-    final pts2 = ps.totalUserPts2 * 2;
-    final ptsTl = ps.totalUserPts1; // 1 c/u
-    final fromBreakdown = pts3 + pts2 + ptsTl;
-
-    // Toda la card es tocable: abre la pantalla desarrollada con gráficos y
-    // filtros de tiempo. El (?) del header captura su propio tap aparte.
     return PressableWidget(
       onTap: () => Navigator.push(
         context,
@@ -1773,6 +1636,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _cardHeader(
               Icons.sports_basketball,
@@ -1788,16 +1652,93 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   size: 20, color: AppColors.white(0.3)),
             ),
             const SizedBox(height: 8),
-            ...rows,
+            if (resumen.isNotEmpty) ..._gridRows(resumen),
+            if (puntos.isNotEmpty) ...[
+              hDiv(),
+              subTitle('PUNTOS'),
+              ..._gridRows(puntos),
+            ],
             if (fromBreakdown > 0) ...[
               hDiv(),
               _pointsDistribution(pts3, pts2, ptsTl, fromBreakdown),
+            ],
+            if (formats.isNotEmpty) ...[
+              hDiv(),
+              subTitle('POR FORMATO'),
+              const SizedBox(height: 4),
+              for (final e in formats)
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 44,
+                        child: Text('${e.key}v${e.key}',
+                            style: AppText.archivo(
+                                size: 14,
+                                weight: FontWeight.w900,
+                                color: e.key == g.favoriteFormat
+                                    ? AppColors.accent
+                                    : AppColors.ink)),
+                      ),
+                      Expanded(
+                        child: Text(
+                          [
+                            if (e.value.games > 0)
+                              '${e.value.games} ${e.value.games == 1 ? 'partido' : 'partidos'}',
+                            if (e.value.winRate != null)
+                              '${e.value.winRate}% efectividad',
+                            if (e.value.avgPoints != null)
+                              '${one(e.value.avgPoints!)} pts/partido',
+                          ].join(' · '),
+                          style: AppText.grotesk(
+                              size: 12, color: AppColors.white(0.7)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 8),
+            ],
+            if (tiempo.isNotEmpty) ...[
+              hDiv(),
+              subTitle('TIEMPO Y CONSTANCIA'),
+              ..._gridRows(tiempo),
+            ],
+            if (tm.games > 0 || lm.games > 0) ...[
+              hDiv(),
+              subTitle('ESTE MES VS. EL ANTERIOR'),
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 14),
+                child: Row(
+                  children: [
+                    trend('Partidos', '${tm.games}',
+                        lm.games > 0 ? '${lm.games}' : null,
+                        cmp(tm.games, lm.games)),
+                    trend(
+                        'Efectividad',
+                        tm.winRate == null ? '—' : '${tm.winRate}%',
+                        lm.winRate == null ? null : '${lm.winRate}%',
+                        cmp(tm.winRate, lm.winRate)),
+                    trend(
+                        'Pts/partido',
+                        tm.avgPoints == null ? '—' : one(tm.avgPoints!),
+                        lm.avgPoints == null ? null : one(lm.avgPoints!),
+                        cmp(tm.avgPoints, lm.avgPoints)),
+                  ],
+                ),
+              ),
             ],
           ],
         ),
       ),
     );
   }
+
+  static String _cap(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
   /// De dónde vienen tus puntos: barra apilada + leyenda por valor de tiro.
   Widget _pointsDistribution(int pts3, int pts2, int ptsTl, int total) {
