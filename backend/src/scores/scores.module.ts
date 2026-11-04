@@ -40,6 +40,7 @@ type TeamLine = {
   score: string;
   winner: boolean;
   record: string;
+  color: string; // hex sin '#', '' si ESPN no lo manda
 };
 
 type Game = {
@@ -52,7 +53,10 @@ type Game = {
 };
 
 type PlayerLine = {
+  id: string;
   name: string;
+  shortName: string;
+  headshot: string;
   position: string;
   starter: boolean;
   dnp: boolean;
@@ -60,17 +64,50 @@ type PlayerLine = {
 };
 
 type BoxTeam = {
+  side: 'home' | 'away';
   name: string;
   abbr: string;
   logo: string;
   score: string;
+  color: string;
+  altColor: string;
+  linescores: number[]; // puntos por período
   players: PlayerLine[];
+};
+
+/// Una jugada de la línea de tiempo, ya clasificada (la app no sabe de ESPN).
+/// `d` son los cambios de estadística que produce: [idJugador, stat, n], con
+/// stat ∈ pts reb ast stl blk to fgm fga tpm tpa ftm fta pf. Con eso la app
+/// arma el box score de CUALQUIER momento del partido sumando hasta ahí (se
+/// validó contra el box final de ESPN: 0 diferencias).
+type Play = {
+  t: number; // segundos de juego transcurridos
+  per: number; // período (5+ = suplementario)
+  clock: string; // reloj del período ("5:12", "38.8")
+  h: number; // marcador local después de la jugada
+  a: number; // marcador visitante
+  side: 'h' | 'a' | '';
+  kind: string; // made · miss · ft · reb · to · foul · sub · timeout · end · jump · other
+  v: number; // puntos de la jugada
+  text: string; // en castellano
+  d: [string, string, number][];
+  in?: string; // sustitución: entra
+  out?: string; // sustitución: sale
+  wp?: number; // probabilidad de ganar del local (0..1), si ESPN la da
+};
+
+type Timeline = {
+  periods: number; // períodos de juego regulares
+  periodLen: number; // segundos por período
+  otLen: number; // segundos del suplementario
+  plays: Play[];
 };
 
 type BoxScore = {
   game: Game | null;
   columns: string[];
   teams: BoxTeam[];
+  timeline: Timeline | null;
 };
 
 type StandingRow = {
@@ -151,6 +188,7 @@ export class ScoresService {
       score: c?.score?.displayValue ?? (typeof c?.score === 'string' ? c.score : '') ?? '',
       winner: c?.winner === true,
       record: c?.records?.[0]?.summary ?? '',
+      color: t.color ?? '',
     };
   }
 
@@ -217,9 +255,9 @@ export class ScoresService {
       const game = headerComp
         ? this.game({ id, date: headerComp.date, status: headerComp.status, competitions: [headerComp] })
         : null;
-      const scores = new Map<string, string>();
+      const header = new Map<string, any>(); // abbr → competidor del header
       for (const c of headerComp?.competitors ?? []) {
-        scores.set(c?.team?.abbreviation ?? '', c?.score ?? '');
+        header.set(c?.team?.abbreviation ?? '', c);
       }
       const teams: BoxTeam[] = [];
       for (const p of (d?.boxscore?.players ?? []) as any[]) {
@@ -227,22 +265,37 @@ export class ScoresService {
         const keys: string[] = block.keys ?? [];
         const idx = BOX_COLUMNS.map((c) => keys.indexOf(c.key));
         const players: PlayerLine[] = ((block.athletes ?? []) as any[]).map((a) => ({
+          id: String(a?.athlete?.id ?? ''),
           name: a?.athlete?.displayName ?? '',
+          shortName: a?.athlete?.shortName ?? a?.athlete?.displayName ?? '',
+          headshot: a?.athlete?.headshot?.href ?? '',
           position: a?.athlete?.position?.abbreviation ?? '',
           starter: a?.starter === true,
           dnp: a?.didNotPlay === true || !(a?.stats ?? []).length,
           stats: idx.map((i) => (i >= 0 ? String(a?.stats?.[i] ?? '') : '')),
         }));
         const abbr = p?.team?.abbreviation ?? '';
+        const h = header.get(abbr);
         teams.push({
+          side: h?.homeAway === 'home' ? 'home' : 'away',
           name: p?.team?.displayName ?? '',
           abbr,
           logo: p?.team?.logo ?? '',
-          score: scores.get(abbr) ?? '',
+          score: h?.score ?? '',
+          color: h?.team?.color ?? p?.team?.color ?? '',
+          altColor: h?.team?.alternateColor ?? p?.team?.alternateColor ?? '',
+          linescores: ((h?.linescores ?? []) as any[]).map((l) =>
+            Number(l?.displayValue ?? l?.value ?? 0),
+          ),
           players,
         });
       }
-      const box: BoxScore = { game, columns: BOX_COLUMNS.map((c) => c.label), teams };
+      const box: BoxScore = {
+        game,
+        columns: BOX_COLUMNS.map((c) => c.label),
+        teams,
+        timeline: this.timeline(d, headerComp, teams),
+      };
       const ttl =
         game?.state === 'post' ? TTL_FINAL_GAME_MS : game?.state === 'in' ? TTL_LIVE_MS : TTL_IDLE_MS;
       return this.store(key, box, ttl);
@@ -250,6 +303,165 @@ export class ScoresService {
       this.log.error(`summary ${league}/${id} falló: ${(e as Error)?.message ?? e}`);
       return null;
     }
+  }
+
+  /// Arma la línea de tiempo desde el play-by-play de ESPN. null si el partido
+  /// no tiene jugadas (todavía no empezó, o ESPN no las publica).
+  private timeline(d: any, headerComp: any, teams: BoxTeam[]): Timeline | null {
+    const raw: any[] = d?.plays ?? [];
+    if (!raw.length) return null;
+    const periods = Number(d?.format?.regulation?.periods ?? 4);
+    const periodLen = Number(d?.format?.regulation?.clock ?? 720);
+    const otLen = Number(d?.format?.overtime?.clock ?? 300);
+
+    // id de equipo de ESPN → lado.
+    const sideOf = new Map<string, 'h' | 'a'>();
+    for (const c of headerComp?.competitors ?? []) {
+      sideOf.set(String(c?.team?.id ?? c?.id ?? ''), c?.homeAway === 'home' ? 'h' : 'a');
+    }
+    const short = new Map<string, string>();
+    for (const t of teams) for (const p of t.players) short.set(p.id, p.shortName);
+    const nm = (id?: string) => (id ? short.get(id) ?? '' : '');
+
+    const wp = new Map<string, number>();
+    for (const w of (d?.winprobability ?? []) as any[]) {
+      if (w?.playId != null && typeof w?.homeWinPercentage === 'number') {
+        wp.set(String(w.playId), w.homeWinPercentage);
+      }
+    }
+
+    const secs = (c: string): number => {
+      const v = String(c ?? '0');
+      if (v.includes(':')) {
+        const [m, x] = v.split(':');
+        return Number(m) * 60 + Number(x);
+      }
+      return Number(v) || 0;
+    };
+    const elapsed = (per: number, clock: string): number => {
+      const base = per > periods ? periods * periodLen + (per - periods - 1) * otLen : (per - 1) * periodLen;
+      const len = per > periods ? otLen : periodLen;
+      return Math.max(0, Math.round(base + len - secs(clock)));
+    };
+
+    const plays: Play[] = [];
+    for (const p of raw) {
+      const type: string = p?.type?.text ?? '';
+      const tx: string = p?.text ?? '';
+      const tl = tx.toLowerCase();
+      const ids: string[] = ((p?.participants ?? []) as any[])
+        .map((x) => String(x?.athlete?.id ?? ''))
+        .filter((x) => x);
+      const [a1, a2] = ids;
+      const per = Number(p?.period?.number ?? 1);
+      const clock: string = p?.clock?.displayValue ?? '';
+      const dl: [string, string, number][] = [];
+      let kind = 'other';
+      let text = tx;
+      let v = 0;
+      let subIn: string | undefined;
+      let subOut: string | undefined;
+
+      if (type === 'Substitution' && a1 && a2) {
+        kind = 'sub';
+        subIn = a1;
+        subOut = a2;
+        text = `Entra ${nm(a1)} por ${nm(a2)}`;
+      } else if (p?.shootingPlay && a1) {
+        const made = p?.scoringPlay === true;
+        if (type.startsWith('Free Throw')) {
+          kind = 'ft';
+          dl.push([a1, 'fta', 1]);
+          if (made) {
+            v = 1;
+            dl.push([a1, 'ftm', 1], [a1, 'pts', 1]);
+          }
+          const m = type.match(/(\d+) of (\d+)/);
+          const which = m ? ` ${m[1]} de ${m[2]}` : type.includes('Technical') ? ' (técnica)' : '';
+          text = `${nm(a1)} ${made ? 'convierte' : 'falla'} libre${which}`;
+        } else {
+          // `pointsAttempted` marca el triple aunque el texto no lo diga
+          // ("misses running pullup jump shot" puede ser de tres).
+          const three = Number(p?.pointsAttempted ?? 0) === 3 || tl.includes('three point');
+          dl.push([a1, 'fga', 1]);
+          if (three) dl.push([a1, 'tpa', 1]);
+          if (made) {
+            kind = 'made';
+            v = Number(p?.scoreValue ?? (three ? 3 : 2));
+            dl.push([a1, 'fgm', 1], [a1, 'pts', v]);
+            if (three) dl.push([a1, 'tpm', 1]);
+            const dunk = /dunk/i.test(type);
+            text = `${nm(a1)} ${three ? 'anota un triple' : dunk ? 'la vuela' : 'anota de dos'}`;
+            if (tl.includes('assists') && a2) {
+              dl.push([a2, 'ast', 1]);
+              text += ` · asist. ${nm(a2)}`;
+            }
+          } else {
+            kind = 'miss';
+            text = `${nm(a1)} falla ${three ? 'un triple' : 'de dos'}`;
+            if (tl.includes('blocks') && a2) {
+              dl.push([a2, 'blk', 1]);
+              text += ` · tapa de ${nm(a2)}`;
+            }
+          }
+        }
+      } else if (type.includes('Rebound')) {
+        kind = 'reb';
+        const off = type.includes('Offensive');
+        if (a1) {
+          dl.push([a1, 'reb', 1]);
+          text = `Rebote ${off ? 'ofensivo' : 'defensivo'} de ${nm(a1)}`;
+        } else {
+          text = `Rebote ${off ? 'ofensivo' : 'defensivo'} del equipo`;
+        }
+      } else if (tl.includes('turnover') || type === 'Traveling') {
+        kind = 'to';
+        if (a1) dl.push([a1, 'to', 1]);
+        text = a1 ? `Pérdida de ${nm(a1)}` : 'Pérdida del equipo';
+        if (tl.includes('steals') && a2) {
+          dl.push([a2, 'stl', 1]);
+          text += ` · robo de ${nm(a2)}`;
+        }
+      } else if (type.includes('Foul')) {
+        kind = 'foul';
+        if (a1 && !type.includes('Technical')) dl.push([a1, 'pf', 1]);
+        text = `${type.includes('Technical') ? 'Técnica' : 'Falta'}${a1 ? ` de ${nm(a1)}` : ''}`;
+      } else if (type.includes('Timeout')) {
+        kind = 'timeout';
+        text = 'Tiempo muerto';
+      } else if (type === 'End Period' || type === 'End Game') {
+        kind = 'end';
+        text =
+          type === 'End Game'
+            ? 'Final del partido'
+            : per > periods
+              ? 'Fin del suplementario'
+              : `Fin del ${per}° ${periods === 4 ? 'cuarto' : 'período'}`;
+      } else if (type === 'Jumpball') {
+        kind = 'jump';
+        text = 'Salto inicial';
+      }
+
+      const side = sideOf.get(String(p?.team?.id ?? '')) ?? '';
+      const play: Play = {
+        t: elapsed(per, clock),
+        per,
+        clock,
+        h: Number(p?.homeScore ?? 0),
+        a: Number(p?.awayScore ?? 0),
+        side,
+        kind,
+        v,
+        text,
+        d: dl,
+      };
+      if (subIn) play.in = subIn;
+      if (subOut) play.out = subOut;
+      const w = wp.get(String(p?.id ?? ''));
+      if (w != null) play.wp = w;
+      plays.push(play);
+    }
+    return { periods, periodLen, otLen, plays };
   }
 
   /// Tabla de posiciones por conferencia, ordenada por puesto.

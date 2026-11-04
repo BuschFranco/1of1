@@ -223,78 +223,95 @@ class _GamesScreenState extends State<GamesScreen> {
       ? ''
       : '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
+  /// Color del equipo, aclarado si es tan oscuro que no se ve sobre el fondo.
+  Color _tc(ScoreTeam t, Color fallback) {
+    final c = teamColor(t.color) ?? fallback;
+    final hsl = HSLColor.fromColor(c);
+    return hsl.lightness < 0.32 ? hsl.withLightness(0.45).toColor() : c;
+  }
+
   Widget _gameCard(ScoreGame g) {
     final played = g.state != GameState.pre;
-    final statusText = switch (g.state) {
-      GameState.post => 'Final',
-      GameState.live => g.status,
-      GameState.pre => _time(g.date),
-    };
+    final live = g.state == GameState.live;
+    final ac = _tc(g.away, const Color(0xFF3B82F6));
+    final hc = _tc(g.home, AppColors.accent);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: PressableWidget(
         onTap: played ? () => _openGame(g) : null,
         child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
           decoration: BoxDecoration(
-            color: AppColors.card,
             borderRadius: BorderRadius.circular(AppShape.rCard),
+            // Los colores de los dos equipos, apenas, de punta a punta.
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [
+                ac.withValues(alpha: 0.22),
+                AppColors.card,
+                AppColors.card,
+                hc.withValues(alpha: 0.22),
+              ],
+              stops: const [0, 0.35, 0.65, 1],
+            ),
+            border: Border.all(
+                color: live
+                    ? const Color(0xFFEF4444).withValues(alpha: 0.6)
+                    : AppColors.white(0.05)),
           ),
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
           child: Row(
             children: [
-              Expanded(
-                child: Column(
-                  children: [
-                    _teamLine(g.away, g),
-                    const SizedBox(height: 8),
-                    _teamLine(g.home, g),
-                  ],
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 44,
-                margin: const EdgeInsets.symmetric(horizontal: 12),
-                color: AppColors.white(0.08),
-              ),
+              Expanded(child: _teamSide(g.away, g, ac, alignEnd: false)),
               SizedBox(
-                width: 64,
+                width: 92,
                 child: Column(
                   children: [
-                    if (g.state == GameState.live)
+                    if (played)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                                color: Color(0xFFEF4444),
-                                shape: BoxShape.circle),
-                          ),
-                          const SizedBox(width: 4),
-                          Text('EN VIVO',
+                          _score(g.away, g),
+                          Text('  –  ',
                               style: AppText.grotesk(
-                                  size: 9,
-                                  weight: FontWeight.w800,
-                                  color: const Color(0xFFEF4444))),
+                                  size: 14, color: AppColors.white(0.3))),
+                          _score(g.home, g),
                         ],
-                      ),
-                    Text(statusText,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        style: AppText.grotesk(
-                            size: 11,
-                            weight: FontWeight.w700,
-                            color: AppColors.white(0.6))),
-                    if (played) ...[
-                      const SizedBox(height: 4),
-                      Icon(Icons.chevron_right,
-                          size: 16, color: AppColors.white(0.3)),
-                    ],
+                      )
+                    else
+                      Text(_time(g.date),
+                          style: AppText.display(
+                              size: 24, color: AppColors.ink)),
+                    const SizedBox(height: 4),
+                    if (live)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const LiveDot(size: 6),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(g.status,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppText.grotesk(
+                                    size: 10,
+                                    weight: FontWeight.w800,
+                                    color: const Color(0xFFEF4444))),
+                          ),
+                        ],
+                      )
+                    else
+                      Text(
+                          g.state == GameState.post ? 'FINAL' : 'PRÓXIMO',
+                          style: AppText.grotesk(
+                              size: 9.5,
+                              weight: FontWeight.w800,
+                              color: AppColors.white(0.45),
+                              letterSpacing: 0.12)),
                   ],
                 ),
               ),
+              Expanded(child: _teamSide(g.home, g, hc, alignEnd: true)),
             ],
           ),
         ),
@@ -302,37 +319,41 @@ class _GamesScreenState extends State<GamesScreen> {
     );
   }
 
-  Widget _teamLine(ScoreTeam t, ScoreGame g) {
-    // Terminado: el que perdió queda apagado, como en cualquier marcador.
+  Widget _score(ScoreTeam t, ScoreGame g) {
     final dim = g.state == GameState.post && !t.winner;
-    final color = dim ? AppColors.white(0.45) : AppColors.ink;
-    return Row(
+    return Text(t.score,
+        style: AppText.display(
+            size: 26, color: dim ? AppColors.white(0.4) : AppColors.ink));
+  }
+
+  /// Escudo con halo del color del equipo + sigla y récord.
+  Widget _teamSide(ScoreTeam t, ScoreGame g, Color c, {required bool alignEnd}) {
+    final dim = g.state == GameState.post && !t.winner;
+    return Column(
       children: [
-        TeamLogo(url: t.logo, size: 24),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Row(
-            children: [
-              Flexible(
-                child: Text(t.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppText.grotesk(
-                        size: 13, weight: FontWeight.w700, color: color)),
-              ),
-              if (t.record.isNotEmpty) ...[
-                const SizedBox(width: 6),
-                Text(t.record,
-                    style: AppText.grotesk(
-                        size: 10, color: AppColors.white(0.35))),
-              ],
+        Container(
+          padding: const EdgeInsets.all(5),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withValues(alpha: 0.05),
+            boxShadow: [
+              BoxShadow(
+                  color: c.withValues(alpha: dim ? 0.1 : 0.35),
+                  blurRadius: 14),
             ],
           ),
+          child: Opacity(
+              opacity: dim ? 0.6 : 1, child: TeamLogo(url: t.logo, size: 34)),
         ),
-        if (g.state != GameState.pre)
-          Text(t.score,
-              style: AppText.archivo(
-                  size: 17, weight: FontWeight.w900, color: color)),
+        const SizedBox(height: 6),
+        Text(t.abbr,
+            style: AppText.archivo(
+                size: 13,
+                weight: FontWeight.w900,
+                color: dim ? AppColors.white(0.5) : AppColors.ink)),
+        if (t.record.isNotEmpty)
+          Text(t.record,
+              style: AppText.grotesk(size: 10, color: AppColors.white(0.4))),
       ],
     );
   }
@@ -377,6 +398,7 @@ class _GamesScreenState extends State<GamesScreen> {
         ),
       ));
     }
+    out.add(_standingsLegend());
     return out;
   }
 
@@ -386,29 +408,66 @@ class _GamesScreenState extends State<GamesScreen> {
         _ => n,
       };
 
-  /// Fila de la tabla; [r] null = encabezado.
+  /// Fila de la tabla; [r] null = encabezado. En NBA los 6 primeros van
+  /// directo a playoffs y del 7 al 10 al play-in: se marcan con un filete.
   Widget _standingRow(StandingRow? r) {
     final head = r == null;
     final style = AppText.grotesk(
         size: head ? 9.5 : 12,
         weight: head ? FontWeight.w700 : FontWeight.w600,
         color: head ? AppColors.white(0.4) : AppColors.ink);
-    Widget cell(String t, double w) =>
-        SizedBox(width: w, child: Text(t, textAlign: TextAlign.right, style: style));
+    Widget cell(String t, double w, {Color? color}) => SizedBox(
+        width: w,
+        child: Text(t,
+            textAlign: TextAlign.right,
+            style: color == null ? style : style.copyWith(color: color)));
+    final nba = _league == ScoresService.nba;
+    final zone = head
+        ? null
+        : nba
+            ? (r.seed <= 6
+                ? AppColors.open
+                : r.seed <= 10
+                    ? AppColors.busy
+                    : null)
+            : (r.seed <= 4 ? AppColors.open : null);
+    final streakColor = head || r.streak.isEmpty
+        ? null
+        : r.streak.startsWith('W')
+            ? AppColors.open
+            : const Color(0xFFEF4444);
+    final cutLine = !head && nba && (r.seed == 6 || r.seed == 10);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      padding: const EdgeInsets.fromLTRB(0, 9, 12, 9),
       decoration: BoxDecoration(
         border: Border(
-            bottom: BorderSide(color: AppColors.white(head ? 0.08 : 0.04))),
+          bottom: BorderSide(
+              color: cutLine
+                  ? AppColors.white(0.22)
+                  : AppColors.white(head ? 0.08 : 0.04),
+              width: cutLine ? 1.2 : 1),
+        ),
       ),
       child: Row(
         children: [
+          Container(
+            width: 3,
+            height: 20,
+            margin: const EdgeInsets.only(right: 9),
+            decoration: BoxDecoration(
+              color: zone ?? Colors.transparent,
+              borderRadius: const BorderRadius.horizontal(
+                  right: Radius.circular(3)),
+            ),
+          ),
           SizedBox(
               width: 22,
               child: Text(head ? '#' : '${r.seed}',
-                  style: style.copyWith(color: AppColors.white(0.45)))),
+                  style: style.copyWith(
+                      color: zone ?? AppColors.white(0.45),
+                      fontWeight: FontWeight.w800))),
           if (!head) ...[
-            TeamLogo(url: r.logo, size: 20),
+            TeamLogo(url: r.logo, size: 22),
             const SizedBox(width: 8),
           ],
           Expanded(
@@ -418,9 +477,34 @@ class _GamesScreenState extends State<GamesScreen> {
           cell(head ? 'G-P' : '${r.wins}-${r.losses}', 46),
           cell(head ? '%' : r.pct, 40),
           cell(head ? 'DIF' : r.gamesBehind, 36),
-          cell(head ? 'RACHA' : r.streak, 46),
+          cell(head ? 'RACHA' : r.streak.replaceAll('W', 'G').replaceAll('L', 'P'),
+              46,
+              color: streakColor),
         ],
       ),
+    );
+  }
+
+  /// Referencias de color de la tabla (solo NBA tiene play-in).
+  Widget _standingsLegend() {
+    Widget item(Color c, String t) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+            const SizedBox(width: 5),
+            Text(t,
+                style: AppText.grotesk(size: 10, color: AppColors.white(0.5))),
+          ],
+        );
+    return Wrap(
+      spacing: 14,
+      children: [
+        item(AppColors.open, 'Playoffs'),
+        if (_league == ScoresService.nba) item(AppColors.busy, 'Play-in'),
+      ],
     );
   }
 
@@ -507,4 +591,36 @@ class TeamLogo extends StatelessWidget {
       errorWidget: (_, _, _) => placeholder,
     );
   }
+}
+
+/// Punto rojo que late: indicador de partido EN VIVO.
+class LiveDot extends StatefulWidget {
+  final double size;
+  const LiveDot({super.key, this.size = 7});
+
+  @override
+  State<LiveDot> createState() => _LiveDotState();
+}
+
+class _LiveDotState extends State<LiveDot> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 900))
+    ..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+        opacity: Tween(begin: 0.35, end: 1.0).animate(_c),
+        child: Container(
+          width: widget.size,
+          height: widget.size,
+          decoration: const BoxDecoration(
+              color: Color(0xFFEF4444), shape: BoxShape.circle),
+        ),
+      );
 }
