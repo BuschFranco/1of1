@@ -102,6 +102,9 @@ Ejemplos: `_ReviewsSection`, `_PostsSection` en `detail_screen.dart`.
 | Ranking global | `globalranking::<period>` | 2 min | `ranking_screen.dart` |
 | Mensajes de chat | `chat::<pickupId>` | (semilla) | `PickupChatScreen` (últimos ~50; el polling incremental sigue igual) |
 | Noticias por liga | `news::<league>` (nba/wnba/lnb/3x3) | 30 min | `NewsScreen`. Sin invalidación por mutación: nadie crea noticias desde el cliente, es TTL puro. |
+| Partidos por liga | `scores::games::<league>` (nba/wnba) | 2 min | `GamesScreen` (Social → Partidos). TTL puro; el backend refresca cada 1 min si hay partidos en vivo. |
+| Box score | `scores::box::<league>::<id>` | 2 min | `GameDetailScreen`. |
+| Posiciones | `scores::standings::<league>` | 30 min | `GamesScreen`, vista Posiciones. |
 
 Notas:
 

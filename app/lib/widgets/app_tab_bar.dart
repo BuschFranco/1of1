@@ -132,7 +132,7 @@ class _AppTabBarState extends State<AppTabBar>
         AppTab.list => isActive ? Icons.stadium : Icons.stadium_outlined,
         // Botón principal: la pelota de básquet (el ícono que tenía Canchas).
         AppTab.plus => Icons.sports_basketball,
-        // Social: Crew (chats/pickups) + Noticias, ya no es solo mensajería.
+        // Social: Partidos (resultados NBA/WNBA) + Noticias. Crew vive en Perfil.
         AppTab.chat => isActive ? Icons.groups : Icons.groups_outlined,
         AppTab.profile => isActive ? Icons.person : Icons.person_outline,
       };
@@ -311,7 +311,7 @@ class _AppTabBarState extends State<AppTabBar>
                                             size: 12,
                                             color: AppColors.white(0.55)),
                                       ),
-                                    if (_slots[i] == AppTab.chat && widget.crewHasActivity)
+                                    if (_slots[i] == AppTab.profile && widget.crewHasActivity)
                                       Positioned(
                                         top: 6,
                                         right: 6,

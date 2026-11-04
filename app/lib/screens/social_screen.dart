@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_tour.dart';
 import '../widgets/segmented_tabs.dart';
-import 'crew_screen.dart';
+import 'games_screen.dart';
 import 'news_screen.dart';
 
-/// Pestaña "Social": Crew (pickups + chats, sin cambios) y Noticias (NBA /
-/// WNBA / Liga Nacional), en dos segmentos deslizables — mismo patrón que
-/// Perfil/Amigos en `profile_screen.dart`. El índice del segmento vive en
-/// `main_shell.dart` (como `_profileTab`), para que el swipe entre pestañas
-/// principales y entre segmentos comparta el mismo gesto.
+/// Pestaña "Social": Partidos (resultados y posiciones de NBA / WNBA) y
+/// Noticias (NBA / WNBA / Liga Nacional / 3x3), en dos segmentos deslizables.
+/// Crew (pickups + chats) se mudó al Perfil (Perfil/Amigos/Crew). El índice
+/// del segmento vive en `main_shell.dart` (como `_profileTab`), para que el
+/// swipe entre pestañas principales y entre segmentos comparta el mismo gesto.
 class SocialScreen extends StatelessWidget {
   final int activeTab;
   final ValueChanged<int> onTabChange;
@@ -35,19 +35,19 @@ class SocialScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: SegmentedTabs(
                 key: TourKeys.socialTabs,
-                labels: const ['Crew', 'Noticias'],
+                labels: const ['Partidos', 'Noticias'],
                 activeIndex: activeTab,
                 onChange: onTabChange,
               ),
             ),
             Expanded(
               // IndexedStack, no swap condicional: mantiene vivo el estado de
-              // los dos segmentos (Crew no vuelve a cargar sus pickups cada
-              // vez que volvés desde Noticias).
+              // los dos segmentos (la liga y la vista elegidas no se pierden
+              // al ir y volver de Noticias).
               child: IndexedStack(
                 index: activeTab,
                 children: const [
-                  CrewScreen(topPadding: 8),
+                  GamesScreen(topPadding: 8),
                   NewsScreen(topPadding: 8),
                 ],
               ),

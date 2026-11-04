@@ -32,6 +32,7 @@ import '../theme/app_theme.dart';
 import 'legal_screen.dart';
 import 'notifications_screen.dart';
 import 'match_detail_screen.dart';
+import 'crew_screen.dart';
 import 'game_stats_screen.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/court_image.dart';
@@ -52,7 +53,7 @@ class ProfileScreen extends StatefulWidget {
   /// Abre el detalle de una cancha (al tocar un favorito).
   final ValueChanged<String>? onSelectCourt;
 
-  /// Subpestaña activa (0 = Perfil, 1 = Amigos). Si viene dada, el estado lo
+  /// Subpestaña activa (0 = Perfil, 1 = Amigos, 2 = Crew). Si viene dada, el estado lo
   /// controla el padre (para poder cambiarla con swipe desde el shell); si es
   /// null, la pantalla la maneja internamente.
   final int? activeTab;
@@ -70,7 +71,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  int _localTab = 0; // 0 = Perfil, 1 = Amigos (fallback si no lo controla el padre)
+  int _localTab = 0; // 0 = Perfil, 1 = Amigos, 2 = Crew (fallback si no lo controla el padre)
 
   int get _tab => widget.activeTab ?? _localTab;
 
@@ -305,7 +306,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 16),
                     Expanded(
-                      child: _FriendsTab(profile: profile),
+                      child: _tab == 2
+                          ? const CrewScreen(topPadding: 0, embedded: true)
+                          : _FriendsTab(profile: profile),
                     ),
                   ],
                 ),
@@ -382,6 +385,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           _tabBtn('Perfil', 0),
           _tabBtn('Amigos', 1),
+          _tabBtn('Crew', 2),
         ],
       ),
     );
@@ -2819,7 +2823,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ('list', 'Canchas', Icons.stadium_outlined),
         ('profile', 'Perfil', Icons.person_outline),
         ('plus', 'Nuevo', Icons.add_circle_outline),
-        ('chat', 'Crew', Icons.group_outlined),
+        ('chat', 'Social', Icons.groups_outlined),
       ];
 
       return [

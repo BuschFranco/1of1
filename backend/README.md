@@ -167,8 +167,12 @@ emails se guardan en minúsculas y `DELETE /me` archiva ambas tablas.
 
 | Endpoint | Request | Response |
 | --- | --- | --- |
-| `POST /uploads/court-image` | multipart | `{url}` — sube al bucket `media` de Supabase Storage |
-| `GET /health` | — | `{ok: true}`. Lo usa el ping keep-alive contra el sleep de Render |
+| `POST /uploads/court-image` | multipart | `{url}` — sube a R2 (o a Supabase Storage sin las `R2_*`) |
+| `GET /health` | — | `1` (texto). Health check del deploy y de Render |
+| `GET /news?league=nba\|wnba\|lnb\|3x3` | — | `[{title, summary, url, imageUrl, source, publishedAt}]`. Caché 30 min |
+| `GET /scores/games?league=nba\|wnba` | — | `[{id, date, state (pre/in/post), status, home, away}]`: hoy y los 3 días anteriores, más nuevos primero. Fuente: ESPN (no oficial). Caché 1 min con partidos en vivo, si no 10 min |
+| `GET /scores/games/:id?league=` | — | Box score `{game, columns, teams: [{name, abbr, logo, score, players: [{name, position, starter, dnp, stats}]}]}` o `null` |
+| `GET /scores/standings?league=` | — | `[{name (conferencia), rows: [{seed, name, abbr, logo, wins, losses, pct, gamesBehind, streak}]}]`. Caché 30 min |
 
 > `PATCH /pickups/:pageId` también cubre la **reprogramación** (campo `dateTime`):
 > es lo que usa el creador para mover fecha/hora desde el chat del pickup. El

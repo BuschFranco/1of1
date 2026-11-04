@@ -8,6 +8,7 @@ import { FriendsModule } from './friends/friends.module';
 import { GeoModule } from './geo/geo.module';
 import { MatchesModule } from './matches/matches.module';
 import { NewsModule } from './news/news.module';
+import { ScoresModule } from './scores/scores.module';
 import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PickupsModule } from './pickups/pickups.module';
@@ -28,6 +29,7 @@ import { UploadsModule } from './uploads/uploads.module';
     FriendsModule,
     GeoModule,
     NewsModule,
+    ScoresModule,
     MatchesModule,
     SyncModule,
     ClansModule,

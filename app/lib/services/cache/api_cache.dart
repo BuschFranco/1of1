@@ -39,6 +39,10 @@ class ApiCache {
   // Noticias no necesitan frescura al segundo, y el backend ya cachea 30 min
   // de su lado (cupo compartido de NewsData.io) — acompañamos ese número.
   static const Duration ttlNews = Duration(minutes: 30);
+  // Partidos: con juegos en vivo el backend refresca cada 1 min; 2 min acá
+  // alcanza (pull-to-refresh fuerza). Posiciones cambian una vez por noche.
+  static const Duration ttlScores = Duration(minutes: 2);
+  static const Duration ttlStandings = Duration(minutes: 30);
 
   /// Valor cacheado sin importar su edad (o null si nunca se guardó).
   static T? peek<T>(String key) => _store[key]?.value as T?;

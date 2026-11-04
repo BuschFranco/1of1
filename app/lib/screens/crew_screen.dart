@@ -12,13 +12,16 @@ import 'pickup_chat_screen.dart';
 
 class CrewScreen extends StatefulWidget {
   /// Espacio arriba del título antes de que empiece el scroll. Default: el
-  /// mismo que siempre tuvo (pantalla completa, sin nada arriba). Dentro de
-  /// `SocialScreen` (segmento Crew/Noticias) el selector de segmentos ya
-  /// ocupa ese lugar, así que ahí se pasa un valor chico para no duplicar el
-  /// espacio en blanco.
+  /// mismo que siempre tuvo (pantalla completa, sin nada arriba). Embebida en
+  /// Perfil (segmento Perfil/Amigos/Crew) el selector ya ocupa ese lugar, así
+  /// que ahí se pasa un valor chico.
   final double topPadding;
 
-  const CrewScreen({super.key, this.topPadding = 56});
+  /// Embebida en el Perfil: sin fondo propio (se ve el fondo del perfil) y sin
+  /// el titular "Tu Crew." (el segmento seleccionado ya dice dónde estás).
+  final bool embedded;
+
+  const CrewScreen({super.key, this.topPadding = 56, this.embedded = false});
 
   @override
   State<CrewScreen> createState() => _CrewScreenState();
@@ -70,7 +73,7 @@ class _CrewScreenState extends State<CrewScreen> {
         .toList();
 
     return Container(
-      color: AppColors.lilac,
+      color: widget.embedded ? Colors.transparent : AppColors.lilac,
       child: RefreshIndicator(
         onRefresh: () => _load(force: true),
         color: AppColors.accent,
@@ -78,6 +81,7 @@ class _CrewScreenState extends State<CrewScreen> {
         child: ListView(
           padding: EdgeInsets.fromLTRB(20, widget.topPadding, 20, 160),
           children: [
+            if (!widget.embedded) ...[
             // Titular de dos líneas, como Canchas: la segunda en acento.
             Text.rich(
               TextSpan(
@@ -105,11 +109,12 @@ class _CrewScreenState extends State<CrewScreen> {
               ),
             ),
             const SizedBox(height: 6),
+            ],
             Text(
               'Tus conversaciones activas',
               style: AppText.grotesk(size: 13, color: AppColors.white(0.6)),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: widget.embedded ? 12 : 20),
             KeyedSubtree(
               key: TourKeys.crewList,
               child: provider.loading

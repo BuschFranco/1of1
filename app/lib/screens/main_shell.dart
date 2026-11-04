@@ -78,11 +78,11 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
   }
   AppTab _previousTab = AppTab.home;
 
-  // Subpestaña del Perfil (0 = Perfil, 1 = Amigos). Vive acá para que el swipe
+  // Subpestaña del Perfil (0 = Perfil, 1 = Amigos, 2 = Crew). Vive acá para que el swipe
   // del shell pueda alternarla antes de saltar a otra pestaña principal.
   int _profileTab = 0;
 
-  // Subpestaña de Social (0 = Crew, 1 = Noticias). Mismo motivo que _profileTab.
+  // Subpestaña de Social (0 = Partidos, 1 = Noticias). Mismo motivo que _profileTab.
   int _socialTab = 0;
 
   // Tope de seguridad del loader: si las señales (mapa/GPS/canchas) no llegan,
@@ -195,24 +195,18 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
     AppTab.chat: [
       TourStep(
         TourKeys.socialTabs,
-        'Crew y Noticias',
-        'En Crew están los chats de tus pickups; en Noticias, lo último de la '
-            'NBA, la WNBA, la Liga Nacional y el 3x3.',
-      ),
-      TourStep(
-        TourKeys.crewList,
-        'Tus pickups',
-        'Acá aparecen los pickups que creaste o aceptaste. Tocá uno para abrir '
-            'el chat y coordinar. Las invitaciones nuevas te llegan a la '
-            'campanita del Perfil.',
+        'Partidos y Noticias',
+        'En Partidos, los resultados, el box score y las posiciones de la NBA '
+            'y la WNBA; en Noticias, lo último de la NBA, la WNBA, la Liga '
+            'Nacional y el 3x3.',
       ),
     ],
     AppTab.profile: [
       TourStep(
         TourKeys.profileTabs,
-        'Amigos',
-        'Buscá jugadores por su usuario, agregalos y mirá cuándo están '
-            'jugando.',
+        'Amigos y Crew',
+        'En Amigos buscá jugadores por su usuario y mirá cuándo están jugando. '
+            'En Crew están los chats de los pickups que creaste o aceptaste.',
         scroll: () => TourKeys.profileScroll,
       ),
       TourStep(
@@ -357,12 +351,12 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
     TourStep(
       TourKeys.tab(AppTab.chat),
       'Social',
-      'Tu crew, los chats de tus pickups y noticias de básquet.',
+      'Resultados y posiciones de la NBA y la WNBA, y noticias de básquet.',
     ),
     TourStep(
       TourKeys.tab(AppTab.profile),
       'Tu perfil',
-      'Tu nivel, EXP, rachas, logros y el historial de tus sesiones.',
+      'Tu nivel, EXP, logros, tus sesiones, tus amigos y los chats de tu crew.',
     ),
   ];
 
@@ -536,11 +530,21 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
       _previousTab = _tab;
       _tab = t;
     });
-    // Limpiar badge de activity al entrar a crew.
-    if (t == AppTab.chat && crewActivityNotifier.value) {
-      crewActivityNotifier.value = false;
-      SharedPreferences.getInstance().then((p) => p.setBool('crew_activity', false));
-    }
+    // Limpiar badge de activity al entrar a Crew (segmento del Perfil).
+    if (t == AppTab.profile && _profileTab == 2) _clearCrewActivity();
+  }
+
+  /// Apaga el puntito de actividad de Crew (pickups/chats nuevos).
+  void _clearCrewActivity() {
+    if (!crewActivityNotifier.value) return;
+    crewActivityNotifier.value = false;
+    SharedPreferences.getInstance()
+        .then((p) => p.setBool('crew_activity', false));
+  }
+
+  void _setProfileTab(int t) {
+    setState(() => _profileTab = t);
+    if (t == 2) _clearCrewActivity();
   }
 
   /// Botón "atrás" del sistema (Android): cierra overlays o vuelve a la pestaña
@@ -555,12 +559,12 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
       _closeDetail();
       return true;
     }
-    // En Perfil, si estás en Amigos, atrás vuelve a Perfil (como el swipe).
-    if (_tab == AppTab.profile && _profileTab == 1) {
+    // En Perfil, si estás en Amigos o Crew, atrás vuelve a Perfil.
+    if (_tab == AppTab.profile && _profileTab != 0) {
       setState(() => _profileTab = 0);
       return true;
     }
-    // Ídem en Social: si estás en Noticias, atrás vuelve a Crew.
+    // Ídem en Social: si estás en Noticias, atrás vuelve a Partidos.
     if (_tab == AppTab.chat && _socialTab == 1) {
       setState(() => _socialTab = 0);
       return true;
@@ -597,27 +601,27 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
   void _handleTabSwipe(DragEndDetails d) {
     final v = d.primaryVelocity ?? 0;
     if (v == 0) return;
-    // Dentro del Perfil, el swipe alterna entre las subpestañas Perfil/Amigos.
+    // Dentro del Perfil, el swipe recorre las subpestañas Perfil/Amigos/Crew.
     // Solo cae a la navegación entre pestañas principales cuando ya está en el
-    // extremo (izquierda desde Perfil → nada; derecha desde Perfil → anterior).
+    // extremo (izquierda desde Crew → nada; derecha desde Perfil → anterior).
     if (_tab == AppTab.profile) {
-      if (v < 0 && _profileTab == 0) {
-        setState(() => _profileTab = 1); // swipe izquierda → Amigos
+      if (v < 0 && _profileTab < 2) {
+        _setProfileTab(_profileTab + 1); // swipe izquierda → Amigos / Crew
         return;
       }
-      if (v > 0 && _profileTab == 1) {
-        setState(() => _profileTab = 0); // swipe derecha → Perfil
+      if (v > 0 && _profileTab > 0) {
+        _setProfileTab(_profileTab - 1); // swipe derecha → Amigos / Perfil
         return;
       }
     }
-    // Ídem, para el segmento Crew/Noticias de Social.
+    // Ídem, para el segmento Partidos/Noticias de Social.
     if (_tab == AppTab.chat) {
       if (v < 0 && _socialTab == 0) {
         setState(() => _socialTab = 1); // swipe izquierda → Noticias
         return;
       }
       if (v > 0 && _socialTab == 1) {
-        setState(() => _socialTab = 0); // swipe derecha → Crew
+        setState(() => _socialTab = 0); // swipe derecha → Partidos
         return;
       }
     }
@@ -837,7 +841,7 @@ class _MainShellState extends State<MainShell> with RestorationMixin {
           key: const ValueKey('tab:profile'),
           onSelectCourt: _openDetail,
           activeTab: _profileTab,
-          onTabChange: (t) => setState(() => _profileTab = t),
+          onTabChange: _setProfileTab,
         ),
     };
     final tabKey = ValueKey('tab:${_tab.name}');

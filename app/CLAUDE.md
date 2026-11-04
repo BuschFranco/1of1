@@ -237,6 +237,13 @@ Supabase ya no se usa (queda hasta apagarlo).
 - El **swipe horizontal** entre pestañas (todas menos el mapa) está en `main_shell`
   (`_handleTabSwipe` + `_swipeTabs`). Si sumás una pestaña, decidí si entra en
   `_swipeTabs`.
+- **Subpestañas (segmentos):** Social = **Partidos | Noticias**
+  (`games_screen.dart`, `news_screen.dart`; los datos vienen de `ScoresModule`
+  y `NewsModule` del backend, que le pegan a ESPN/NewsData.io). Perfil =
+  **Perfil | Amigos | Crew** (`CrewScreen(embedded: true)`). El índice de cada
+  una vive en `main_shell` (`_socialTab`, `_profileTab`) para que el swipe y el
+  botón atrás las recorran antes de cambiar de pestaña principal. El puntito de
+  actividad de Crew va en el ícono de Perfil.
 - **Primer ingreso: bienvenida → permisos → tour, en fila.** Lo ordena
   `MainShell._firstRunSequence`, que arranca cuando se va el loader. No dispares
   diálogos sueltos en el arranque (se pisaban). El tour (coach marks,
@@ -471,7 +478,7 @@ El branding está centralizado. Seguí este checklist en orden.
     (`web/src/styles/tokens.css`): azules muy oscuros, no negro puro. La rampa de
     superficies, de más oscura a más clara, es
     `lilac` #080E18 → `bg` #0D141E → `bgElev` #141B26 → `card`/`panel` #1A202A.
-    - `lilac` es el fondo de **Canchas y Crew**, más oscuro que `bg` a propósito.
+    - `lilac` es el fondo de **Canchas y Social**, más oscuro que `bg` a propósito.
     - `bgElev` es un paso **intermedio** entre `bg` y `card`: los modales se
       pintan con `bgElev` y sus secciones con `card`, así que igualarlos aplana
       los sheets y los diálogos.

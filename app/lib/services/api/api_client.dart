@@ -425,6 +425,22 @@ class ApiClient {
   Future<List<Map<String, dynamic>>> getNews(String league) =>
       _list(_send('GET', '/news', query: {'league': league}));
 
+  // ── Partidos (NBA / WNBA) ──────────────────────────────────────────────
+
+  /// Partidos de hoy y de los últimos días de [league] ('nba' | 'wnba').
+  Future<List<Map<String, dynamic>>> getScoreGames(String league) =>
+      _list(_send('GET', '/scores/games', query: {'league': league}));
+
+  /// Box score de un partido, o null si el backend no lo tiene.
+  Future<Map<String, dynamic>?> getBoxScore(String league, String id) async {
+    final r = await _send('GET', '/scores/games/$id', query: {'league': league});
+    return r is Map ? r.cast<String, dynamic>() : null;
+  }
+
+  /// Tabla de posiciones por conferencia.
+  Future<List<Map<String, dynamic>>> getStandings(String league) =>
+      _list(_send('GET', '/scores/standings', query: {'league': league}));
+
   /// Sube una imagen de cancha (ya comprimida) a Storage vía multipart.
   /// Devuelve la URL pública. Timeout propio más largo que el de JSON.
   ///

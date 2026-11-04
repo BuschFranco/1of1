@@ -106,10 +106,11 @@ enviamos desde nuestros servidores ni compartimos datos con terceros para
 mostrarlas. Podés apagarlas desde los permisos del sistema, y el recordatorio de
 volver a jugar desde Ajustes → Privacidad.
 
-NOTICIAS
-La sección de Noticias muestra notas de básquet (NBA, WNBA y Liga Nacional) que
-nuestro servidor obtiene de ESPN y NewsData.io. Para eso no enviamos ningún dato
-tuyo a esos servicios: la consulta es solo por liga.
+PARTIDOS Y NOTICIAS
+Las secciones de Partidos y Noticias muestran resultados, estadísticas y notas de
+básquet (NBA, WNBA y Liga Nacional) que nuestro servidor obtiene de ESPN y
+NewsData.io. Para eso no enviamos ningún dato tuyo a esos servicios: la consulta
+es solo por liga o por partido.
 
 CUÁNTO TIEMPO LOS CONSERVAMOS
 Conservamos tus datos mientras tu cuenta esté activa. Si eliminás tu cuenta, los
