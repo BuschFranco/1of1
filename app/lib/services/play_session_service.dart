@@ -72,8 +72,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   static const Duration pointsTimeCap = Duration(hours: 3);
   // Pregunta de partido largo: al llegar a [pointsTimeCap] de juego neto se
   // pausa el cronómetro y se pregunta si el partido sigue. Sin respuesta en
-  // [confirmTimeout] se cancela POR COMPLETO (sin puntos ni historial); con
-  // "SÍ" hay [overtimeMax] extra y a las 3h netas se cierra y guarda solo.
+  // [confirmTimeout] se CIERRA Y GUARDA con el tiempo del momento de la
+  // pregunta (antes se descartaba entera y el usuario perdía 3 horas de juego);
+  // con "SÍ" hay [overtimeMax] extra y a las 4h netas se cierra y guarda solo.
   // GEMELAS: session_alarms._kConfirmAfter / _kConfirmTimeout.
   static const Duration confirmTimeout = Duration(minutes: 20);
   static const Duration overtimeMax = Duration(hours: 1);
@@ -113,6 +114,8 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
   String get _kLog => _k('play_log');
   // Cola de sesiones por respaldar en el servidor (mismo patrón que pending_matches).
   String get _kPendingSessions => _k('pending_sessions');
+  // Sesiones que el usuario borró y falta avisar al servidor (epoch ms).
+  String get _kPendingSessionDeletes => _k('pending_session_deletes');
   String get _kPending => _k('play_pending_result');
   String get _kStreak => _k('play_streak');
   String get _kStreakHist => _k('play_streak_history');
@@ -226,6 +229,10 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Quitar la notificación de sesión.
   VoidCallback? onClearSessionNotif;
+
+  /// El usuario borró una sesión del historial: hay que avisar al servidor
+  /// (lo cablea SyncCoordinator).
+  VoidCallback? onSessionDeleted;
 
   // Si la app está en primer plano (no mostramos la notif de sesión en ese caso).
   bool _foreground = true;
@@ -401,6 +408,71 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
 
   /// True si [s] tiene configuración propia (para ofrecer "volver al default").
   bool hasVisibilityOverride(PlaySession s) => s.hiddenSections != null;
+
+  /// El usuario borra una sesión de su historial. Deja de contar en todo lo
+  /// que se calcula del historial: estadísticas de juego (récord, efectividad,
+  /// puntos, formatos, tiempo, mes contra mes), salud y el historial de la
+  /// cancha. NO se descuentan la EXP, el nivel, los logros, las rachas ni el
+  /// ranking: son acumulados (y el ranking de amigos/clanes está en el
+  /// servidor); borrar no puede ser una forma de "editar" el ranking.
+  ///
+  /// En el servidor queda archivada (no vuelve al restaurar en otro celu): el
+  /// aviso va por una cola, así funciona sin red.
+  Future<void> deleteSession(PlaySession s) async {
+    final i = _log.indexWhere((e) =>
+        e.endedAtMillis == s.endedAtMillis && e.courtId == s.courtId);
+    if (i < 0) return;
+    _log.removeAt(i);
+    notifyListeners();
+    await _persistLog();
+    AnalyticsService.event('play_session_delete', {
+      'minutes': s.seconds ~/ 60,
+    });
+    if (s.endedAtMillis <= 0 || _userKey.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    // Si todavía no había subido, no tiene sentido subirla.
+    final pending = prefs.getStringList(_kPendingSessions) ?? <String>[];
+    pending.removeWhere((e) {
+      try {
+        return (jsonDecode(e) as Map)['endedAtMs'] == s.endedAtMillis;
+      } catch (_) {
+        return false;
+      }
+    });
+    await prefs.setStringList(_kPendingSessions, pending);
+    if (!ApiConfig.isConfigured) return;
+    final dels = prefs.getStringList(_kPendingSessionDeletes) ?? <String>[];
+    final id = '${s.endedAtMillis}';
+    if (!dels.contains(id)) dels.add(id);
+    await prefs.setStringList(_kPendingSessionDeletes, dels);
+    onSessionDeleted?.call();
+  }
+
+  /// Borrados pendientes de avisar al servidor (epoch ms).
+  Future<List<int>> readPendingSessionDeletes() async {
+    final prefs = await SharedPreferences.getInstance();
+    return [
+      for (final e in prefs.getStringList(_kPendingSessionDeletes) ??
+          const <String>[])
+        if (int.tryParse(e) != null) int.parse(e),
+    ];
+  }
+
+  /// Quita de la cola los borrados que el servidor ya confirmó.
+  Future<void> ackSessionDeletes(Set<int> done) async {
+    if (done.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final left = [
+      for (final e in prefs.getStringList(_kPendingSessionDeletes) ??
+          const <String>[])
+        if (!done.contains(int.tryParse(e))) e,
+    ];
+    if (left.isEmpty) {
+      await prefs.remove(_kPendingSessionDeletes);
+    } else {
+      await prefs.setStringList(_kPendingSessionDeletes, left);
+    }
+  }
 
   /// Guarda el default del usuario. Los partidos SIN override lo reflejan al
   /// instante; los que tienen uno conservan el suyo.
@@ -916,7 +988,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
       // Esperando respuesta: solo vigilamos el timeout (la alarma de
       // background es el respaldo con el proceso muerto).
       if (DateTime.now().difference(_confirmAskedAt!) >= confirmTimeout) {
-        discardOnTimeout();
+        closeOnTimeout();
       }
       return;
     }
@@ -995,20 +1067,32 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     _endSession();
   }
 
-  /// Venció el timeout sin respuesta: cancela el partido POR COMPLETO — no
-  /// queda pendiente, no suma puntos, ni tiempo, ni jugadas, ni historial.
-  void discardOnTimeout() {
+  /// Venció el timeout sin respuesta: CIERRA Y GUARDA la sesión con el
+  /// tiempo congelado en la pregunta (como "NO, TERMINÉ"), así queda pendiente
+  /// de "¿Cómo te fue?" y suma como cualquier sesión. La espera no cuenta y el
+  /// fin es el momento de la pregunta (las métricas de salud se leen de esa
+  /// ventana, no de los 20 minutos de espera). Snooze de la cancha: el celu
+  /// probablemente sigue en el radio.
+  void closeOnTimeout() {
     if (!awaitingConfirm) return;
-    AnalyticsService.event('play_session_discard', {
+    final askedAt = _confirmAskedAt!;
+    AnalyticsService.event('play_session_timeout_save', {
       'minutes': _elapsed ~/ 60,
-      'reason': 'confirm_timeout',
     });
     onCancelConfirmNotif?.call();
+    unawaited(cancelConfirmTimeoutAlarm());
     final id = _courtId;
     if (id != null) unawaited(_setSnooze(id));
-    onNoticeNotif?.call('Sesión cancelada',
-        'No respondiste si seguías jugando, así que no la guardamos.');
-    _resetLiveSession();
+    // Si la sesión la adoptamos de background, _elapsed corrió hasta "now":
+    // se recorta al juego neto hasta la pregunta.
+    final start = _startedAt;
+    if (start != null) {
+      final cap = askedAt.difference(start).inSeconds - _pausedSeconds;
+      if (cap > 0 && _elapsed > cap) _elapsed = cap;
+    }
+    onNoticeNotif?.call('Cerramos tu sesión de juego',
+        'No respondiste si seguías jugando, así que la guardamos hasta ese momento. Registrá el resultado.');
+    _endSession(endedAt: askedAt);
   }
 
   /// True cuando estamos acumulando permanencia en una cancha cercana pero el
@@ -1108,7 +1192,7 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
           _confirmAskedAt = DateTime.fromMillisecondsSinceEpoch(askedMillis);
           _pausedAt ??= _confirmAskedAt;
           if (DateTime.now().difference(_confirmAskedAt!) >= confirmTimeout) {
-            discardOnTimeout();
+            closeOnTimeout();
           } else {
             _renderSessionNotif();
             notifyListeners();
@@ -2179,7 +2263,9 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  void _endSession({bool lowBattery = false}) {
+  /// [endedAt]: fin real de la sesión si no es "ahora" (p. ej. el timeout de
+  /// la pregunta de sesión larga cierra en el momento de la pregunta).
+  void _endSession({bool lowBattery = false, DateTime? endedAt}) {
     onPresenceChanged?.call(false, '', null);
 
     final endedSeconds = _elapsed;
@@ -2198,15 +2284,15 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
     // Dejamos el partido "pendiente de resultado": la UI le preguntará al
     // usuario cómo le fue (Ganó/Perdió/Empató/...). El registro local (jugada,
     // tiempo, puntos, racha, historial) se hace al resolver, en resolvePending.
-    final endedAt = DateTime.now();
+    final end = endedAt ?? DateTime.now();
     _pendingSession = PlaySession(
       courtId: endedCourtId,
       courtName: endedCourtName,
       seconds: endedSeconds,
-      endedAtMillis: endedAt.millisecondsSinceEpoch,
+      endedAtMillis: end.millisecondsSinceEpoch,
     );
     _persistPending();
-    onMatchEnded?.call(endedCourtId, endedAt, lowBattery);
+    onMatchEnded?.call(endedCourtId, end, lowBattery);
     _resetLiveSession();
   }
 
@@ -3032,8 +3118,35 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         final now = DateTime.now();
 
         if (now.difference(start) > const Duration(hours: 6)) {
-          // Demasiado vieja: la descartamos.
+          // Demasiado vieja (la app estuvo cerrada mucho tiempo): antes se
+          // descartaba y se perdía todo lo jugado. Ahora se GUARDA hasta lo
+          // último que sabemos: el último latido, la pregunta de sesión larga
+          // o, sin datos, el tope de puntos; nunca más de 4 h.
+          var end = hasHeartbeat ? lastSeen : start.add(pointsTimeCap);
+          if (askedAt != null && askedAt.isBefore(end)) end = askedAt;
+          final maxEnd = start.add(pointsTimeCap + overtimeMax);
+          if (end.isAfter(maxEnd)) end = maxEnd;
+          final seconds = end.difference(start).inSeconds;
+          if (seconds >= minMatch.inSeconds) {
+            _pendingSession = PlaySession(
+              courtId: courtId ?? '',
+              courtName: courtName ?? '',
+              seconds: seconds,
+              endedAtMillis: end.millisecondsSinceEpoch,
+            );
+            await _persistPending();
+          }
+          if (courtId != null && courtId.isNotEmpty) {
+            unawaited(_setSnooze(courtId));
+          }
           await _clearActive();
+          unawaited(cancelStartAlarm());
+          unawaited(cancelEndAlarm());
+          unawaited(cancelBatteryWatch());
+          unawaited(cancelConfirmAlarm());
+          unawaited(cancelConfirmTimeoutAlarm());
+          unawaited(cancelHardEndAlarm());
+          onCancelConfirmNotif?.call();
         } else if (endsAt != null && !now.isBefore(endsAt)) {
           // Habías salido de la cancha y la gracia venció con la app cerrada: el
           // partido debía cerrarse a [endsAt]. Lo guardamos con esa duración (la
@@ -3055,8 +3168,18 @@ class PlaySessionService extends ChangeNotifier with WidgetsBindingObserver {
         } else if (askedAt != null &&
             now.difference(askedAt) >= confirmTimeout) {
           // La pregunta venció sin respuesta y su alarma de timeout no llegó a
-          // correr: descartamos POR COMPLETO (sin pendiente, sin puntos) —
-          // misma regla que el timeout en background.
+          // correr: se GUARDA con el tiempo de la pregunta (misma regla que el
+          // timeout en background).
+          final seconds = askedAt.difference(start).inSeconds;
+          if (seconds >= minMatch.inSeconds) {
+            _pendingSession = PlaySession(
+              courtId: courtId ?? '',
+              courtName: courtName ?? '',
+              seconds: seconds,
+              endedAtMillis: askedAt.millisecondsSinceEpoch,
+            );
+            await _persistPending();
+          }
           if (courtId != null && courtId.isNotEmpty) {
             unawaited(_setSnooze(courtId));
           }

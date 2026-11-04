@@ -117,9 +117,9 @@ deja de sumar puntos), PLAYING entra en un sub-estado de pausa forzada:
    ┌──────────┐ ─────────────▶ ┌──────────┐  │   a las 4h netas cierra y GUARDA solo
    │ PLAYING  │                │ AWAITING │──┤   (+ snooze 2:30hs + botón manual)
    │          │                │ CONFIRM  │  ├─ "NO, TERMINÉ" → cierra normal (tiempo
-   └──────────┘                │ (pausado)│  │   congelado en 2h) + snooze 2:30hs
-                               └──────────┘  └─ sin respuesta en 20 min → CANCELADO
-                                                 (sin puntos/historial) + snooze 2:30hs
+   └──────────┘                │ (pausado)│  │   congelado en 3h) + snooze 2:30hs
+                               └──────────┘  └─ sin respuesta en 20 min → cierra y
+                                                 GUARDA (tiempo de la pregunta) + snooze
 ```
 
 - El cronómetro y la detección quedan **congelados** (reutiliza el mecanismo
@@ -131,9 +131,11 @@ deja de sumar puntos), PLAYING entra en un sub-estado de pausa forzada:
   límite". No se vuelve a preguntar.
 - **"No, terminé"**: cierre normal con el tiempo congelado en las 3 h — queda
   pendiente de "¿Cómo te fue?" y suma como cualquier partido.
-- **Sin respuesta en 20 min** (`confirmTimeout`): el partido se **cancela por
-  completo** — no queda pendiente, no suma puntos, ni tiempo, ni jugadas, ni
-  historial.
+- **Sin respuesta en 20 min** (`confirmTimeout`): la sesión se **cierra y se
+  guarda** con el tiempo congelado en la pregunta (como "No, terminé"), con
+  aviso "Cerramos tu sesión de juego". Termina en el momento de la pregunta,
+  no a los 20 min, para que salud lea la ventana jugada. Antes se descartaba
+  entera y se perdían 3 h de juego (`closeOnTimeout` / `alarmConfirmTimeoutCallback`).
 - Los tres desenlaces (límite / No / timeout) aplican el **snooze de 2 h 30 min**
   de la cancha (mismo flujo que "No juego"): el celu sigue en el radio y sin eso
   arrancaría otra cuenta regresiva al instante. Queda el botón **"Iniciar
@@ -166,12 +168,12 @@ Casos especiales:
 | salís del radio | Arranca la **gracia de salida**: **6 min** continuos afuera para cerrar. Aviso "se cierra pronto" cuando faltan **3 min**. Si volvés **15 s** continuos adentro, se cancela. La gracia CUENTA como tiempo jugado. | `exitGrace` 6 min · `endNotifLeadTime` 3 min |
 | **1:30 h** | El multiplicador de puntos por duración llega a su tope (×1.8). | `multiplierCap` 90 min |
 | **3 h netas** | El tiempo deja de sumar puntos Y salta la **pregunta "¿Seguís jugando?"**: el cronómetro se PAUSA hasta que respondas. | `pointsTimeCap` 3 h |
-| +20' sin respuesta | Partido **CANCELADO por completo** (sin puntos/historial/tiempo) + snooze 2 h 30 min + botón manual. | `confirmTimeout` 20 min |
+| +20' sin respuesta | Se **cierra y GUARDA** con el tiempo de la pregunta (pendiente de "¿Cómo te fue?") + snooze 2 h 30 min + botón manual. | `confirmTimeout` 20 min |
 | respondés "No" | Cierre normal con el tiempo congelado en 3 h (pendiente de "¿Cómo te fue?") + snooze 2 h 30 min + botón manual. | — |
 | respondés "Sí" | Reanuda (la espera no cuenta) con **1 h más** como máximo. | `overtimeMax` 1 h |
 | **4 h netas** | **Tope duro**: cierra y GUARDA solo + "llegaste al tiempo límite" + snooze 2 h 30 min + botón manual. | 3 h + 1 h |
-| tras cerrar/cancelar | La cancha queda silenciada **1 h** ("No juego"/DETENER/límite/timeout): arranque solo manual. El snooze se limpia si estás **2 min** continuos fuera del radio. | `dwellSnooze` 2 h 30 min · `snoozeExitClear` 2 min |
-| al reabrir la app | Si el latido quedó > **3 min** viejo (proceso muerto), se guarda con el tiempo del último latido. Una sesión activa de > **6 h** se descarta por corrupta. | `resumeGapMax` 3 min · tope 6 h |
+| tras cerrar/cancelar | La cancha queda silenciada **2 h 30 min** ("No juego"/DETENER/límite/timeout): arranque solo manual. El snooze se limpia si estás **2 min** continuos fuera del radio. | `dwellSnooze` 2 h 30 min · `snoozeExitClear` 2 min |
+| al reabrir la app | Si el latido quedó > **3 min** viejo (proceso muerto), se guarda con el tiempo del último latido. Una sesión activa de > **6 h** se guarda hasta el último latido (o la pregunta de 3 h), con tope de 4 h. | `resumeGapMax` 3 min · tope 6 h |
 | batería ≤ **5 %** | (Sin cargar) el partido se cierra para proteger el registro. | `batteryEndPercent` |
 
 ## 4. Qué NO hace el sistema (decisión de diseño)
@@ -267,8 +269,8 @@ SharedPreferences para que el callback sepa qué hacer sin memoria compartida.
 | **Aviso** | 100014 | Junto con la de cierre, a -3 min | "Tu partido se cierra en 3 minutos. Volvé a la cancha para seguir jugando." Solo si la gracia sigue vigente y seguís afuera. |
 | **Batería** | 100013 | Al arrancar un partido, periódica 15 min | Si el partido sigue y la batería ≤5 % sin cargar, cierra para proteger el registro. |
 | **Radar** | 100015 | Ver §5.5 | — |
-| **Pregunta 3h** | 100016 | Al arrancar el partido, a +2 h (reprogramada al reanudar una pausa: el umbral es juego neto) | Si el partido sigue (sin gracia ni pregunta previa): estampa `confirmAskedAtMillis` en la sesión activa ("pausa" en background), muestra "¿Seguís jugando?" con SÍ/NO y programa el timeout. |
-| **Timeout pregunta** | 100017 | Al preguntar, a +20 min | Si nadie respondió (el flag sigue en la sesión activa): descarta el partido POR COMPLETO (sin pendiente), snooze 2 h 30 min de la cancha, notifica "Partido cancelado". |
+| **Pregunta 3h** | 100016 | Al arrancar el partido, a +3 h (reprogramada al reanudar una pausa: el umbral es juego neto) | Si el partido sigue (sin gracia ni pregunta previa): estampa `confirmAskedAtMillis` en la sesión activa ("pausa" en background), muestra "¿Seguís jugando?" con SÍ/NO y programa el timeout. |
+| **Timeout pregunta** | 100017 | Al preguntar, a +20 min | Si nadie respondió (el flag sigue en la sesión activa): cierra y GUARDA la sesión con el momento de la pregunta como fin, snooze 2 h 30 min de la cancha, notifica "Cerramos tu sesión de juego". |
 | **Reenganche** | 100020 | Al loguear y al tocar el switch, **periódica 4 h** | Ver §5.6. **No toma GPS ni red**: solo lee prefs. |
 | **Cierre duro 4h** | 100018 | Al responder "Sí", a +1 h de juego neto | Cierra y GUARDA el partido (pendiente de resultado) con el tope como fin, snooze 2 h 30 min, notifica "Llegaste al tiempo límite". |
 | **Salida del dwell** | 100020 | Al salir del radio con permanencia sembrada, a +1 min | Confirma con GPS que seguís afuera (sin fix NO cancela) → cancela el arranque pendiente y las dos notificaciones de la permanencia. Ver §8.1.4. |

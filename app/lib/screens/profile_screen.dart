@@ -2241,9 +2241,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       AppText.grotesk(size: 10, color: AppColors.white(0.45))),
               const SizedBox(width: 6),
             ],
+            // Borrar: su propia zona de toque, así no abre el detalle.
+            GestureDetector(
+              onTap: () => _confirmDeleteSession(s),
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Icon(Icons.delete_outline,
+                    size: 18, color: AppColors.white(0.4)),
+              ),
+            ),
             Icon(Icons.chevron_right, size: 18, color: AppColors.white(0.35)),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Borra una sesión del historial, previo aviso de lo que implica. Es local
+  /// e instantáneo (el servidor se entera por la cola de borrados), así que no
+  /// lleva loader.
+  Future<void> _confirmDeleteSession(PlaySession s) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: Text('Eliminar sesión de juego',
+            style: AppText.archivo(size: 18, weight: FontWeight.w800)),
+        content: Text(
+          'Vas a borrar la sesión en ${s.courtName.isEmpty ? 'la cancha' : s.courtName} '
+          'del ${_fmtDate(s.endedAtMillis)}.\n\n'
+          'Deja de contar en tus estadísticas de juego (récord, puntos, formatos, '
+          'tiempo) y en tus estadísticas de salud. No se puede deshacer.\n\n'
+          'Tu EXP, nivel, logros y ranking no cambian.',
+          style: AppText.grotesk(size: 14, color: AppColors.white(0.7)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancelar',
+                style: AppText.grotesk(size: 13, color: AppColors.white(0.5))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Eliminar',
+                style: AppText.grotesk(
+                    size: 13,
+                    color: const Color(0xFFEF4444),
+                    weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await context.read<PlaySessionService>().deleteSession(s);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Sesión eliminada', style: AppText.grotesk(size: 13)),
+        backgroundColor: AppColors.accent,
       ),
     );
   }

@@ -1242,7 +1242,7 @@ class _HomeScreenState extends State<HomeScreen>
                     )
                   else if (awaiting)
                     Text(
-                      '¿Seguís jugando? Si no respondés, se cancela',
+                      '¿Seguís jugando? Si no respondés, la guardamos',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppText.grotesk(

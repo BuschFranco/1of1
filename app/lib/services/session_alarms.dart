@@ -1034,8 +1034,9 @@ Future<void> alarmConfirmCallback() async {
 }
 
 /// Timeout de la pregunta: si nadie respondió (el flag sigue en la sesión
-/// activa), descarta el partido POR COMPLETO — sin pendiente, sin puntos, sin
-/// historial.
+/// activa), CIERRA Y GUARDA la sesión con el tiempo del momento de la pregunta
+/// (queda pendiente de resultado, como "NO, TERMINÉ"). Antes se descartaba
+/// entera y se perdían las 3 horas jugadas.
 @pragma('vm:entry-point')
 Future<void> alarmConfirmTimeoutCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1053,8 +1054,34 @@ Future<void> alarmConfirmTimeoutCallback() async {
     return;
   }
   // Respondida (el isolate principal limpió el flag): nada que hacer.
-  if (a['confirmAskedAtMillis'] == null) return;
-  await _discardActive(prefs, uk, a);
+  final askedMs = (a['confirmAskedAtMillis'] as num?)?.toInt();
+  if (askedMs == null) return;
+  // Snooze de la cancha: el celu probablemente sigue en el radio y sin esto el
+  // radar re-sembraría la permanencia enseguida.
+  final courtId = (a['courtId'] ?? '') as String;
+  if (courtId.isNotEmpty) {
+    await prefs.setString(
+      bgNsKey(_kDwellSnoozeBase, uk),
+      jsonEncode({
+        'courtId': courtId,
+        'untilMillis':
+            DateTime.now().add(_kDwellSnooze).millisecondsSinceEpoch,
+      }),
+    );
+  }
+  await AndroidAlarmManager.cancel(kAlarmEndId);
+  await AndroidAlarmManager.cancel(kAlarmWarnId);
+  await prefs.remove(_kAlarmEnd);
+  await prefs.remove(_kAlarmWarn);
+  await _closeActiveToPending(
+    prefs,
+    uk,
+    lowBattery: false,
+    endsAtMillis: askedMs,
+    notifTitle: 'Cerramos tu sesión de juego',
+    notifBody: 'No respondiste si seguías jugando, así que la guardamos hasta '
+        'ese momento. Abrí 1of1 para registrar el resultado.',
+  );
   _pingMain();
 }
 
@@ -1109,42 +1136,6 @@ Future<void> alarmHardEndCallback() async {
         'el resultado.',
   );
   _pingMain();
-}
-
-/// Descarta el partido en curso POR COMPLETO desde background (timeout de la
-/// pregunta): sin pendiente, sin puntos, sin historial. Silencia el detector
-/// de esa cancha 2:30hs (el celu probablemente sigue dentro del radio: sin snooze
-/// el dwell re-arrancaría enseguida) y avisa por notificación.
-Future<void> _discardActive(
-    SharedPreferences prefs, String uk, Map<String, dynamic> a) async {
-  await prefs.remove(bgNsKey(kActiveSessionBase, uk));
-  final courtId = (a['courtId'] ?? '') as String;
-  if (courtId.isNotEmpty) {
-    await prefs.setString(
-      bgNsKey(_kDwellSnoozeBase, uk),
-      jsonEncode({
-        'courtId': courtId,
-        'untilMillis':
-            DateTime.now().add(_kDwellSnooze).millisecondsSinceEpoch,
-      }),
-    );
-  }
-  await cancelBatteryWatch();
-  await cancelConfirmAlarm();
-  await cancelConfirmTimeoutAlarm();
-  await cancelHardEndAlarm();
-  await AndroidAlarmManager.cancel(kAlarmEndId);
-  await AndroidAlarmManager.cancel(kAlarmWarnId);
-  await prefs.remove(_kAlarmEnd);
-  await prefs.remove(_kAlarmWarn);
-  await _setNotionPresence(prefs, playing: false, courtId: '', sinceIso: '');
-  await NotificationsService.instance.init();
-  await NotificationsService.instance.cancelContinueCheck();
-  await NotificationsService.instance.show(
-    'Sesión cancelada',
-    'No respondiste si seguías jugando, así que no la guardamos.',
-  );
-  await NotificationsService.instance.cancelSession();
 }
 
 /// WATCHDOG del radar: si el radar dejó de tickear, lo vuelve a programar.

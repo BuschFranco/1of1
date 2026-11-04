@@ -473,6 +473,10 @@ class ApiClient {
   ) =>
       _map(_send('POST', '/sync/sessions', body: {'sessions': sessions}));
 
+  /// Borra (archiva) una sesión de mi historial respaldado. Idempotente.
+  Future<void> deleteSyncedSession(int endedAtMs) =>
+      _send('DELETE', '/sync/sessions/$endedAtMs');
+
   /// Mis sesiones respaldadas, más nuevas primero: `{sessions: [{endedAtMs, data}]}`.
   Future<Map<String, dynamic>> mySyncedSessions({int limit = 100}) =>
       _map(_send('GET', '/sync/sessions', query: {'limit': '$limit'}));

@@ -167,6 +167,9 @@ class SyncCoordinator with WidgetsBindingObserver {
     // cancelamos su alarma. Es independiente de las geofences: el aviso no
     // necesita ubicación ni permiso "Siempre", solo leer prefs.
     _play.onNudgeChanged = (_) => unawaited(_syncNudge());
+    // Borrado de una sesión del historial: se avisa al servidor al toque (si
+    // no hay red queda en la cola y sale en el próximo flush).
+    _play.onSessionDeleted = () => unawaited(_flushPendingSessionDeletes());
 
     // Cada recompensa (logro/título/nivel) también dispara un push del sistema.
     // chatCreated se salta: solo se muestra el banner in-app.
@@ -307,6 +310,7 @@ class SyncCoordinator with WidgetsBindingObserver {
     await _session.flush();
     await _flushPendingMatches();
     await _flushPendingSessions();
+    await _flushPendingSessionDeletes();
     await _flushPendingUnfriends();
     // Si el restore no pudo correr al arrancar (sin red), reintenta acá.
     if (!_historyReady && !_syncingHistory && _historyUserKey.isNotEmpty) {
@@ -722,6 +726,26 @@ class SyncCoordinator with WidgetsBindingObserver {
     final current = await _play.readPendingSessions();
     await _play.writePendingSessions(
         [for (final m in current) if (!sent.contains(jsonEncode(m))) m]);
+  }
+
+  /// Avisa al servidor las sesiones que el usuario borró del historial (quedan
+  /// archivadas allá y no vuelven al restaurar). Lo que falla queda en la cola.
+  Future<void> _flushPendingSessionDeletes() async {
+    final api = ApiClient();
+    if (!api.isConfigured || !api.hasToken) return;
+    final pending = await _play.readPendingSessionDeletes();
+    if (pending.isEmpty) return;
+    final done = <int>{};
+    for (final ms in pending) {
+      try {
+        await api.deleteSyncedSession(ms);
+        done.add(ms);
+      } on ApiException catch (e) {
+        // 4xx (sesión inválida): reintentar no lo va a arreglar.
+        if (e.statusCode >= 400 && e.statusCode < 500) done.add(ms);
+      } catch (_) {/* sin red: queda en la cola */}
+    }
+    await _play.ackSessionDeletes(done);
   }
 
   /// Restaura del servidor lo que falte y sube lo que el servidor todavía no

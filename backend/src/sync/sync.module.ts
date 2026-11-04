@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Injectable,
   Module,
@@ -227,6 +228,24 @@ class SyncService {
     return { results };
   }
 
+  /** El usuario borró una sesión de su historial: se ARCHIVA (no vuelve al
+   * restaurar en otro celu ni al reinstalar). Si todavía no se había subido, se
+   * crea archivada: así el upload que quedó en cola no la revive (upsert no
+   * toca `archived`). Idempotente. */
+  async deleteSession(emailRaw: string, endedAtMs: number) {
+    if (!Number.isFinite(endedAtMs) || endedAtMs < 1577836800000) {
+      throw new BadRequestException('Sesión inválida.');
+    }
+    const email = this.norm(emailRaw);
+    const key = BigInt(Math.trunc(endedAtMs));
+    await this.prisma.playSession.upsert({
+      where: { email_endedAtMs: { email, endedAtMs: key } },
+      create: { email, endedAtMs: key, data: {}, archived: true },
+      update: { archived: true },
+    });
+    return { ok: true };
+  }
+
   /** Sesiones del usuario, más nuevas primero. `before` (epoch ms) pagina. */
   async listSessions(emailRaw: string, limit: number, before?: number) {
     const rows = await this.prisma.playSession.findMany({
@@ -303,6 +322,14 @@ class SyncController {
     const n = Math.min(Math.max(parseInt(limit ?? '', 10) || DEFAULT_LIMIT, 1), MAX_LIMIT);
     const b = parseInt(before ?? '', 10);
     return this.sync.listSessions(user.email, n, Number.isFinite(b) && b > 0 ? b : undefined);
+  }
+
+  @Delete('sessions/:endedAtMs')
+  deleteSession(
+    @CurrentUser() user: AuthUser,
+    @Param('endedAtMs') endedAtMs: string,
+  ) {
+    return this.sync.deleteSession(user.email, Number(endedAtMs));
   }
 
   @Get('data')

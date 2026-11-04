@@ -137,6 +137,7 @@ que no esté permitido. No toca `matches` (los rankings leen de ahí).
 | --- | --- | --- |
 | `POST /sync/sessions` | `{sessions: [{endedAtMs, data}]}` — lote de hasta **50**; `endedAtMs` (epoch ms) es la identidad | `{results: [{ok}]}` por ítem. **Upsert** por `(email, endedAtMs)`: reintentar no duplica |
 | `GET /sync/sessions` | `?limit=100&before=<ms>` (tope 200) | `{sessions: [{endedAtMs, data}]}`, más nuevas primero |
+| `DELETE /sync/sessions/:endedAtMs` | — | `{ok: true}`. El usuario la borró del historial: queda **archivada** (no vuelve al restaurar). Si no estaba subida se crea archivada, así un upload en cola no la revive |
 | `GET /sync/data` | — | `{streak_history?, favorites?, blocked?}`. Un `kind` **ausente** = nunca sincronizado; **vacío** = el usuario lo vació |
 | `PUT /sync/data/:kind` | `{data: [...]}` — `kind` ∈ `streak_history`, `favorites`, `blocked` | `{ok, count}`. **Reemplaza** el contenido |
 

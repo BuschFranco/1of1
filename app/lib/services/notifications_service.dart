@@ -632,7 +632,7 @@ class NotificationsService {
         _confirmId,
         court.isEmpty ? '¿Seguís jugando?' : '¿Seguís jugando en $court?',
         'Pausamos tu sesión a las 3 horas. Si no respondés en 20 minutos, '
-            'la cancelamos.',
+            'la cerramos y la guardamos hasta ahora.',
         details,
       );
     } catch (_) {/* ignorar */}
