@@ -192,16 +192,13 @@ emails se guardan en minúsculas y `DELETE /me` archiva ambas tablas.
 
 ## Estado
 
-Corre en **Render** (`https://oneofone-backend.onrender.com`, HTTPS) con la base
-en Supabase. `app/dart_defines.json` apunta ahí, así que la app no necesita un
-backend local. Deploy: push a `main` → Render redeploya leyendo `render.yaml` de
-la raíz del repo; las variables de entorno viven en su dashboard.
+Corre en la **VPS de Hetzner** (`https://api.buschfranco.com`) con la base en
+PostgreSQL local; `app/dart_defines.json` apunta ahí, así que la app no necesita
+un backend local. Deploy: push a `main` que toque `backend/` → GitHub Actions
+compila y publica. Las variables viven en `/etc/oneofone/oneofone.env`.
 
-El free tier duerme tras ~15 min sin tráfico (**cold start de 30-60 s**): tenelo
-en cuenta al pensar timeouts y feedback de carga en la app.
-
-**En curso: mudanza a la VPS** (ver la sección siguiente). Hasta el corte,
-Render y Supabase siguen siendo producción.
+**Mudado a la VPS** (3/11/2026, ver la sección siguiente). Render quedó solo
+como reenvío para las apps ya instaladas y Supabase ya no se usa.
 
 ## VPS (Hetzner) — `https://api.buschfranco.com`
 

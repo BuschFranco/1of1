@@ -8,8 +8,9 @@
 /// IMPORTANTE: estos textos describen lo que el código realmente hace. Si
 /// cambiás el flujo de datos (nuevos proveedores, nuevos datos que se suben,
 /// nuevas features que comparten info), actualizá el texto acá para que siga
-/// siendo veraz. Hoy los datos se guardan en un backend propio (NestJS en
-/// Render + Supabase Postgres); ya NO se usa Notion.
+/// siendo veraz. Hoy los datos se guardan en un backend propio (NestJS +
+/// PostgreSQL en la VPS de Hetzner, fotos en Cloudflare R2); ya NO se usa
+/// Notion ni Supabase.
 ///
 /// Cambiá el email de contacto o los textos SOLO acá.
 library;
@@ -26,7 +27,7 @@ const String kPrivacyPolicyUrl = 'https://buschfranco.github.io/1of1/privacidad'
 const String kTermsUrl = 'https://buschfranco.github.io/1of1/terminos';
 
 /// Fecha de última actualización de los documentos (mostrada al usuario).
-const String kLegalLastUpdated = '19 de octubre de 2026';
+const String kLegalLastUpdated = '3 de noviembre de 2026';
 
 /// Política de Privacidad (resumen honesto de lo que la app hace hoy).
 const String kPrivacyPolicy = '''
@@ -71,12 +72,14 @@ sesiones de juego, mostrar tu perfil y rankings, y conectar la comunidad (amigos
 y sus chats).
 
 DÓNDE SE GUARDAN
-Los datos de cuenta, juego y mensajes se almacenan en nuestro backend propio,
-alojado en Render (Render Services, Inc., servidores en Estados Unidos) sobre una
-base de datos Supabase Postgres (Supabase, Inc.). Ambos proveedores actúan como
-encargados del tratamiento por nuestra cuenta. Al usar la app aceptás esta
-transferencia internacional de datos a Estados Unidos. Los datos de salud no
-salen de tu teléfono.
+Los datos de cuenta, juego y mensajes se almacenan en nuestro backend y base de
+datos propios, en un servidor de Hetzner Online GmbH (Alemania). Las fotos de
+canchas se guardan en Cloudflare R2, y Cloudflare (Cloudflare, Inc.) protege y
+entrega el tráfico de la app. Las versiones anteriores de la app pasan por Render
+(Render Services, Inc., Estados Unidos), que solo reenvía los pedidos al servidor
+sin guardarlos. Estos proveedores actúan como encargados del tratamiento por
+nuestra cuenta. Al usar la app aceptás esta transferencia internacional de datos.
+Los datos de salud no salen de tu teléfono.
 
 SERVICIOS DE TERCEROS
 Usamos servicios de Google para funciones del mapa: Google Maps (mostrar el

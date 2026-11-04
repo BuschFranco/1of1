@@ -8,9 +8,13 @@
 # claves de R2 en /root/.r2-oneofone.env (R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY).
 set -euo pipefail
 
-SUPABASE_REF=mwkrsqgdfnfidchotjel
+# Proyecto y pooler de Supabase: salen de DIRECT_URL en Render
+# (postgresql://postgres.<REF>:<pass>@<HOST>:5432/postgres). Se pueden pasar por env:
+#   SUPABASE_REF=<ref> SUPABASE_HOST=<host> bash migrate-from-supabase.sh
+# Solo las fotos (no pide contraseña, no toca los datos): SOLO_FOTOS=1 bash migrate-from-supabase.sh
+SUPABASE_REF="${SUPABASE_REF:-mwkrsqgdfnfidchotjel}"
 # Pooler en modo sesión (IPv4): la conexión directa de Supabase es solo IPv6.
-SUPABASE_HOST=aws-1-sa-east-1.pooler.supabase.com
+SUPABASE_HOST="${SUPABASE_HOST:-aws-1-sa-east-1.pooler.supabase.com}"
 OLD_PREFIX="https://${SUPABASE_REF}.supabase.co/storage/v1/object/public/media/"
 NEW_PREFIX="https://img.buschfranco.com/"
 ACCOUNT=2e3b069064b630882f2cb54755188225
@@ -26,6 +30,7 @@ echo "==> Cliente de PostgreSQL 17 (Supabase usa una versión más nueva que la 
 sudo -u postgres psql -d "$DB" -tAc "select 1 from pg_tables where schemaname = 'public' and tablename = 'users'" | grep -q 1 \
   || { echo "La base $DB no tiene tablas: publicá una versión primero (crea el esquema)."; exit 1; }
 
+if [ "${SOLO_FOTOS:-0}" != 1 ]; then
 echo "==> 1) Datos de Supabase"
 echo "    Escribí la contraseña de la base de Supabase (Project Settings -> Database) y Enter:"
 "$PG17/pg_dump" "host=$SUPABASE_HOST port=5432 dbname=postgres user=postgres.${SUPABASE_REF} sslmode=require" \
@@ -53,6 +58,7 @@ sudo -u postgres psql -d "$DB" -tA -F ': ' -c "
   select 'partidos (ranking)', count(*) from matches union all
   select 'sesiones de juego', count(*) from play_sessions union all
   select 'mensajes', count(*) from messages" | sed 's/^/    /'
+fi
 
 echo "==> 3) Fotos: de Supabase Storage (bucket media) a R2 ($BUCKET)"
 CREDS=/root/.r2-oneofone.env

@@ -61,7 +61,7 @@ dart run build_runner build --delete-conflicting-outputs   # regenerar freezed/j
 
 - **Secretos:** `dart_defines.json` (`MAPS_API_KEY` + `API_BASE_URL`) **no se
   commitea** (`.gitignore`). Ver `lib/config.template.dart` para el formato.
-  Por defecto `API_BASE_URL` apunta al backend de producción (Render), así que
+  Por defecto `API_BASE_URL` apunta al backend de producción (la VPS), así que
   **no hace falta levantar nada local** para correr la app. Si querés trabajar
   contra un backend local: `cd backend && npm run start:dev` y apuntá
   `API_BASE_URL` a la IP LAN de esa PC.
@@ -184,7 +184,8 @@ llega con IP y sin firma → `REQUEST_DENIED`, siempre.
 
 Por eso el reverse geocoding (punto → barrio/ciudad) pasa por
 `GET /geo/reverse` del backend (`backend/src/geo/geo.module.ts`), que tiene su
-**propia** `MAPS_API_KEY` sin restricción de app, cargada como env var en Render.
+**propia** `MAPS_API_KEY` sin restricción de app, cargada como env var del
+backend (`/etc/oneofone/oneofone.env` en la VPS).
 `GeocodingService` en la app es solo un wrapper de esa llamada.
 
 > Si agregás cualquier otro servicio web de Google (Places, Directions,
@@ -193,14 +194,21 @@ Por eso el reverse geocoding (punto → barrio/ciudad) pasa por
 
 ### Hosting (producción)
 
-El backend corre en **Render** (`https://oneofone-backend.onrender.com`, HTTPS),
-con la base en **Supabase Postgres**. `dart_defines.json` apunta ahí. Ya no hay
+El backend y la base corren en la **VPS de Hetzner** que comparte con Rebound
+y el portafolio: `https://api.buschfranco.com` (Cloudflare → Caddy → NestJS en
+:3002 → PostgreSQL 16 local). Fotos de canchas en **Cloudflare R2**
+(`https://img.buschfranco.com`). `dart_defines.json` apunta a la VPS. Ya no hay
 cleartext ni IP LAN: se borró `network_security_config.xml` y su atributo en
-`AndroidManifest.xml`. El free tier de Render duerme tras ~15 min sin tráfico
-(cold start ~30-60s); mitigado con un ping keep-alive externo a `GET /health`
-cada ~10 min (cron-job.org u otro). Variables de entorno del backend en el
-dashboard de Render (no en un `.env` de producción). Deploy: push a `main` →
-Render redeploya solo (lee `render.yaml` en la raíz del repo).
+`AndroidManifest.xml`. Sin cold start: el servidor no se duerme. Variables del
+backend en `/etc/oneofone/oneofone.env` del servidor. Deploy: push a `main` que
+toque `backend/` → GitHub Actions compila y publica (migraciones incluidas).
+Todo el detalle (scripts, backups, rollback): `backend/README.md` → "VPS".
+
+**Render quedó solo como reenvío** (`render.yaml` → `render-proxy.mjs`): las
+versiones ya instaladas tienen grabada `oneofone-backend.onrender.com` y Render
+les pasa cada pedido a la VPS. Ese salto sí puede tener el cold start de Render
+(30-60 s); por eso los timeouts largos y el modo offline siguen como están.
+Supabase ya no se usa (queda hasta apagarlo).
 
 ---
 
