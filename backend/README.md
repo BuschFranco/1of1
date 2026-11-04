@@ -171,8 +171,11 @@ emails se guardan en minúsculas y `DELETE /me` archiva ambas tablas.
 | `GET /health` | — | `1` (texto). Health check del deploy y de Render |
 | `GET /news?league=nba\|wnba\|lnb\|3x3` | — | `[{title, summary, url, imageUrl, source, publishedAt}]`. Caché 30 min |
 | `GET /scores/games?league=nba\|wnba` | — | `[{id, date, state (pre/in/post), status, home, away}]`: hoy y los 3 días anteriores, más nuevos primero. Fuente: ESPN (no oficial). Caché 1 min con partidos en vivo, si no 10 min |
-| `GET /scores/games/:id?league=` | — | Box score `{game, columns, teams: [{name, abbr, logo, score, players: [{name, position, starter, dnp, stats}]}]}` o `null` |
-| `GET /scores/standings?league=` | — | `[{name (conferencia), rows: [{seed, name, abbr, logo, wins, losses, pct, gamesBehind, streak}]}]`. Caché 30 min |
+| `GET /scores/games/:id?league=` | — | `{game, columns, teams, timeline, preview}` o `null`. `teams`: box por equipo (colores, puntos por cuarto, jugadores con id/foto). `timeline`: jugada a jugada clasificada (la app arma el box de cualquier momento). `preview`: pronóstico ESPN, últimos 5, cara a cara, comparativa, líderes y lesionados (también para partidos sin jugar, con `teams` vacío) |
+| `GET /scores/standings?league=` | — | `[{name (conferencia), rows: [{id, seed, name, abbr, logo, wins, losses, pct, gamesBehind, streak}]}]`. Caché 30 min |
+| `GET /scores/power?league=` | — | Power ranking ESPN BPI: `[{id, name, abbr, logo, rank, bpi, projW, projL, playoffs, playIn, finals, title}]` (porcentajes 0-100). Caché 6 h |
+| `GET /scores/players/:id?league=` | — | `{name, headshot, position, jersey, team, info, season, career, lastGames}` (promedios de temporada y carrera, últimos partidos) o `null`. Caché 1 h |
+| `GET /scores/teams/:id?league=` | — | `{name, abbr, logo, color, record, standing, power, averages, roster}` (plantel con promedios de cada jugador) o `null`. Caché 1 h |
 
 > `PATCH /pickups/:pageId` también cubre la **reprogramación** (campo `dateTime`):
 > es lo que usa el creador para mover fecha/hora desde el chat del pickup. El

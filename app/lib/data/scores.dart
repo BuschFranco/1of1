@@ -13,6 +13,7 @@ Color? teamColor(String hex) {
 }
 
 class ScoreTeam {
+  final String id;
   final String name;
   final String abbr;
   final String logo;
@@ -22,6 +23,7 @@ class ScoreTeam {
   final String color;
 
   const ScoreTeam({
+    this.id = '',
     required this.name,
     required this.abbr,
     required this.logo,
@@ -32,6 +34,7 @@ class ScoreTeam {
   });
 
   factory ScoreTeam.fromApi(Map<String, dynamic> j) => ScoreTeam(
+        id: (j['id'] ?? '') as String,
         name: (j['name'] ?? '') as String,
         abbr: (j['abbr'] ?? '') as String,
         logo: (j['logo'] ?? '') as String,
@@ -118,6 +121,7 @@ class BoxPlayer {
 }
 
 class BoxTeam {
+  final String id;
   final bool isHome;
   final String name;
   final String abbr;
@@ -131,6 +135,7 @@ class BoxTeam {
   final List<BoxPlayer> players;
 
   const BoxTeam({
+    this.id = '',
     required this.isHome,
     required this.name,
     required this.abbr,
@@ -143,6 +148,7 @@ class BoxTeam {
   });
 
   factory BoxTeam.fromApi(Map<String, dynamic> j) => BoxTeam(
+        id: (j['id'] ?? '') as String,
         isHome: j['side'] == 'home',
         name: (j['name'] ?? '') as String,
         abbr: (j['abbr'] ?? '') as String,
@@ -171,11 +177,15 @@ class BoxScore {
   /// Jugada a jugada (null si ESPN no la publica o el partido no empezó).
   final GameTimeline? timeline;
 
+  /// Previa / contexto (pronóstico, forma, cara a cara, comparativa…).
+  final GamePreview? preview;
+
   const BoxScore({
     required this.game,
     required this.columns,
     required this.teams,
     this.timeline,
+    this.preview,
   });
 
   factory BoxScore.fromApi(Map<String, dynamic> j) => BoxScore(
@@ -190,6 +200,9 @@ class BoxScore {
         timeline: j['timeline'] is Map
             ? GameTimeline.fromApi(
                 (j['timeline'] as Map).cast<String, dynamic>())
+            : null,
+        preview: j['preview'] is Map
+            ? GamePreview.fromApi((j['preview'] as Map).cast<String, dynamic>())
             : null,
       );
 
@@ -314,6 +327,62 @@ class LiveLine {
       ];
 }
 
+/// Columnas que muestra la planilla: las del backend con el porcentaje
+/// intercalado después de cada "convertidos-intentados" (TC, 3P, TL).
+List<String> columnsWithPct(List<String> base) => [
+      for (final c in base) ...[
+        c,
+        if (c == 'TC' || c == '3P' || c == 'TL') '$c%',
+      ],
+    ];
+
+/// "8-18" → "44"; sin intentos, "—".
+String pctOf(String madeAttempted) {
+  final parts = madeAttempted.split('-');
+  if (parts.length != 2) return '—';
+  final m = int.tryParse(parts[0]) ?? 0;
+  final a = int.tryParse(parts[1]) ?? 0;
+  return a == 0 ? '—' : '${(m * 100 / a).round()}';
+}
+
+/// Inserta los porcentajes en una fila alineada con [base] (ver
+/// [columnsWithPct]).
+List<String> cellsWithPct(List<String> base, List<String> cells) => [
+      for (var i = 0; i < base.length; i++) ...[
+        i < cells.length ? cells[i] : '',
+        if (base[i] == 'TC' || base[i] == '3P' || base[i] == 'TL')
+          pctOf(i < cells.length ? cells[i] : ''),
+      ],
+    ];
+
+/// Fila de totales del equipo: suma columna por columna ("m-a" suma ambos
+/// lados; el +/- no se suma porque no tiene sentido por equipo).
+List<String> teamTotals(List<String> base, List<List<String>> rows) {
+  final out = <String>[];
+  for (var i = 0; i < base.length; i++) {
+    if (base[i] == '+/-') {
+      out.add('');
+      continue;
+    }
+    var a = 0, b = 0;
+    var pair = false;
+    for (final r in rows) {
+      if (i >= r.length) continue;
+      final v = r[i];
+      if (v.contains('-') && !v.startsWith('-')) {
+        pair = true;
+        final ps = v.split('-');
+        a += int.tryParse(ps[0]) ?? 0;
+        b += int.tryParse(ps.length > 1 ? ps[1] : '') ?? 0;
+      } else {
+        a += int.tryParse(v.replaceAll('+', '')) ?? 0;
+      }
+    }
+    out.add(pair ? '$a-$b' : '$a');
+  }
+  return out;
+}
+
 /// Reconstruye el box score hasta la jugada [upTo] (inclusive), sumando los
 /// cambios de cada jugada. Minutos y +/- salen de quién estaba en cancha:
 /// arrancan los titulares y cada sustitución cambia el quinteto (se validó
@@ -396,6 +465,7 @@ Map<String, LiveLine> boxAt(BoxScore box, int upTo) {
 }
 
 class StandingRow {
+  final String id;
   final int seed;
   final String name;
   final String abbr;
@@ -407,6 +477,7 @@ class StandingRow {
   final String streak;
 
   const StandingRow({
+    this.id = '',
     required this.seed,
     required this.name,
     required this.abbr,
@@ -419,6 +490,7 @@ class StandingRow {
   });
 
   factory StandingRow.fromApi(Map<String, dynamic> j) => StandingRow(
+        id: (j['id'] ?? '') as String,
         seed: (j['seed'] as num?)?.toInt() ?? 0,
         name: (j['name'] ?? '') as String,
         abbr: (j['abbr'] ?? '') as String,
@@ -443,5 +515,292 @@ class StandingGroup {
           for (final r in (j['rows'] as List? ?? const []))
             StandingRow.fromApi((r as Map).cast<String, dynamic>()),
         ],
+      );
+}
+
+
+// ── Previa / pronósticos / perfiles ─────────────────────────────────────────
+
+List<Map<String, dynamic>> _maps(Object? v) => [
+      for (final e in (v as List? ?? const []))
+        if (e is Map) e.cast<String, dynamic>(),
+    ];
+String _s(Object? v) => v == null ? '' : '$v';
+double _d(Object? v) => (v as num?)?.toDouble() ?? 0;
+
+class FormGame {
+  final String result; // 'W' | 'L'
+  final String opp;
+  final String score;
+  final String atVs;
+  const FormGame(this.result, this.opp, this.score, this.atVs);
+  factory FormGame.fromApi(Map<String, dynamic> j) =>
+      FormGame(_s(j['result']), _s(j['opp']), _s(j['score']), _s(j['atVs']));
+}
+
+class H2hGame {
+  final DateTime? date;
+  final String home, away, homeScore, awayScore;
+  final bool done;
+  const H2hGame(
+      this.date, this.home, this.away, this.homeScore, this.awayScore, this.done);
+  factory H2hGame.fromApi(Map<String, dynamic> j) => H2hGame(
+      DateTime.tryParse(_s(j['date']))?.toLocal(),
+      _s(j['home']),
+      _s(j['away']),
+      _s(j['homeScore']),
+      _s(j['awayScore']),
+      j['done'] == true);
+}
+
+class CompareRow {
+  final String label, home, away;
+  final bool higherIsBetter;
+  const CompareRow(this.label, this.home, this.away, this.higherIsBetter);
+  factory CompareRow.fromApi(Map<String, dynamic> j) => CompareRow(
+      _s(j['label']), _s(j['home']), _s(j['away']), j['higherIsBetter'] != false);
+}
+
+class LeaderItem {
+  final String cat, id, name, headshot, value;
+  const LeaderItem(this.cat, this.id, this.name, this.headshot, this.value);
+  factory LeaderItem.fromApi(Map<String, dynamic> j) => LeaderItem(_s(j['cat']),
+      _s(j['id']), _s(j['name']), _s(j['headshot']), _s(j['value']));
+}
+
+class InjuryItem {
+  final String name, status, detail;
+  const InjuryItem(this.name, this.status, this.detail);
+  factory InjuryItem.fromApi(Map<String, dynamic> j) =>
+      InjuryItem(_s(j['name']), _s(j['status']), _s(j['detail']));
+}
+
+/// Par local / visitante de cualquier lista.
+class Sides<T> {
+  final List<T> home;
+  final List<T> away;
+  const Sides(this.home, this.away);
+  factory Sides.fromApi(
+          Object? j, T Function(Map<String, dynamic>) f) =>
+      j is Map
+          ? Sides(_maps(j['home']).map(f).toList(),
+              _maps(j['away']).map(f).toList())
+          : Sides(const [], const []);
+  bool get isEmpty => home.isEmpty && away.isEmpty;
+}
+
+class GamePreview {
+  /// Pronóstico de ESPN antes del partido (0..1).
+  final double? homeWinProb;
+  final double? awayWinProb;
+  final String h2hSummary;
+  final List<H2hGame> h2hGames;
+  final Sides<FormGame> form;
+
+  /// true = promedios de la temporada; false = números del partido.
+  final bool compareSeason;
+  final List<CompareRow> compare;
+  final Sides<LeaderItem> leaders;
+  final Sides<InjuryItem> injuries;
+
+  const GamePreview({
+    required this.homeWinProb,
+    required this.awayWinProb,
+    required this.h2hSummary,
+    required this.h2hGames,
+    required this.form,
+    required this.compareSeason,
+    required this.compare,
+    required this.leaders,
+    required this.injuries,
+  });
+
+  factory GamePreview.fromApi(Map<String, dynamic> j) {
+    final wp = j['winProb'] is Map ? (j['winProb'] as Map) : null;
+    final h2h = j['h2h'] is Map ? (j['h2h'] as Map) : null;
+    final cmp = j['compare'] is Map ? (j['compare'] as Map) : null;
+    return GamePreview(
+      homeWinProb: (wp?['home'] as num?)?.toDouble(),
+      awayWinProb: (wp?['away'] as num?)?.toDouble(),
+      h2hSummary: _s(h2h?['summary']),
+      h2hGames: _maps(h2h?['games']).map(H2hGame.fromApi).toList(),
+      form: Sides.fromApi(j['form'], FormGame.fromApi),
+      compareSeason: cmp?['season'] == true,
+      compare: _maps(cmp?['rows']).map(CompareRow.fromApi).toList(),
+      leaders: Sides.fromApi(j['leaders'], LeaderItem.fromApi),
+      injuries: Sides.fromApi(j['injuries'], InjuryItem.fromApi),
+    );
+  }
+}
+
+/// Fila del power ranking (ESPN BPI). Porcentajes 0..100.
+class PowerRow {
+  final String id, name, abbr, logo;
+  final int rank;
+  final double bpi, projW, projL, playoffs, playIn, finals, title;
+
+  const PowerRow({
+    required this.id,
+    required this.name,
+    required this.abbr,
+    required this.logo,
+    required this.rank,
+    required this.bpi,
+    required this.projW,
+    required this.projL,
+    required this.playoffs,
+    required this.playIn,
+    required this.finals,
+    required this.title,
+  });
+
+  factory PowerRow.fromApi(Map<String, dynamic> j) => PowerRow(
+        id: _s(j['id']),
+        name: _s(j['name']),
+        abbr: _s(j['abbr']),
+        logo: _s(j['logo']),
+        rank: (j['rank'] as num?)?.toInt() ?? 0,
+        bpi: _d(j['bpi']),
+        projW: _d(j['projW']),
+        projL: _d(j['projL']),
+        playoffs: _d(j['playoffs']),
+        playIn: _d(j['playIn']),
+        finals: _d(j['finals']),
+        title: _d(j['title']),
+      );
+}
+
+/// Promedios (labels de ESPN: GP, MIN, FG%, 3P%, FT%, REB, AST, BLK, STL, PF,
+/// TO, PTS).
+class StatLine {
+  final List<String> labels;
+  final List<String> values;
+  const StatLine(this.labels, this.values);
+
+  static StatLine? fromApi(Object? j) => j is Map
+      ? StatLine([for (final l in (j['labels'] as List? ?? const [])) '$l'],
+          [for (final v in (j['values'] as List? ?? const [])) '$v'])
+      : null;
+
+  String of(String label) {
+    final i = labels.indexOf(label);
+    return i >= 0 && i < values.length ? values[i] : '';
+  }
+}
+
+class PlayerGame {
+  final DateTime? date;
+  final String opp, oppLogo, atVs, result, score;
+  final StatLine stats;
+  const PlayerGame(this.date, this.opp, this.oppLogo, this.atVs, this.result,
+      this.score, this.stats);
+  factory PlayerGame.fromApi(Map<String, dynamic> j) => PlayerGame(
+        DateTime.tryParse(_s(j['date']))?.toLocal(),
+        _s(j['opp']),
+        _s(j['oppLogo']),
+        _s(j['atVs']),
+        _s(j['result']),
+        _s(j['score']),
+        StatLine([for (final l in (j['labels'] as List? ?? const [])) '$l'],
+            [for (final v in (j['stats'] as List? ?? const [])) '$v']),
+      );
+}
+
+class PlayerProfile {
+  final String id, name, headshot, position, jersey;
+  final String teamId, teamName, teamAbbr, teamLogo, teamColor;
+  final List<(String, String)> info;
+  final StatLine? season;
+  final StatLine? career;
+  final List<PlayerGame> lastGames;
+
+  const PlayerProfile({
+    required this.id,
+    required this.name,
+    required this.headshot,
+    required this.position,
+    required this.jersey,
+    required this.teamId,
+    required this.teamName,
+    required this.teamAbbr,
+    required this.teamLogo,
+    required this.teamColor,
+    required this.info,
+    required this.season,
+    required this.career,
+    required this.lastGames,
+  });
+
+  factory PlayerProfile.fromApi(Map<String, dynamic> j) {
+    final t = j['team'] is Map ? (j['team'] as Map) : const {};
+    return PlayerProfile(
+      id: _s(j['id']),
+      name: _s(j['name']),
+      headshot: _s(j['headshot']),
+      position: _s(j['position']),
+      jersey: _s(j['jersey']),
+      teamId: _s(t['id']),
+      teamName: _s(t['name']),
+      teamAbbr: _s(t['abbr']),
+      teamLogo: _s(t['logo']),
+      teamColor: _s(t['color']),
+      info: [for (final m in _maps(j['info'])) (_s(m['label']), _s(m['value']))],
+      season: StatLine.fromApi(j['season']),
+      career: StatLine.fromApi(j['career']),
+      lastGames: _maps(j['lastGames']).map(PlayerGame.fromApi).toList(),
+    );
+  }
+}
+
+class RosterPlayer {
+  final String id, name, headshot, position, jersey, pts, reb, ast, min;
+  const RosterPlayer(this.id, this.name, this.headshot, this.position,
+      this.jersey, this.pts, this.reb, this.ast, this.min);
+  factory RosterPlayer.fromApi(Map<String, dynamic> j) => RosterPlayer(
+      _s(j['id']),
+      _s(j['name']),
+      _s(j['headshot']),
+      _s(j['position']),
+      _s(j['jersey']),
+      _s(j['pts']),
+      _s(j['reb']),
+      _s(j['ast']),
+      _s(j['min']));
+}
+
+class TeamProfile {
+  final String id, name, abbr, logo, color, record, standing;
+  final PowerRow? power;
+  final List<(String, String)> averages;
+  final List<RosterPlayer> roster;
+
+  const TeamProfile({
+    required this.id,
+    required this.name,
+    required this.abbr,
+    required this.logo,
+    required this.color,
+    required this.record,
+    required this.standing,
+    required this.power,
+    required this.averages,
+    required this.roster,
+  });
+
+  factory TeamProfile.fromApi(Map<String, dynamic> j) => TeamProfile(
+        id: _s(j['id']),
+        name: _s(j['name']),
+        abbr: _s(j['abbr']),
+        logo: _s(j['logo']),
+        color: _s(j['color']),
+        record: _s(j['record']),
+        standing: _s(j['standing']),
+        power: j['power'] is Map
+            ? PowerRow.fromApi((j['power'] as Map).cast<String, dynamic>())
+            : null,
+        averages: [
+          for (final m in _maps(j['averages'])) (_s(m['label']), _s(m['value']))
+        ],
+        roster: _maps(j['roster']).map(RosterPlayer.fromApi).toList(),
       );
 }

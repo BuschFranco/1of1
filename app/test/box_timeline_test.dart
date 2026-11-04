@@ -63,4 +63,22 @@ void main() {
     final live = boxAt(box, 0);
     expect(live.values.every((l) => l.pts == 0 && l.reb == 0), isTrue);
   });
+
+  test('porcentajes y totales del equipo', () {
+    expect(pctOf('8-18'), '44');
+    expect(pctOf('0-0'), '—');
+    expect(columnsWithPct(box.columns),
+        containsAllInOrder(['TC', 'TC%', '3P', '3P%', 'TL', 'TL%']));
+    for (final t in box.teams) {
+      final rows = [for (final p in t.players) if (!p.dnp) p.stats];
+      final total = teamTotals(box.columns, rows);
+      // Los puntos sumados dan el marcador final del equipo.
+      expect(total[box.columns.indexOf('PTS')], t.score, reason: t.abbr);
+      // TC sumado: convertidos ≤ intentados.
+      final tc = total[box.columns.indexOf('TC')].split('-').map(int.parse).toList();
+      expect(tc[0], lessThanOrEqualTo(tc[1]));
+      final withPct = cellsWithPct(box.columns, total);
+      expect(withPct.length, columnsWithPct(box.columns).length);
+    }
+  });
 }

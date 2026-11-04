@@ -105,6 +105,9 @@ Ejemplos: `_ReviewsSection`, `_PostsSection` en `detail_screen.dart`.
 | Partidos por liga | `scores::games::<league>` (nba/wnba) | 2 min | `GamesScreen` (Social → Partidos). TTL puro; el backend refresca cada 1 min si hay partidos en vivo. |
 | Box score | `scores::box::<league>::<id>` | 2 min | `GameDetailScreen`. |
 | Posiciones | `scores::standings::<league>` | 30 min | `GamesScreen`, vista Posiciones. |
+| Pronósticos (BPI) | `scores::power::<league>` | 1 h | `GamesScreen`, vista Pronósticos. El backend cachea 6 h. |
+| Perfil de jugador | `scores::player::<league>::<id>` | 30 min | `PlayerScreen` |
+| Perfil de equipo | `scores::team::<league>::<id>` | 30 min | `TeamScreen` |
 
 Notas:
 

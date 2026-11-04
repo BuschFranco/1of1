@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../widgets/app_chip.dart';
 import '../widgets/pressable_widget.dart';
 import 'game_detail_screen.dart';
+import 'team_screen.dart';
 
 /// Segmento "Partidos" de Social: resultados recientes y posiciones de NBA y
 /// WNBA (ESPN vía el backend), filtrables por liga con los mismos chips que
@@ -29,12 +30,13 @@ class GamesScreen extends StatefulWidget {
 class _GamesScreenState extends State<GamesScreen> {
   String _league = ScoresService.nba;
 
-  /// false = resultados, true = posiciones.
-  bool _standings = false;
+  /// 0 = resultados, 1 = posiciones, 2 = pronósticos (ESPN BPI).
+  int _view = 0;
   bool _loading = false;
 
   String get _gamesKey => 'scores::games::$_league';
   String get _standingsKey => 'scores::standings::$_league';
+  String get _powerKey => 'scores::power::$_league';
   bool get _hasData => _league != ScoresService.lnb;
 
   @override
@@ -46,15 +48,22 @@ class _GamesScreenState extends State<GamesScreen> {
   // Patrón (a) de docs/cache.md: peek síncrono + fetch si no está fresco.
   Future<void> _load({bool force = false}) async {
     if (!_hasData) return;
-    final standings = _standings;
-    final key = standings ? _standingsKey : _gamesKey;
-    final ttl = standings ? ApiCache.ttlStandings : ApiCache.ttlScores;
+    final view = _view;
+    final league = _league;
+    final (key, ttl) = switch (view) {
+      1 => (_standingsKey, ApiCache.ttlStandings),
+      2 => (_powerKey, ApiCache.ttlPower),
+      _ => (_gamesKey, ApiCache.ttlScores),
+    };
     if (!force && ApiCache.isFresh(key, ttl)) return;
     setState(() => _loading = true);
-    if (standings) {
-      ApiCache.put(key, await ScoresService.standings(_league));
-    } else {
-      ApiCache.put(key, await ScoresService.games(_league));
+    switch (view) {
+      case 1:
+        ApiCache.put(key, await ScoresService.standings(league));
+      case 2:
+        ApiCache.put(key, await ScoresService.power(league));
+      default:
+        ApiCache.put(key, await ScoresService.games(league));
     }
     if (!mounted) return;
     setState(() => _loading = false);
@@ -66,9 +75,11 @@ class _GamesScreenState extends State<GamesScreen> {
     _load();
   }
 
-  void _selectView(bool standings) {
-    if (standings == _standings) return;
-    setState(() => _standings = standings);
+  void _selectView(int view) {
+    if (view == _view) return;
+    setState(() => _view = view);
+    AnalyticsService.event('games_view',
+        {'view': const ['resultados', 'posiciones', 'pronosticos'][view]});
     _load();
   }
 
@@ -108,45 +119,28 @@ class _GamesScreenState extends State<GamesScreen> {
           else ...[
             _viewToggle(),
             const SizedBox(height: 14),
-            if (_standings) ..._standingsBody() else ..._gamesBody(),
+            ...switch (_view) {
+              1 => _standingsBody(),
+              2 => _powerBody(),
+              _ => _gamesBody(),
+            },
           ],
         ],
       ),
     );
   }
 
-  // ── Selector Resultados / Posiciones ────────────────────────────────────
+  // ── Selector Resultados / Posiciones / Pronósticos ──────────────────────
 
-  Widget _viewToggle() {
-    Widget opt(String label, bool value) {
-      final active = _standings == value;
-      return GestureDetector(
-        onTap: () => _selectView(value),
-        behavior: HitTestBehavior.opaque,
-        child: Padding(
-          padding: const EdgeInsets.only(right: 18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style: AppText.archivo(
-                      size: 13,
-                      weight: FontWeight.w800,
-                      color: active ? AppColors.ink : AppColors.white(0.4))),
-              const SizedBox(height: 4),
-              Container(
-                height: 2,
-                width: 24,
-                color: active ? AppColors.accent : Colors.transparent,
-              ),
-            ],
-          ),
-        ),
+  Widget _viewToggle() => ScoreTabs(
+        items: const [
+          (Icons.scoreboard_outlined, 'Resultados'),
+          (Icons.format_list_numbered, 'Posiciones'),
+          (Icons.insights, 'Pronósticos'),
+        ],
+        active: _view,
+        onChange: _selectView,
       );
-    }
-
-    return Row(children: [opt('Resultados', false), opt('Posiciones', true)]);
-  }
 
   Widget _spinner() => Center(
         child: Padding(
@@ -180,7 +174,7 @@ class _GamesScreenState extends State<GamesScreen> {
     if (games.isEmpty) {
       return [
         _empty(Icons.sports_basketball_outlined,
-            'No hubo partidos en los últimos días.\nPuede que la temporada esté en pausa.'),
+            'No hubo partidos en el último mes.\nLa temporada está en receso.'),
       ];
     }
     final out = <Widget>[];
@@ -224,11 +218,7 @@ class _GamesScreenState extends State<GamesScreen> {
       : '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
   /// Color del equipo, aclarado si es tan oscuro que no se ve sobre el fondo.
-  Color _tc(ScoreTeam t, Color fallback) {
-    final c = teamColor(t.color) ?? fallback;
-    final hsl = HSLColor.fromColor(c);
-    return hsl.lightness < 0.32 ? hsl.withLightness(0.45).toColor() : c;
-  }
+  Color _tc(ScoreTeam t, Color fallback) => readableTeamColor(t.color, fallback);
 
   Widget _gameCard(ScoreGame g) {
     final played = g.state != GameState.pre;
@@ -238,7 +228,7 @@ class _GamesScreenState extends State<GamesScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: PressableWidget(
-        onTap: played ? () => _openGame(g) : null,
+        onTap: () => _openGame(g),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppShape.rCard),
@@ -437,7 +427,7 @@ class _GamesScreenState extends State<GamesScreen> {
             ? AppColors.open
             : const Color(0xFFEF4444);
     final cutLine = !head && nba && (r.seed == 6 || r.seed == 10);
-    return Container(
+    final row = Container(
       padding: const EdgeInsets.fromLTRB(0, 9, 12, 9),
       decoration: BoxDecoration(
         border: Border(
@@ -483,7 +473,10 @@ class _GamesScreenState extends State<GamesScreen> {
         ],
       ),
     );
+    if (head || r.id.isEmpty) return row;
+    return InkWell(onTap: () => _openTeam(r.id), child: row);
   }
+
 
   /// Referencias de color de la tabla (solo NBA tiene play-in).
   Widget _standingsLegend() {
@@ -506,6 +499,133 @@ class _GamesScreenState extends State<GamesScreen> {
         if (_league == ScoresService.nba) item(AppColors.busy, 'Play-in'),
       ],
     );
+  }
+
+  void _openTeam(String id) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => TeamScreen(league: _league, teamId: id),
+    ));
+  }
+
+  // ── Pronósticos (ESPN BPI) ──────────────────────────────────────────────
+
+  List<Widget> _powerBody() {
+    final rows = ApiCache.peek<List<PowerRow>>(_powerKey) ?? const [];
+    if (_loading && rows.isEmpty) return [_spinner()];
+    if (rows.isEmpty) {
+      return [_empty(Icons.insights_outlined, 'Sin pronósticos por ahora')];
+    }
+    final head = AppText.grotesk(
+        size: 9.5, weight: FontWeight.w700, color: AppColors.white(0.4));
+    Widget pctCell(double v, Color c) => SizedBox(
+          width: 54,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(fmtPct(v),
+                  style: AppText.grotesk(size: 12, weight: FontWeight.w800)),
+              const SizedBox(height: 3),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: SizedBox(
+                  width: 44,
+                  child: LinearProgressIndicator(
+                    value: (v / 100).clamp(0, 1),
+                    minHeight: 4,
+                    backgroundColor: AppColors.white(0.08),
+                    color: c,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+    return [
+      Container(
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(AppShape.rCard),
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  SizedBox(width: 26, child: Text('#', style: head)),
+                  Expanded(child: Text('EQUIPO', style: head)),
+                  SizedBox(
+                      width: 48,
+                      child: Text('PROY.',
+                          textAlign: TextAlign.right, style: head)),
+                  SizedBox(
+                      width: 54,
+                      child: Text('PLAYOFFS',
+                          textAlign: TextAlign.right, style: head)),
+                  SizedBox(
+                      width: 54,
+                      child: Text('FINAL',
+                          textAlign: TextAlign.right, style: head)),
+                  SizedBox(
+                      width: 54,
+                      child: Text('CAMPEÓN',
+                          textAlign: TextAlign.right, style: head)),
+                ],
+              ),
+            ),
+            for (final r in rows)
+              InkWell(
+                onTap: r.id.isEmpty ? null : () => _openTeam(r.id),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    border: Border(
+                        top: BorderSide(color: AppColors.white(0.04))),
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 26,
+                        child: Text('${r.rank}',
+                            style: AppText.archivo(
+                                size: 12,
+                                weight: FontWeight.w900,
+                                color: r.rank <= 3
+                                    ? AppColors.accent
+                                    : AppColors.white(0.5))),
+                      ),
+                      TeamLogo(url: r.logo, size: 22),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(r.abbr,
+                            style: AppText.archivo(
+                                size: 13, weight: FontWeight.w900)),
+                      ),
+                      SizedBox(
+                        width: 48,
+                        child: Text('${r.projW.round()}-${r.projL.round()}',
+                            textAlign: TextAlign.right,
+                            style: AppText.grotesk(
+                                size: 12, color: AppColors.white(0.7))),
+                      ),
+                      pctCell(r.playoffs, AppColors.open),
+                      pctCell(r.finals, AppColors.busy),
+                      pctCell(r.title, AppColors.accent),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        'Proyección ESPN BPI: simula el resto de la temporada. "Proy." es el '
+        'récord final esperado. Tocá un equipo para ver su detalle.',
+        style: AppText.grotesk(size: 10, color: AppColors.white(0.4)),
+      ),
+    ];
   }
 
   // ── Liga Nacional ───────────────────────────────────────────────────────
@@ -563,6 +683,14 @@ class _GamesScreenState extends State<GamesScreen> {
       AnalyticsService.event('lnb_fixture_open');
     } catch (_) {/* sin browser disponible */}
   }
+}
+
+/// Color del equipo legible sobre el fondo oscuro de la app: si es muy
+/// oscuro (p. ej. el azul marino de muchos equipos) se aclara.
+Color readableTeamColor(String hex, Color fallback) {
+  final c = teamColor(hex) ?? fallback;
+  final hsl = HSLColor.fromColor(c);
+  return hsl.lightness < 0.32 ? hsl.withLightness(0.45).toColor() : c;
 }
 
 /// Escudo del equipo (PNG de ESPN, cacheado en disco). Sin logo o si falla,
@@ -623,4 +751,85 @@ class _LiveDotState extends State<LiveDot> with SingleTickerProviderStateMixin {
               color: Color(0xFFEF4444), shape: BoxShape.circle),
         ),
       );
+}
+
+/// Selector de solapas de la sección Partidos (Resultados / Posiciones /
+/// Pronósticos, Partido / Previa). Pill con ícono en cada opción y la activa
+/// rellena en acento con halo: el subrayado anterior pasaba desapercibido.
+class ScoreTabs extends StatelessWidget {
+  final List<(IconData, String)> items;
+  final int active;
+  final ValueChanged<int> onChange;
+
+  const ScoreTabs({
+    super.key,
+    required this.items,
+    required this.active,
+    required this.onChange,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.bgElev,
+        borderRadius: BorderRadius.circular(AppShape.rBtn),
+        border: Border.all(color: AppColors.white(0.12)),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < items.length; i++)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onChange(i),
+                behavior: HitTestBehavior.opaque,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: i == active ? AppColors.accent : Colors.transparent,
+                    borderRadius: BorderRadius.circular(AppShape.rChip),
+                    boxShadow: i == active
+                        ? [
+                            BoxShadow(
+                              color: AppColors.accent.withValues(alpha: 0.45),
+                              blurRadius: 14,
+                              offset: const Offset(0, 3),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(items[i].$1,
+                          size: 16,
+                          color: i == active
+                              ? Colors.white
+                              : AppColors.white(0.55)),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          items[i].$2,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppText.archivo(
+                              size: 12.5,
+                              weight: FontWeight.w800,
+                              color: i == active
+                                  ? Colors.white
+                                  : AppColors.white(0.7)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

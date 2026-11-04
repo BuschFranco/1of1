@@ -43,6 +43,9 @@ class ApiCache {
   // alcanza (pull-to-refresh fuerza). Posiciones cambian una vez por noche.
   static const Duration ttlScores = Duration(minutes: 2);
   static const Duration ttlStandings = Duration(minutes: 30);
+  // BPI se recalcula una vez por día; perfiles cambian con cada partido.
+  static const Duration ttlPower = Duration(hours: 1);
+  static const Duration ttlScoreProfiles = Duration(minutes: 30);
 
   /// Valor cacheado sin importar su edad (o null si nunca se guardó).
   static T? peek<T>(String key) => _store[key]?.value as T?;

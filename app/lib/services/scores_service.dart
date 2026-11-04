@@ -42,4 +42,31 @@ class ScoresService {
       return const [];
     }
   }
+
+  static Future<List<PowerRow>> power(String league) async {
+    try {
+      final raw = await ApiClient().getPower(league);
+      return raw.map(PowerRow.fromApi).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  static Future<PlayerProfile?> player(String league, String id) async {
+    try {
+      final raw = await ApiClient().getPlayerProfile(league, id);
+      return raw == null ? null : PlayerProfile.fromApi(raw);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<TeamProfile?> team(String league, String id) async {
+    try {
+      final raw = await ApiClient().getTeamProfile(league, id);
+      return raw == null ? null : TeamProfile.fromApi(raw);
+    } catch (_) {
+      return null;
+    }
+  }
 }

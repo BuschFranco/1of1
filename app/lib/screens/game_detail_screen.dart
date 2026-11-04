@@ -8,6 +8,8 @@ import '../services/cache/api_cache.dart';
 import '../services/scores_service.dart';
 import '../theme/app_theme.dart';
 import 'games_screen.dart';
+import 'player_screen.dart';
+import 'team_screen.dart';
 
 /// Partido de NBA / WNBA con **línea de tiempo**: el usuario recorre el
 /// partido jugada a jugada (deslizando el gráfico o la barra, o con "play") y
@@ -29,6 +31,10 @@ class _GameDetailScreenState extends State<GameDetailScreen> {
 
   /// 0 = visitante, 1 = local.
   int _team = 0;
+
+  /// Solapa bajo el hero: 0 = Partido (línea de tiempo y planilla),
+  /// 1 = Previa (pronóstico, forma, cara a cara, comparativa…).
+  int _view = 0;
 
   /// Jugada seleccionada en la línea de tiempo; null = la última (en vivo o
   /// final). Mientras sea null, un refresco en vivo sigue la jugada nueva.
@@ -137,9 +143,21 @@ class _GameDetailScreenState extends State<GameDetailScreen> {
                             strokeWidth: 2, color: AppColors.white(0.4)),
                       ),
                     )
-                  else if (box == null || box.teams.isEmpty)
+                  else if (box == null)
                     _note('Sin estadísticas de este partido por ahora')
+                  // Sin jugar: solo la previa.
+                  else if (box.teams.isEmpty)
+                    box.preview == null
+                        ? _note('Todavía no hay datos de este partido')
+                        : _previewView(box.preview!, g, awayColor, homeColor)
                   else ...[
+                    if (box.preview != null) ...[
+                      _viewTabs(),
+                      const SizedBox(height: 14),
+                    ],
+                    if (_view == 1 && box.preview != null)
+                      _previewView(box.preview!, g, awayColor, homeColor)
+                    else ...[
                     if (awayTeam != null && homeTeam != null)
                       _linescore(awayTeam, homeTeam, play, tl, awayColor, homeColor),
                     if (tl != null && count > 1) ...[
@@ -158,10 +176,12 @@ class _GameDetailScreenState extends State<GameDetailScreen> {
                     const SizedBox(height: 10),
                     Text(
                       'TC: tiros de campo · 3P: triples · TL: tiros libres · '
-                      'ROB: robos · TAP: tapas · PER: pérdidas',
+                      'ROB: robos · TAP: tapas · PER: pérdidas · '
+                      'Tocá un jugador para ver sus promedios.',
                       style: AppText.grotesk(
                           size: 10, color: AppColors.white(0.4)),
                     ),
+                    ],
                   ],
                 ],
               ),
@@ -175,11 +195,7 @@ class _GameDetailScreenState extends State<GameDetailScreen> {
   // ── Helpers ─────────────────────────────────────────────────────────────
 
   /// Color del equipo, aclarado si es tan oscuro que no se ve sobre el fondo.
-  Color _color(String hex, Color fallback) {
-    final c = teamColor(hex) ?? fallback;
-    final hsl = HSLColor.fromColor(c);
-    return hsl.lightness < 0.32 ? hsl.withLightness(0.45).toColor() : c;
-  }
+  Color _color(String hex, Color fallback) => readableTeamColor(hex, fallback);
 
   Widget _note(String t) => Padding(
         padding: const EdgeInsets.only(top: 30),
@@ -220,7 +236,17 @@ class _GameDetailScreenState extends State<GameDetailScreen> {
     if (play != null && !atEnd) {
       moment = '${_periodName(play.period)} · ${play.clock}';
     } else {
-      moment = g.state == GameState.post ? 'Final' : g.status;
+      moment = switch (g.state) {
+        GameState.post => 'Final',
+        GameState.live => g.status,
+        // Sin jugar: fecha y hora locales (ESPN manda "7:30 PM EST").
+        GameState.pre => g.date == null
+            ? g.status
+            : '${g.date!.day.toString().padLeft(2, '0')}/'
+                '${g.date!.month.toString().padLeft(2, '0')} · '
+                '${g.date!.hour.toString().padLeft(2, '0')}:'
+                '${g.date!.minute.toString().padLeft(2, '0')} hs',
+      };
     }
 
     Widget side(ScoreTeam t, String score, bool lead, Color c) {
@@ -241,7 +267,10 @@ class _GameDetailScreenState extends State<GameDetailScreen> {
                       spreadRadius: 1),
                 ],
               ),
-              child: TeamLogo(url: t.logo, size: 52),
+              child: GestureDetector(
+                onTap: t.id.isEmpty ? null : () => _openTeam(t.id),
+                child: TeamLogo(url: t.logo, size: 52),
+              ),
             ),
             const SizedBox(height: 8),
             Text(t.abbr,
@@ -822,8 +851,10 @@ class _GameDetailScreenState extends State<GameDetailScreen> {
     // En un momento intermedio, "jugó" = entró a la cancha hasta ahí.
     bool inGame(BoxPlayer p) =>
         atEnd ? !p.dnp : (live?[p.id]?.played ?? false);
-    List<String> cells(BoxPlayer p) =>
+    List<String> raw(BoxPlayer p) =>
         atEnd || live == null ? p.stats : live[p.id]!.cells();
+    List<String> cells(BoxPlayer p) => cellsWithPct(box.columns, raw(p));
+    final columns = columnsWithPct(box.columns);
     final starters = team.players.where((p) => p.starter && inGame(p)).toList();
     final bench = team.players.where((p) => !p.starter && inGame(p)).toList();
     final out = team.players.where((p) => !inGame(p)).toList();
@@ -833,7 +864,10 @@ class _GameDetailScreenState extends State<GameDetailScreen> {
         weight: head || bold ? FontWeight.w700 : FontWeight.w500,
         color: head ? AppColors.white(0.4) : AppColors.ink);
 
-    Widget nameCell(BoxPlayer? p, {String? label}) => SizedBox(
+    Widget nameCell(BoxPlayer? p, {String? label}) => GestureDetector(
+          onTap: p == null ? null : () => _openPlayer(p),
+          behavior: HitTestBehavior.opaque,
+          child: SizedBox(
           width: nameW,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -856,27 +890,33 @@ class _GameDetailScreenState extends State<GameDetailScreen> {
                     ],
                   ),
           ),
+        ),
         );
 
     Widget statsRow(List<String> values, {bool head = false}) => Row(
           children: [
-            for (var i = 0; i < box.columns.length; i++)
+            for (var i = 0; i < columns.length; i++)
               SizedBox(
                 width: colW,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(i < values.length ? values[i] : '',
                       textAlign: TextAlign.center,
+                      // PTS resaltada; los % un poco más tenues.
                       style: head
                           ? st(head: true)
-                          : (i == 1 ? st(bold: true) : st())),
+                          : i == 1
+                              ? st(bold: true)
+                              : columns[i].endsWith('%')
+                                  ? st().copyWith(color: AppColors.white(0.6))
+                                  : st()),
                 ),
               ),
           ],
         );
 
     final names = <Widget>[nameCell(null, label: 'TITULARES')];
-    final stats = <Widget>[statsRow(box.columns, head: true)];
+    final stats = <Widget>[statsRow(columns, head: true)];
     for (final p in starters) {
       names.add(nameCell(p));
       stats.add(statsRow(cells(p)));
@@ -888,6 +928,13 @@ class _GameDetailScreenState extends State<GameDetailScreen> {
         names.add(nameCell(p));
         stats.add(statsRow(cells(p)));
       }
+    }
+    // Totales del equipo (con sus porcentajes).
+    final played = [...starters, ...bench];
+    if (played.isNotEmpty) {
+      names.add(nameCell(null, label: 'TOTAL'));
+      stats.add(statsRow(cellsWithPct(
+          box.columns, teamTotals(box.columns, played.map(raw).toList()))));
     }
 
     return _card(
@@ -920,6 +967,505 @@ class _GameDetailScreenState extends State<GameDetailScreen> {
                 style: AppText.grotesk(size: 11, color: AppColors.white(0.45)),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  // ── Navegación ──────────────────────────────────────────────────────────
+
+  void _openPlayer(BoxPlayer p) {
+    if (p.id.isEmpty) return;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => PlayerScreen(
+        league: widget.league,
+        playerId: p.id,
+        name: p.name,
+        headshot: p.headshot,
+      ),
+    ));
+  }
+
+  void _openTeam(String id) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => TeamScreen(league: widget.league, teamId: id),
+    ));
+  }
+
+  // ── Solapas Partido / Previa ────────────────────────────────────────────
+
+  Widget _viewTabs() => ScoreTabs(
+        items: const [
+          (Icons.timeline, 'Partido'),
+          (Icons.query_stats, 'Previa'),
+        ],
+        active: _view,
+        onChange: (i) => setState(() => _view = i),
+      );
+
+  // ── Previa ──────────────────────────────────────────────────────────────
+
+  Widget _previewView(
+      GamePreview pv, ScoreGame g, Color awayColor, Color homeColor) {
+    final out = <Widget>[];
+    void section(String label, Widget child) {
+      if (out.isNotEmpty) out.add(const SizedBox(height: 18));
+      out
+        ..add(sectionLabel(label))
+        ..add(const SizedBox(height: 8))
+        ..add(child);
+    }
+
+    if (pv.homeWinProb != null && pv.awayWinProb != null) {
+      section('PRONÓSTICO',
+          _forecast(pv, g, awayColor, homeColor));
+    }
+    if (!pv.form.isEmpty) {
+      section('ÚLTIMOS 5 PARTIDOS', _form(pv, g, awayColor, homeColor));
+    }
+    if (pv.h2hSummary.isNotEmpty || pv.h2hGames.isNotEmpty) {
+      section('CARA A CARA ESTA TEMPORADA', _h2h(pv));
+    }
+    if (pv.compare.isNotEmpty) {
+      section(
+          pv.compareSeason
+              ? 'COMPARATIVA · PROMEDIOS DE LA TEMPORADA'
+              : 'COMPARATIVA DEL PARTIDO',
+          _compare(pv, g, awayColor, homeColor));
+    }
+    if (!pv.leaders.isEmpty) {
+      section(
+          pv.compareSeason ? 'LÍDERES DE LA TEMPORADA' : 'LÍDERES DEL PARTIDO',
+          _seasonLeaders(pv, g, awayColor, homeColor));
+    }
+    if (!pv.injuries.isEmpty) {
+      section('LESIONADOS', _injuries(pv, g));
+    }
+    if (out.isEmpty) return _note('Sin previa para este partido');
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch, children: out);
+  }
+
+  Widget _forecast(
+      GamePreview pv, ScoreGame g, Color awayColor, Color homeColor) {
+    final a = (pv.awayWinProb! * 100).round();
+    final h = (pv.homeWinProb! * 100).round();
+    Widget side(ScoreTeam t, int pct, Color c, bool alignEnd) => Column(
+          crossAxisAlignment:
+              alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!alignEnd) ...[
+                  TeamLogo(url: t.logo, size: 26),
+                  const SizedBox(width: 6),
+                ],
+                Text('$pct%',
+                    style: AppText.display(size: 30, color: c)),
+                if (alignEnd) ...[
+                  const SizedBox(width: 6),
+                  TeamLogo(url: t.logo, size: 26),
+                ],
+              ],
+            ),
+            Text(t.abbr,
+                style: AppText.grotesk(
+                    size: 11,
+                    weight: FontWeight.w800,
+                    color: AppColors.white(0.6))),
+          ],
+        );
+    return _card(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              side(g.away, a, awayColor, false),
+              const Spacer(),
+              side(g.home, h, homeColor, true),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: SizedBox(
+              height: 10,
+              child: Row(
+                children: [
+                  Expanded(
+                      flex: a.clamp(1, 99), child: Container(color: awayColor)),
+                  Container(width: 2, color: AppColors.bg),
+                  Expanded(
+                      flex: h.clamp(1, 99), child: Container(color: homeColor)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text('Probabilidad de ganar según ESPN, antes del partido.',
+              style: AppText.grotesk(size: 10, color: AppColors.white(0.4))),
+        ],
+      ),
+    );
+  }
+
+  Widget _form(GamePreview pv, ScoreGame g, Color awayColor, Color homeColor) {
+    Widget row(ScoreTeam t, List<FormGame> games, Color c) {
+      final wins = games.where((x) => x.result == 'W').length;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            TeamLogo(url: t.logo, size: 24),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 44,
+              child: Text(t.abbr,
+                  style: AppText.archivo(size: 13, weight: FontWeight.w900)),
+            ),
+            for (final f in games)
+              Container(
+                width: 26,
+                height: 26,
+                margin: const EdgeInsets.only(right: 5),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: f.result == 'W'
+                      ? AppColors.open.withValues(alpha: 0.9)
+                      : const Color(0xFFEF4444).withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Text(f.result == 'W' ? 'G' : 'P',
+                    style: AppText.archivo(
+                        size: 11,
+                        weight: FontWeight.w900,
+                        color: Colors.white)),
+              ),
+            const Spacer(),
+            Text('$wins-${games.length - wins}',
+                style: AppText.archivo(
+                    size: 14, weight: FontWeight.w900, color: c)),
+          ],
+        ),
+      );
+    }
+
+    return _card(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+      child: Column(
+        children: [
+          row(g.away, pv.form.away, awayColor),
+          row(g.home, pv.form.home, homeColor),
+        ],
+      ),
+    );
+  }
+
+  /// ESPN manda el resumen de la serie en inglés.
+  String _seriesEs(String s) {
+    final lead = RegExp(r'^(\w+) leads series (\d+-\d+)').firstMatch(s);
+    if (lead != null) return '${lead[1]} gana la serie ${lead[2]}';
+    final won = RegExp(r'^(\w+) wins? series (\d+-\d+)').firstMatch(s);
+    if (won != null) return '${won[1]} ganó la serie ${won[2]}';
+    final tied = RegExp(r'^Series tied (\d+-\d+)').firstMatch(s);
+    if (tied != null) return 'Serie empatada ${tied[1]}';
+    if (s.startsWith('Series starts')) return 'Primer cruce de la temporada';
+    return s;
+  }
+
+  Widget _h2h(GamePreview pv) {
+    final done = pv.h2hGames.where((x) => x.done).toList();
+    String date(DateTime? d) => d == null
+        ? ''
+        : '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+    return _card(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(_seriesEs(pv.h2hSummary),
+              style: AppText.archivo(size: 14, weight: FontWeight.w900)),
+          for (final x in done)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 48,
+                    child: Text(date(x.date),
+                        style: AppText.grotesk(
+                            size: 11, color: AppColors.white(0.45))),
+                  ),
+                  Expanded(
+                    child: Text(
+                      '${x.away} ${x.awayScore}  –  ${x.homeScore} ${x.home}',
+                      style: AppText.grotesk(
+                          size: 13, weight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _compare(
+      GamePreview pv, ScoreGame g, Color awayColor, Color homeColor) {
+    Widget row(CompareRow r) {
+      final a = double.tryParse(r.away) ?? 0;
+      final h = double.tryParse(r.home) ?? 0;
+      final awayBetter = r.higherIsBetter ? a > h : a < h;
+      final homeBetter = r.higherIsBetter ? h > a : h < a;
+      final total = (a + h) == 0 ? 1 : (a + h);
+      TextStyle v(bool better, Color c) => AppText.archivo(
+          size: 14,
+          weight: FontWeight.w900,
+          color: better ? c : AppColors.white(0.55));
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Text(r.away, style: v(awayBetter, awayColor)),
+                Expanded(
+                  child: Text(r.label,
+                      textAlign: TextAlign.center,
+                      style: AppText.grotesk(
+                          size: 11, color: AppColors.white(0.6))),
+                ),
+                Text(r.home, style: v(homeBetter, homeColor)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // Barras enfrentadas: cada lado crece hacia el centro.
+            Row(
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: FractionallySizedBox(
+                      widthFactor: (a / total).clamp(0.02, 1.0),
+                      child: Container(
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: awayColor.withValues(
+                              alpha: awayBetter ? 1 : 0.35),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: FractionallySizedBox(
+                      widthFactor: (h / total).clamp(0.02, 1.0),
+                      child: Container(
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: homeColor.withValues(
+                              alpha: homeBetter ? 1 : 0.35),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    return _card(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              TeamLogo(url: g.away.logo, size: 20),
+              const SizedBox(width: 6),
+              Text(g.away.abbr,
+                  style: AppText.archivo(size: 12, weight: FontWeight.w900)),
+              const Spacer(),
+              Text(g.home.abbr,
+                  style: AppText.archivo(size: 12, weight: FontWeight.w900)),
+              const SizedBox(width: 6),
+              TeamLogo(url: g.home.logo, size: 20),
+            ],
+          ),
+          const SizedBox(height: 4),
+          for (final r in pv.compare) row(r),
+        ],
+      ),
+    );
+  }
+
+  Widget _seasonLeaders(
+      GamePreview pv, ScoreGame g, Color awayColor, Color homeColor) {
+    Widget item(LeaderItem l, Color c) => GestureDetector(
+          onTap: l.id.isEmpty
+              ? null
+              : () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => PlayerScreen(
+                        league: widget.league,
+                        playerId: l.id,
+                        name: l.name,
+                        headshot: l.headshot),
+                  )),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                _headshotSmall(l.headshot, c),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(l.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppText.grotesk(
+                              size: 12, weight: FontWeight.w700)),
+                      Text(l.cat,
+                          style: AppText.grotesk(
+                              size: 10, color: AppColors.white(0.45))),
+                    ],
+                  ),
+                ),
+                Text(l.value,
+                    style: AppText.archivo(
+                        size: 16, weight: FontWeight.w900, color: c)),
+              ],
+            ),
+          ),
+        );
+
+    Widget col(ScoreTeam t, List<LeaderItem> ls, Color c) => Expanded(
+          child: _card(
+            padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    TeamLogo(url: t.logo, size: 18),
+                    const SizedBox(width: 6),
+                    Text(t.abbr,
+                        style: AppText.archivo(
+                            size: 12, weight: FontWeight.w900)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                for (final l in ls) item(l, c),
+              ],
+            ),
+          ),
+        );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        col(g.away, pv.leaders.away, awayColor),
+        const SizedBox(width: 8),
+        col(g.home, pv.leaders.home, homeColor),
+      ],
+    );
+  }
+
+  Widget _headshotSmall(String url, Color ring) {
+    final fallback = Icon(Icons.person, size: 18, color: AppColors.white(0.3));
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.white(0.06),
+        border: Border.all(color: ring, width: 1.5),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: url.isEmpty
+          ? fallback
+          : CachedNetworkImage(
+              imageUrl: url,
+              fit: BoxFit.cover,
+              alignment: Alignment.topCenter,
+              errorWidget: (_, _, _) => fallback,
+            ),
+    );
+  }
+
+  Widget _injuries(GamePreview pv, ScoreGame g) {
+    Widget team(ScoreTeam t, List<InjuryItem> list) {
+      if (list.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                TeamLogo(url: t.logo, size: 18),
+                const SizedBox(width: 6),
+                Text(t.abbr,
+                    style:
+                        AppText.archivo(size: 12, weight: FontWeight.w900)),
+              ],
+            ),
+            for (final i in list)
+              Padding(
+                padding: const EdgeInsets.only(top: 6, left: 24),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        i.detail.isEmpty ? i.name : '${i.name} · ${i.detail}',
+                        style: AppText.grotesk(size: 12),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: (i.status == 'Afuera'
+                                ? const Color(0xFFEF4444)
+                                : AppColors.busy)
+                            .withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: Text(i.status,
+                          style: AppText.grotesk(
+                              size: 10,
+                              weight: FontWeight.w800,
+                              color: i.status == 'Afuera'
+                                  ? const Color(0xFFEF4444)
+                                  : AppColors.busy)),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return _card(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          team(g.away, pv.injuries.away),
+          team(g.home, pv.injuries.home),
         ],
       ),
     );
