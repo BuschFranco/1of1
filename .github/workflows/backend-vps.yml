@@ -1,0 +1,65 @@
+# Publica el backend de 1of1 en la VPS de Hetzner en cada push a main que toque backend/.
+# Compila acá (la VPS tiene 1 GB de RAM) y sube dist + node_modules de producción.
+# Secrets del repo: VPS_HOST, VPS_SSH_KEY (clave privada de deploy) y VPS_KNOWN_HOSTS.
+# Las variables del backend viven en el servidor: /etc/oneofone/oneofone.env.
+# Ver backend/README.md → "VPS".
+name: Backend VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-vps.yml'
+  workflow_dispatch:
+
+# Un deploy a la vez; si llegan dos pushes seguidos, se publica el último.
+concurrency:
+  group: backend-vps
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+
+      - run: npx prisma generate
+
+      - run: npm run build
+
+      # Solo lo necesario para correr (prisma queda: el servidor corre migrate deploy).
+      - run: npm prune --omit=dev
+
+      - name: Empaquetar
+        run: tar -czf oneofone.tgz dist node_modules prisma package.json
+
+      - name: Subir y publicar en la VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          [ -n "$VPS_HOST" ] || { echo "Faltan los secrets de la VPS (ver backend/README.md)"; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes"
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes oneofone.tgz "deploy@$VPS_HOST:/srv/oneofone/incoming/$GITHUB_SHA.tgz"
+          $SSH "deploy@$VPS_HOST" "oneofone-deploy $GITHUB_SHA"

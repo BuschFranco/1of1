@@ -107,7 +107,7 @@ Todos protegidos con `Authorization: Bearer <jwt>` salvo los de `/auth`.
 El chat de pickups es **server-backed** (tabla `messages`): mensajes reales,
 polling incremental cada 4 s en la app. `/chats` sigue siendo solo la metadata.
 
-### Uploads (Supabase Storage)
+### Uploads (R2 o Supabase Storage)
 
 | Endpoint | Body | Devuelve |
 | --- | --- | --- |
@@ -199,6 +199,88 @@ la raíz del repo; las variables de entorno viven en su dashboard.
 
 El free tier duerme tras ~15 min sin tráfico (**cold start de 30-60 s**): tenelo
 en cuenta al pensar timeouts y feedback de carga en la app.
+
+**En curso: mudanza a la VPS** (ver la sección siguiente). Hasta el corte,
+Render y Supabase siguen siendo producción.
+
+## VPS (Hetzner) — `https://api.buschfranco.com`
+
+El backend se suma a la VPS que ya corre Rebound y el portafolio (`2.31.106.97`,
+Ubuntu, 1 GB de RAM + 2 GB de swap), con el mismo esquema que esos proyectos.
+
+- **Cómo funciona:** cada push a `main` que toque `backend/` dispara
+  `.github/workflows/backend-vps.yml`. GitHub compila (la VPS no compila), sube
+  `dist` + `node_modules` de producción por SSH con el usuario `deploy` y corre
+  `oneofone-deploy <commit>`. Ese script descomprime en
+  `/srv/oneofone/releases/<commit>`, corre `prisma migrate deploy` (si falla,
+  no cambia nada), apunta `/srv/oneofone/current` ahí, reinicia y chequea
+  `/health`; si no responde, vuelve sola a la versión anterior. Guarda las
+  últimas 3.
+- **En el servidor:** servicio `oneofone` (systemd, usuario `oneofone`, puerto
+  **3002** local, tope de 300 MB), Caddy adelante (`api-buschfranco.caddy`),
+  Cloudflare con proxy. Variables en `/etc/oneofone/oneofone.env`.
+- **Base:** `oneofone` en el PostgreSQL 16 de la VPS (solo local), rol dueño
+  `oneofone` (contraseña en `/root/oneofone-db.env`). Conexión directa, sin
+  pgbouncer: `DATABASE_URL` y `DIRECT_URL` son la misma. Backup semanal a R2
+  (`rebound-backups/oneofone/`, se borran a los 90 días).
+- **Fotos:** Cloudflare R2, bucket `oneofone-media`, dominio
+  `https://img.buschfranco.com`. Con las `R2_*` cargadas el backend sube ahí;
+  sin ellas, a Supabase Storage (lo que usa Render hasta el corte).
+- **Puertos en la VPS:** 3000 Rebound, 3001 portafolio, 3002 1of1, 3010
+  PostgREST, 5432 Postgres (todos locales; afuera solo 22/80/443).
+
+### Scripts (`backend/deploy/vps/`, se corren como root en la VPS)
+
+| Script | Qué hace |
+| --- | --- |
+| `provision.sh "<clave pública>"` | Usuario, carpetas, servicio, sudoers del deploy y sitio de Caddy. Repetible. |
+| `provision-db.sh` | Rol y base `oneofone`; escribe `DATABASE_URL`/`DIRECT_URL`. Las tablas las crea el primer deploy. |
+| `oneofone-deploy` | Publica una versión (lo instala `provision.sh` en `/usr/local/bin`). |
+| `migrate-from-supabase.sh` | Copia los datos de Supabase y las fotos a R2, y reescribe las URLs. Repetible (vuelve a copiar todo). |
+| `provision-backups.sh` | Backup semanal a R2 (`oneofone-backup` a mano). |
+| `render-proxy.mjs` | Reenvío de Render a la VPS para las apps ya instaladas (corte). |
+
+### Alta (una vez)
+
+1. **Cloudflare:** registro A `api` → `2.31.106.97` con proxy (nube naranja).
+2. **R2:** bucket `oneofone-media`, dominio público `img.buschfranco.com` y un
+   token con escritura en ese bucket. Las claves van en
+   `/root/.r2-oneofone.env` (`R2_ACCESS_KEY_ID=…`, `R2_SECRET_ACCESS_KEY=…`).
+3. **Clave de deploy:** `ssh-keygen -t ed25519 -N "" -C github-1of1 -f oneofone_deploy`.
+   En GitHub → Settings → Secrets → Actions: `VPS_HOST` = `2.31.106.97`,
+   `VPS_SSH_KEY` = contenido de `oneofone_deploy` (privada) y
+   `VPS_KNOWN_HOSTS` = salida de `ssh-keyscan 2.31.106.97`.
+4. **En la VPS:** copiar `backend/deploy/vps/` (p. ej. a `/root/oneofone-vps/`) y
+   correr `bash provision.sh "<contenido de oneofone_deploy.pub>"` y
+   `bash provision-db.sh`.
+5. **Variables** en `/etc/oneofone/oneofone.env` (además de las que escribió
+   `provision-db.sh`): `JWT_SECRET` (**el mismo de Render**, así las sesiones
+   abiertas siguen valiendo), `JWT_EXPIRES_IN=30d`, `CORS_ORIGIN=*`,
+   `GOOGLE_CLIENT_IDS`, `MAPS_API_KEY`, `NEWSDATA_API_KEY`, `R2_ACCOUNT_ID`,
+   `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET=oneofone-media`,
+   `R2_PUBLIC_URL=https://img.buschfranco.com`.
+6. **Primera publicación:** GitHub → Actions → "Backend VPS" → Run workflow.
+   Crea las tablas. Probar `curl https://api.buschfranco.com/health`.
+7. `bash migrate-from-supabase.sh` (pide la contraseña de la base de Supabase) y
+   `bash provision-backups.sh`.
+
+### Corte (cuando la VPS esté probada)
+
+1. Volver a correr `migrate-from-supabase.sh` para traer lo último.
+2. `render.yaml`: `startCommand: node deploy/vps/render-proxy.mjs` y env
+   `UPSTREAM_URL=https://api.buschfranco.com` (sin build de Nest). Desde ahí
+   las apps instaladas siguen andando por el reenvío, y la base es una sola.
+3. App: `API_BASE_URL=https://api.buschfranco.com` en `dart_defines.json` y
+   nueva versión. Actualizar los textos legales (app y web) y `app/CLAUDE.md`.
+4. Cuando casi nadie use versiones viejas: apagar Render, el ping keep-alive y
+   el proyecto de Supabase.
+
+### Comandos útiles (como root)
+
+`systemctl status oneofone`, `journalctl -u oneofone -n 100`,
+`ls -lt /srv/oneofone/releases`. Volver a una versión anterior:
+`ln -sfn /srv/oneofone/releases/<commit> /srv/oneofone/current && systemctl restart oneofone`
+(ojo: las migraciones no se deshacen solas).
 
 ## Pendiente
 

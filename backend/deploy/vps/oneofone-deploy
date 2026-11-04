@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Publica una versión ya compilada del backend (la sube GitHub Actions a
+# /srv/oneofone/incoming/<commit>.tgz).
+# Uso (como deploy): oneofone-deploy <commit>
+# Corre las migraciones ANTES de cambiar de versión: si fallan, no se toca la activa.
+# Si la versión nueva no responde, vuelve sola a la anterior.
+set -euo pipefail
+
+SHA="${1:-}"
+[[ "$SHA" =~ ^[0-9a-f]{7,40}$ ]] || { echo "Commit inválido: '$SHA'"; exit 1; }
+
+ROOT=/srv/oneofone
+PORT=3002
+ARCHIVE="$ROOT/incoming/$SHA.tgz"
+DEST="$ROOT/releases/$SHA"
+[ -f "$ARCHIVE" ] || { echo "No existe $ARCHIVE"; exit 1; }
+
+umask 002
+rm -rf "$DEST"
+mkdir -p "$DEST"
+tar -xzf "$ARCHIVE" -C "$DEST"
+
+echo "==> Migraciones (prisma migrate deploy)"
+(
+  set -a
+  # shellcheck disable=SC1091
+  . /etc/oneofone/oneofone.env
+  set +a
+  cd "$DEST"
+  node node_modules/prisma/build/index.js migrate deploy
+)
+
+PREVIOUS="$(readlink -f "$ROOT/current" 2>/dev/null || true)"
+switch_to() {
+  ln -sfn "$1" "$ROOT/current.tmp"
+  mv -T "$ROOT/current.tmp" "$ROOT/current"
+  sudo /usr/bin/systemctl restart oneofone
+}
+
+healthy() {
+  for _ in $(seq 1 30); do
+    if curl -fsS -o /dev/null --max-time 5 "http://127.0.0.1:$PORT/health"; then return 0; fi
+    sleep 2
+  done
+  return 1
+}
+
+switch_to "$DEST"
+if healthy; then
+  echo "Publicado $SHA"
+else
+  echo "La versión $SHA no responde."
+  if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ] && [ "$PREVIOUS" != "$DEST" ]; then
+    echo "Volviendo a $(basename "$PREVIOUS")"
+    switch_to "$PREVIOUS"
+  fi
+  exit 1
+fi
+
+# Limpieza: se guardan las últimas 3 versiones para poder volver atrás.
+rm -f "$ARCHIVE"
+ls -1dt "$ROOT"/releases/*/ | tail -n +4 | xargs -r rm -rf 2>/dev/null || echo "Aviso: no se pudieron borrar todas las versiones viejas."

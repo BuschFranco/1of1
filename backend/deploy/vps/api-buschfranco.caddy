@@ -1,0 +1,13 @@
+# Backend de 1of1 en la VPS (/etc/caddy/sites/api-buschfranco.caddy).
+# Lo incluye el Caddyfile principal (el de Rebound) con: import /etc/caddy/sites/*.caddy
+# Cloudflare (nube naranja) está adelante en modo "Full (strict)"; la redirección a
+# https la hace Cloudflare ("Always Use HTTPS").
+
+api.buschfranco.com, http://api.buschfranco.com {
+	encode zstd gzip
+	# Fotos de cancha: hasta 8 MB (el backend valida); un poco de margen.
+	request_body {
+		max_size 10MB
+	}
+	reverse_proxy 127.0.0.1:3002
+}

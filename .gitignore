@@ -40,3 +40,6 @@ Thumbs.db
 # en otras PCs, pero no el cache de extracción ni los temporales de pipeline.
 **/graphify-out/cache/
 **/graphify-out/.graphify_*
+
+# Claves de R2 para subir a la VPS (no se commitean)
+.r2-oneofone.env
